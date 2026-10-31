@@ -1,0 +1,22 @@
+# Esquema aislado: las pruebas nunca tocan los datos del esquema janery.
+spring:
+  datasource:
+    url: jdbc:postgresql://${JANERY_DB_HOST:localhost}:${JANERY_DB_PORT:5432}/${JANERY_DB_NAME:janery}?currentSchema=janery_test
+  jpa:
+    properties:
+      hibernate:
+        default_schema: janery_test
+  flyway:
+    enabled: true
+    schemas: janery_test
+    default-schema: janery_test
+    clean-disabled: false
+
+janery:
+  jwt:
+    secret: secreto-solo-para-pruebas-de-32-bytes-o-mas
+  cors:
+    allowed-origins: http://origen-permitido.test
+  admin-inicial:
+    correo: presidente@janery.test
+    contrasena: Clave-Presidente-1

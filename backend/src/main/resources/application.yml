@@ -1,0 +1,55 @@
+spring:
+  application:
+    name: janery
+  config:
+    # .env local, ignorado por Git. Admite ejecutar desde backend/ o desde la raiz.
+    import: "optional:file:.env[.properties],optional:file:../.env[.properties]"
+  datasource:
+    url: jdbc:postgresql://${JANERY_DB_HOST:localhost}:${JANERY_DB_PORT:5432}/${JANERY_DB_NAME:janery}?currentSchema=${JANERY_DB_SCHEMA:janery}
+    username: ${JANERY_DB_USER:}
+    password: ${JANERY_DB_PASSWORD:}
+    hikari:
+      connection-timeout: 5000
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        default_schema: ${JANERY_DB_SCHEMA:janery}
+        jdbc:
+          time_zone: UTC
+  flyway:
+    enabled: ${JANERY_FLYWAY_ENABLED:true}
+    schemas: ${JANERY_DB_SCHEMA:janery}
+    default-schema: ${JANERY_DB_SCHEMA:janery}
+    create-schemas: true
+    clean-disabled: true
+
+server:
+  port: ${JANERY_SERVER_PORT:8080}
+  error:
+    include-message: never
+    include-stacktrace: never
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+
+janery:
+  zona-horaria: America/Guayaquil
+  jwt:
+    secret: ${JANERY_JWT_SECRET:}
+    access-minutos: 15
+    refresh-dias: 7
+  cookie-segura: ${JANERY_COOKIE_SEGURA:true}
+  cors:
+    allowed-origins: ${JANERY_CORS_ORIGINS:http://localhost:4200}
+  admin-inicial:
+    correo: ${JANERY_ADMIN_CORREO:}
+    contrasena: ${JANERY_ADMIN_PASSWORD:}

@@ -1,0 +1,14 @@
+<h1>Janery</h1>
+<p>Caja de ahorro y crédito.</p>
+
+<p class="suave" role="status" aria-live="polite">
+  @switch (conexion()) {
+    @case ('comprobando') { Comprobando la conexión con el servidor… }
+    @case ('disponible') { Servidor disponible. }
+    @case ('no-disponible') { No se pudo conectar con el servidor. }
+  }
+</p>
+
+<div class="acciones">
+  <a routerLink="/informacion">Conocer Janery</a>
+</div>

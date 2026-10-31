@@ -1,0 +1,23 @@
+# Secretos
+.env
+.env.*
+!.env.example
+
+# Respaldos de base de datos
+respaldos/
+*.dump
+*.sql.gz
+
+# Backend
+backend/target/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.angular/
+
+# Editores y sistema
+.idea/
+*.iml
+.DS_Store
+Thumbs.db

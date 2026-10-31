@@ -1,0 +1,86 @@
+:root {
+  --texto: #1f2933;
+  --suave: #5f6c7b;
+  --borde: #d5dbe1;
+  --fondo: #f6f7f9;
+  --primario: #14532d;
+  --error: #b42318;
+  --ok: #14532d;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  color: var(--texto);
+  background: var(--fondo);
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  line-height: 1.5;
+}
+
+.barra {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.5rem;
+  align-items: center;
+  padding: 0.75rem 1.5rem;
+  background: #fff;
+  border-bottom: 1px solid var(--borde);
+}
+.barra nav { display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; align-items: center; }
+.barra a { color: var(--texto); text-decoration: none; }
+.barra a:hover, .barra a.activo { color: var(--primario); text-decoration: underline; }
+.marca { font-size: 1.2rem; font-weight: 700; }
+
+.contenido { max-width: 64rem; margin: 0 auto; padding: 1.5rem; }
+.estrecho { max-width: 28rem; }
+
+.tarjeta {
+  background: #fff;
+  border: 1px solid var(--borde);
+  border-radius: 6px;
+  padding: 1.25rem;
+  margin-bottom: 1rem;
+}
+
+label { display: block; margin-bottom: 0.75rem; font-weight: 500; }
+input, select {
+  display: block;
+  width: 100%;
+  margin-top: 0.25rem;
+  padding: 0.5rem;
+  font: inherit;
+  border: 1px solid var(--borde);
+  border-radius: 4px;
+  background: #fff;
+}
+
+button {
+  padding: 0.45rem 0.9rem;
+  font: inherit;
+  color: #fff;
+  background: var(--primario);
+  border: 1px solid var(--primario);
+  border-radius: 4px;
+  cursor: pointer;
+}
+button:disabled { opacity: 0.55; cursor: not-allowed; }
+button.secundario { color: var(--primario); background: #fff; }
+button.peligro { color: var(--error); background: #fff; border-color: var(--error); }
+:focus-visible { outline: 2px solid var(--primario); outline-offset: 2px; }
+
+.error { color: var(--error); }
+.exito { color: var(--ok); }
+.suave { color: var(--suave); }
+.acciones { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+
+.tabla { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; background: #fff; }
+th, td { padding: 0.5rem 0.6rem; text-align: left; border-bottom: 1px solid var(--borde); vertical-align: top; }
+th { font-weight: 600; white-space: nowrap; }
+.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+.importes { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: 1rem; }
+.importe { font-size: 1.6rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+.paginador { display: flex; gap: 0.75rem; align-items: center; margin-top: 0.75rem; }
