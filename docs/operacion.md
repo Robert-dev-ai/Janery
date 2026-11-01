@@ -8,7 +8,7 @@ Copie `.env.example` a `.env` y complete los valores. El archivo `.env` nunca se
 
 | Variable | Uso |
 |---|---|
-| `JANERY_DB_HOST`, `_PORT`, `_NAME`, `_SCHEMA` | Ubicación de la base. Base `janery`, esquema `janery` |
+| `JANERY_DB_HOST`, `_PORT`, `_NAME`, `_SCHEMA` | Ubicación de la base. Base `neondb` en Neon, esquema `janery` ([neon.md](neon.md)) |
 | `JANERY_DB_USER`, `JANERY_DB_PASSWORD` | Credenciales de PostgreSQL |
 | `JANERY_JWT_SECRET` | Firma de los tokens, mínimo 32 caracteres. Cambiarlo cierra todas las sesiones al caducar el token actual |
 | `JANERY_CORS_ORIGINS` | Orígenes permitidos para el navegador, separados por comas |

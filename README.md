@@ -27,6 +27,7 @@ Leer todos los documentos de `docs/` antes de programar:
 12. `testing.md`
 13. `despliegue.md`
 14. `decisiones-pendientes.md`
+15. `neon.md`
 
 ## Instrucciones críticas
 
@@ -90,6 +91,12 @@ Cada módulo debe incluir migraciones, backend, frontend cuando corresponda, val
 
 ---
 
+# Trabajo con Neon desde varias computadoras
+
+**Si eres una IA o una persona que empieza en una computadora nueva, lee [docs/neon.md](docs/neon.md) antes de programar.** La base de trabajo está en Neon, el código en GitHub, y el `.env` se copia a mano en cada computadora.
+
+---
+
 # Registro de construcción
 
 ## Estado
@@ -111,9 +118,10 @@ Fases 0 a 7 construidas para uso local, con valores provisionales y fórmulas po
 
 ## Ejecución local
 
+La base de trabajo está en Neon: ver [neon.md](docs/neon.md).
+
 ```powershell
-# 1. Configuración: copiar y completar .env (ignorado por Git)
-Copy-Item .env.example .env
+# 1. Configuración: copiar el .env de otra computadora (ignorado por Git)
 
 # 2. Backend, en http://localhost:8080
 cd backend
@@ -145,7 +153,7 @@ cd frontend; npx ng test --watch=false --browsers=ChromeHeadless
 | Node.js / npm | 24.22.1 / 11.19.1 |
 | Angular / Angular CLI | 20.3.34 / 20.3.42 |
 | TypeScript | 5.9.3 |
-| PostgreSQL (servidor local) | 18 |
+| PostgreSQL (Neon) | 18 |
 
 ## Comandos de generación
 
@@ -157,7 +165,7 @@ cd frontend; npx ng test --watch=false --browsers=ChromeHeadless
 - La raíz del proyecto es esta carpeta (`janery_desde_cero_v3`), que ya contiene `docs/` y este README.
 - Paquete raíz: `ec.janery`, el ejemplo de `docs/setup.md`.
 - Se añadió `spring-boot-starter-actuator`, no incluido en la lista de `docs/setup.md`, para el health check exigido.
-- Las pruebas del backend necesitan PostgreSQL y el `.env`. Usan el esquema `janery_test`, que recrean en cada ejecución; nunca tocan `janery`.
+- Las pruebas del backend necesitan conexión a Neon y el `.env`. Usan el esquema `janery_test`, que recrean en cada ejecución; nunca tocan `janery`.
 - Lombok se usa en las entidades, para evitar getters repetitivos.
 - El presidente inicial se crea al arrancar a partir de `JANERY_ADMIN_CORREO` y `JANERY_ADMIN_PASSWORD`, si ese correo aún no existe.
 - Decisiones del propietario y criterios por confirmar: [docs/decisiones-pendientes.md](docs/decisiones-pendientes.md).
