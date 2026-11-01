@@ -2,6 +2,7 @@ import { Component, inject, OnInit, signal } from '@angular/core';
 import { forkJoin } from 'rxjs';
 
 import { ApiService, CargoVista, PermisoVista } from '../../core/services/api';
+import { alCambiar } from '../../core/services/tiempo-real';
 import { mensajeDeError } from '../../shared/utils/errores';
 
 @Component({
@@ -44,6 +45,10 @@ export class RolesPermisos implements OnInit {
   protected readonly cargos = signal<CargoVista[]>([]);
   protected readonly permisos = signal<PermisoVista[]>([]);
   protected readonly error = signal<string | null>(null);
+
+  constructor() {
+    alCambiar(() => this.cargar());
+  }
 
   ngOnInit(): void {
     this.cargar();

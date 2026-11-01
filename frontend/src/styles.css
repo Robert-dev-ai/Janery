@@ -1,86 +1,80 @@
-:root {
-  --texto: #1f2933;
-  --suave: #5f6c7b;
-  --borde: #d5dbe1;
-  --fondo: #f6f7f9;
-  --primario: #14532d;
-  --error: #b42318;
-  --ok: #14532d;
+@import "tailwindcss";
+
+/* Identidad de Janery: todo el sitio va del blanco al verde. */
+@theme {
+  --color-texto: #14532d;
+  --color-suave: #3f7a58;
+  --color-borde: #bbf7d0;
+  --color-fondo: #f0fdf4;
+  --color-primario: #15803d;
+  --color-intenso: #052e16;
+
+  --animate-entrada: entrada 0.3s ease-out;
+
+  @keyframes entrada {
+    from { opacity: 0; transform: translateY(0.5rem); }
+    to { opacity: 1; transform: translateY(0); }
+  }
 }
 
-* { box-sizing: border-box; }
-
-body {
-  margin: 0;
-  color: var(--texto);
-  background: var(--fondo);
-  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  line-height: 1.5;
+@layer base {
+  body { @apply min-h-screen bg-linear-to-b from-white to-fondo text-texto leading-normal; }
+  h1 { @apply mb-4 text-3xl font-bold text-green-800; }
+  h2 { @apply mb-2 text-xl font-semibold text-green-800; }
+  h3 { @apply mb-2 text-lg font-semibold text-green-800; }
+  p { @apply mb-3; }
+  a { @apply text-primario underline transition-colors duration-200 hover:text-green-500; }
+  label { @apply mb-3 block font-medium; }
+  input, select { @apply mt-1 block w-full rounded-md border border-green-300 bg-white p-2 transition duration-200 hover:border-green-500 focus:border-primario focus:ring-2 focus:ring-green-200 focus:outline-none; }
+  button { @apply cursor-pointer rounded-md border border-primario bg-primario px-3.5 py-2 text-white transition duration-200 hover:-translate-y-0.5 hover:bg-green-800 hover:shadow-md active:translate-y-0 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 disabled:hover:bg-primario disabled:hover:shadow-none; }
+  :focus-visible { @apply outline-2 outline-offset-2 outline-primario; }
+  table { @apply w-full border-collapse overflow-hidden rounded-md bg-white; }
+  th, td { @apply border-b border-borde p-2 text-left align-top; }
+  th { @apply bg-green-100 font-semibold whitespace-nowrap text-green-900; }
+  tbody tr { @apply transition-colors duration-150 hover:bg-green-50; }
 }
 
-.barra {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem 1.5rem;
-  align-items: center;
-  padding: 0.75rem 1.5rem;
-  background: #fff;
-  border-bottom: 1px solid var(--borde);
+@layer components {
+  .barra { @apply sticky top-0 z-10 flex flex-wrap items-center gap-x-6 gap-y-2 border-b border-green-300 bg-linear-to-r from-white via-green-50 to-green-200 px-6 py-3 shadow-sm; }
+  .barra nav { @apply flex flex-wrap items-center gap-x-4 gap-y-1; }
+  .barra nav a { @apply inline-block font-medium text-green-900 no-underline transition duration-200 hover:scale-110 hover:text-green-500; }
+  .barra nav a.activo { @apply font-bold text-primario underline decoration-2 underline-offset-4; }
+  .marca { @apply inline-block text-xl font-extrabold text-green-800 no-underline transition duration-200 hover:scale-110 hover:text-green-500; }
+  .en-vivo { @apply inline-flex items-center gap-1.5 text-xs font-medium text-green-800; }
+  .en-vivo i { @apply size-2 animate-pulse rounded-full bg-green-500; }
+  .sin-conexion { @apply text-xs font-medium text-suave; }
+
+  .contenido { @apply mx-auto max-w-5xl p-6; }
+  .contenido > router-outlet + * { @apply block animate-entrada; }
+  .estrecho { @apply max-w-md; }
+  .tarjeta { @apply mb-4 rounded-lg border border-borde bg-white p-5 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-green-400 hover:shadow-lg; }
+  .portada { @apply mb-6 rounded-xl bg-linear-to-br from-green-50 via-green-200 to-green-600 p-10; }
+  .portada h1 { @apply text-5xl font-extrabold text-green-950; }
+  .portada p { @apply text-lg text-green-950; }
+  .boton { @apply inline-block rounded-md border border-primario bg-primario px-4 py-2 font-medium text-white no-underline transition duration-200 hover:-translate-y-0.5 hover:bg-green-800 hover:text-white hover:shadow-md active:scale-95; }
+  .boton-claro { @apply inline-block rounded-md border border-primario bg-white px-4 py-2 font-medium text-primario no-underline transition duration-200 hover:-translate-y-0.5 hover:bg-green-100 hover:text-green-800 hover:shadow-md active:scale-95; }
+
+  /* Sin rojo: el error se distingue por el símbolo, el borde y el verde más oscuro. */
+  .error { @apply rounded-md border-l-4 border-intenso bg-green-100 px-3 py-2 font-semibold text-intenso; }
+  .error::before { content: "⚠ "; }
+  .exito { @apply animate-entrada font-medium text-primario; }
+  .exito::before { content: "✓ "; }
+  .suave { @apply text-suave; }
+  .acciones { @apply flex flex-wrap items-end gap-2; }
+  .tabla { @apply overflow-x-auto; }
+  .num { @apply text-right whitespace-nowrap tabular-nums; }
+  .importes { @apply grid grid-cols-[repeat(auto-fit,minmax(14rem,1fr))] gap-4; }
+  .importe { @apply text-2xl font-semibold text-green-800 tabular-nums; }
+  .paginador { @apply mt-3 flex items-center gap-3; }
+  button.secundario { @apply bg-white text-primario hover:bg-green-100 hover:text-green-800 disabled:hover:bg-white; }
+  button.peligro { @apply border-2 border-intenso bg-white font-semibold text-intenso hover:bg-intenso hover:text-white; }
+
+  /* Barra de pruebas: solo aparece con el perfil de simulación. */
+  .simulacion { @apply flex flex-wrap items-center gap-x-3 gap-y-2 border-b-2 border-intenso bg-green-200 px-6 py-2; }
+  .simulacion label { @apply m-0 inline-flex items-center gap-2; }
+  .simulacion input { @apply m-0 w-auto; }
 }
-.barra nav { display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; align-items: center; }
-.barra a { color: var(--texto); text-decoration: none; }
-.barra a:hover, .barra a.activo { color: var(--primario); text-decoration: underline; }
-.marca { font-size: 1.2rem; font-weight: 700; }
 
-.contenido { max-width: 64rem; margin: 0 auto; padding: 1.5rem; }
-.estrecho { max-width: 28rem; }
-
-.tarjeta {
-  background: #fff;
-  border: 1px solid var(--borde);
-  border-radius: 6px;
-  padding: 1.25rem;
-  margin-bottom: 1rem;
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after { animation: none !important; transition: none !important; }
 }
-
-label { display: block; margin-bottom: 0.75rem; font-weight: 500; }
-input, select {
-  display: block;
-  width: 100%;
-  margin-top: 0.25rem;
-  padding: 0.5rem;
-  font: inherit;
-  border: 1px solid var(--borde);
-  border-radius: 4px;
-  background: #fff;
-}
-
-button {
-  padding: 0.45rem 0.9rem;
-  font: inherit;
-  color: #fff;
-  background: var(--primario);
-  border: 1px solid var(--primario);
-  border-radius: 4px;
-  cursor: pointer;
-}
-button:disabled { opacity: 0.55; cursor: not-allowed; }
-button.secundario { color: var(--primario); background: #fff; }
-button.peligro { color: var(--error); background: #fff; border-color: var(--error); }
-:focus-visible { outline: 2px solid var(--primario); outline-offset: 2px; }
-
-.error { color: var(--error); }
-.exito { color: var(--ok); }
-.suave { color: var(--suave); }
-.acciones { display: flex; flex-wrap: wrap; gap: 0.5rem; }
-
-.tabla { overflow-x: auto; }
-table { width: 100%; border-collapse: collapse; background: #fff; }
-th, td { padding: 0.5rem 0.6rem; text-align: left; border-bottom: 1px solid var(--borde); vertical-align: top; }
-th { font-weight: 600; white-space: nowrap; }
-.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-
-.importes { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: 1rem; }
-.importe { font-size: 1.6rem; font-weight: 600; font-variant-numeric: tabular-nums; }
-
-.paginador { display: flex; gap: 0.75rem; align-items: center; margin-top: 0.75rem; }

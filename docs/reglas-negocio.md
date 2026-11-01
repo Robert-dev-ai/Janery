@@ -160,7 +160,9 @@ Todos los importes, porcentajes, tasas, límites, plazos y condiciones numérica
 
 El propietario autorizó el 30/10/2026 usar valores provisionales de tasas, encajes, plazos y ahorros, ajustables desde el CMS. Sus valores están en las migraciones `V4__creditos.sql` y `V5__ahorros.sql`. Las fórmulas siguientes las propuso el desarrollo y están pendientes de confirmación:
 
-- **Letras:** mensuales, con capital constante. Interés y desgravamen se calculan sobre el capital pendiente. Se redondea cada componente a centavos y el ahorro letras completa hasta el dólar entero.
+- **Letras (definido por el propietario):** mensuales. El interés es fijo sobre el capital sacado, y la letra es la misma hasta el final del crédito. El ahorro letras completa hasta el dólar entero. Si el capital no se divide exacto, la última letra lleva los centavos que faltan y esos mismos centavos menos de ahorro letras. Ejemplo: USD 100 a 3 meses lleva capital de 33,33, 33,33 y 33,34.
+- **Desgravamen de letras:** fijo sobre el capital sacado, igual que el interés. Pendiente de confirmación.
+- **Pagos parciales de letras (definido por el propietario):** se admiten, y lo primero que se cobra es el capital. Luego, a criterio del desarrollo, interés, desgravamen y ahorro letras. También aplican al emergente de cliente. Encaje y ahorro letras solo se usan para cubrir lo que falta de la última letra completa.
 - **Encaje:** porcentaje del importe, descontado de la cuenta principal al desembolsar.
 - **Tasas de un crédito a letras:** quedan fijadas al solicitarlo.
 - **Emergente de cliente:** interés y desgravamen de un mes sobre el importe, en una sola cuota al mes siguiente. Se desembolsa al momento, sin aprobación.
@@ -172,18 +174,35 @@ El propietario autorizó el 30/10/2026 usar valores provisionales de tasas, enca
 - **Caja principal:** refleja el dinero real. Solo cambia con depósitos, retiros e ingreso de apertura; créditos y ahorros se mueven dentro de la cuenta de cada persona.
 - **Aprobación de créditos a letras:** Presidencia, con el permiso `APROBAR_CREDITOS`.
 
-## 11. Fórmulas de socios y fondos, pendientes de confirmación
+## 11. Socios y fondos
 
-Las propuso el desarrollo para resolver lo que la sección 6 dejaba abierto:
+**Definido por el propietario (31/10/2026):**
 
-- **Valor del socio:** suma de sus aportes de capital, más ganancias, menos pérdidas, reserva y ganancias ya distribuidas.
-- **Participación:** valor del socio dividido entre la suma de los valores de todos los socios activos.
-- **Ganancias y pérdidas:** las registra a mano quien tenga `GESTIONAR_RESULTADOS`; ningún ingreso se convierte solo en ganancia. Se reparten en el acto según el valor de cada socio. Una pérdida no puede superar el capital total.
+- **Fondo personal:** el dinero de cada socio es un solo valor, pero se lleva separado por origen: aportes iniciales, aportes mensuales, aportes personales y ganancias.
+- **Ganancias:** van al fondo personal de cada socio y se quedan ahí; no se pagan a la cuenta principal.
+- **Fondo de reserva:** el 10 % se separa cada vez que se reparte una ganancia, no al cerrar el año.
+- **Cierre:** es anual.
+- **Pérdidas:** se restan de las ganancias. La reserva no se devuelve.
+- **Aportes:** al aportar, el dinero pasa a ser parte de Janery y no se retira. Solo puede venderse a otro socio, en una compraventa interna.
+- **Retiro de ganancias:** se pueden retirar desde el 1 de enero siguiente, si el socio está al día con sus obligaciones.
+- **Decisión del 1 de enero:** el presidente decide si cada socio puede retirar o si se le descuenta, y a qué se destina, eligiendo en un menú que muestra lo que debe. Nada se descuenta automáticamente.
+
+**Criterios del desarrollo, pendientes de confirmación:**
+
+- **Obligaciones:** aporte mensual y caja chica de meses ya terminados desde que entró el socio, y cuotas de crédito vencidas. El cupo emergente no cuenta porque no tiene vencimiento.
+- **Menú del presidente:** aportes y caja chica se descuentan por mes completo; las letras, completas o en parte, empezando por la más antigua de cada crédito. Si lo elegido supera las ganancias liberadas no se aplica nada. La autorización vale para el año en curso, exige que el socio esté al día y puede quitarse.
+- **Destino del retiro:** la cuenta principal del socio.
+- **Una pérdida de este año** reduce lo disponible aunque la ganancia sea de años anteriores.
+- **Compraventa:** la registra Presidencia cuando ambos socios la acordaron. Se vende solo capital, no ganancias, al precio que acuerden. El comprador paga al vendedor entre sus cuentas principales; la caja no cambia.
+
+- **Participación:** fondo personal del socio dividido entre la suma de los fondos de todos los socios activos.
+- **Registro de ganancias y pérdidas:** a mano, por quien tenga `GESTIONAR_RESULTADOS`; ningún ingreso se convierte solo en ganancia. Se reparten según el valor de cada socio en ese momento. Una pérdida no puede superar el capital total.
 - **Evolución mensual:** se calcula de las variaciones; el valor inicial de un mes es el final del anterior.
-- **Cierre anual:** solo años terminados y una vez por año. Con neto positivo, separa el porcentaje `FONDO_RESERVA` y paga el resto a la cuenta principal de cada socio, según su valor al cerrar. Con neto negativo o cero no reserva ni paga.
+- **Cierre anual:** solo años terminados y una vez por año. Totaliza y bloquea nuevos resultados en ese año; no mueve dinero.
+- **Aportes iniciales:** los registra Presidencia como dinero recibido fuera del sistema; entran a la caja principal y al fondo personal.
 - **Caja chica:** el aporte de USD 2,50 sale de la cuenta del socio y pasa de la caja principal a caja chica. No aumenta la participación.
 - **Fondo de reserva:** caja propia; recibe el traspaso desde la caja principal.
-- **Aportes:** los paga el socio desde su cuenta principal, y puede ponerse al día con meses pasados.
-- **Retiro de capital:** sin definir, por lo que un socio activo no puede cerrar su cuenta principal.
+- **Aportes mensuales y personales:** los paga el socio desde su cuenta principal, y puede ponerse al día con meses pasados.
+- **Cierre de cuenta:** un socio activo no puede cerrar su cuenta principal.
 
-**Fuera de esta versión, por decisión del propietario:** mora, pagos parciales de letras y emergente de cliente, pagos anticipados y refinanciación. Las letras pueden pagarse antes de su vencimiento, una a una y por el total.
+**Fuera de esta versión, por decisión del propietario:** mora y refinanciación. Las letras pueden pagarse antes de su vencimiento, una a una.

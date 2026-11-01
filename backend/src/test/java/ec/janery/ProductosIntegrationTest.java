@@ -146,6 +146,38 @@ class ProductosIntegrationTest {
     }
 
     @Test
+    void pagoParcialDeLetraCobraPrimeroElCapital() throws Exception {
+        Persona p = persona();
+        long credito = solicitarLetras(p, "NORMAL", "300.00", 3);
+        aprobar(credito);
+        // Letra fija: capital 100, interés 4,50, desgravamen 0,30 y ahorro 0,20 = 105.
+        JsonNode c = credito(p, credito);
+        assertThat(c.get("cuotas")).allSatisfy(l -> assertThat(l.get("total").decimalValue()).isEqualByComparingTo("105"));
+
+        pagar(p, credito, "{\"importe\":60.00}").andExpect(status().isOk());
+        c = credito(p, credito);
+        assertThat(c.get("capitalPendiente").decimalValue()).isEqualByComparingTo("240");
+        assertThat(c.get("ahorroLetras").decimalValue()).isEqualByComparingTo("0");
+        assertThat(c.get("cuotasPagadas")).isEmpty();
+        assertThat(c.get("cuotas").get(0).get("pagado").decimalValue()).isEqualByComparingTo("60");
+        assertThat(c.get("totalPendiente").decimalValue()).isEqualByComparingTo("255");
+
+        pagar(p, credito, "{\"importe\":45.01}").andExpect(status().isConflict()).andExpect(jsonPath("$.codigo").value("PAGO_EXCEDIDO"));
+
+        // 40 de capital; lo demás a interés, desgravamen y por último ahorro letras.
+        pagar(p, credito, "{\"importe\":44.90}").andExpect(status().isOk());
+        c = credito(p, credito);
+        assertThat(c.get("capitalPendiente").decimalValue()).isEqualByComparingTo("200");
+        assertThat(c.get("ahorroLetras").decimalValue()).isEqualByComparingTo("0.10");
+        assertThat(c.get("cuotasPagadas")).isEmpty();
+
+        pagar(p, credito, "{}").andExpect(status().isOk());
+        c = credito(p, credito);
+        assertThat(c.get("ahorroLetras").decimalValue()).isEqualByComparingTo("0.20");
+        assertThat(c.get("cuotasPagadas")).hasSize(1);
+    }
+
+    @Test
     void aprobarExigePermisoYLimitesSeValidan() throws Exception {
         Persona p = persona();
         long credito = solicitarLetras(p, "NORMAL", "300.00", 3);

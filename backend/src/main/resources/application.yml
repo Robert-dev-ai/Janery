@@ -5,11 +5,13 @@ spring:
     # .env local, ignorado por Git. Admite ejecutar desde backend/ o desde la raiz.
     import: "optional:file:.env[.properties],optional:file:../.env[.properties]"
   datasource:
-    url: jdbc:postgresql://${JANERY_DB_HOST:localhost}:${JANERY_DB_PORT:5432}/${JANERY_DB_NAME:janery}?currentSchema=${JANERY_DB_SCHEMA:janery}
+    url: jdbc:postgresql://${JANERY_DB_HOST:localhost}:${JANERY_DB_PORT:5432}/${JANERY_DB_NAME:janery}?currentSchema=${JANERY_DB_SCHEMA:janery}&sslmode=${JANERY_DB_SSLMODE:prefer}&channelBinding=${JANERY_DB_CHANNEL_BINDING:prefer}
     username: ${JANERY_DB_USER:}
     password: ${JANERY_DB_PASSWORD:}
     hikari:
       connection-timeout: 5000
+      # El proxy de Neon ignora currentSchema: las consultas nativas dependen de esto.
+      connection-init-sql: SET search_path TO ${JANERY_DB_SCHEMA:janery}
   jpa:
     open-in-view: false
     hibernate:

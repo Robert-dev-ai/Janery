@@ -3,6 +3,7 @@ import { Component, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
 import { ApiService, HistorialParametro, Parametro } from '../../core/services/api';
+import { alCambiar } from '../../core/services/tiempo-real';
 import { mensajeDeError } from '../../shared/utils/errores';
 
 const UNIDADES: Record<string, string> = {
@@ -106,6 +107,10 @@ export class AdminParametros implements OnInit {
   protected readonly edicion = signal<Edicion | null>(null);
   protected readonly historial = signal<HistorialParametro[] | null>(null);
   protected readonly error = signal<string | null>(null);
+
+  constructor() {
+    alCambiar(() => this.cargar());
+  }
 
   ngOnInit(): void {
     this.cargar();

@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { Observable } from 'rxjs';
 
 import { Ahorro, ApiService } from '../../core/services/api';
+import { alCambiar } from '../../core/services/tiempo-real';
 import { mensajeDeError } from '../../shared/utils/errores';
 
 @Component({
@@ -76,6 +77,10 @@ export class Ahorros implements OnInit {
 
   // Una clave por intento: se renueva solo tras un éxito, para que reintentar no duplique.
   private clave: string = crypto.randomUUID();
+
+  constructor() {
+    alCambiar(() => this.cargar());
+  }
 
   ngOnInit(): void {
     this.cargar();

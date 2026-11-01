@@ -91,6 +91,13 @@ public class CreditoService {
 
     interface CuotaRepository extends JpaRepository<CuotaCredito, Long> {
         List<CuotaCredito> findByCreditoIdOrderByNumero(Long creditoId);
+
+        @Query("""
+                select q from CuotaCredito q, Credito c where c.id = q.creditoId and c.personaId = :personaId
+                and c.estado = 'ACTIVO' and q.pagadaEn is null and q.vencimiento < :hoy
+                order by q.vencimiento, q.numero
+                """)
+        List<CuotaCredito> vencidas(@Param("personaId") Long personaId, @Param("hoy") LocalDate hoy);
     }
 
     interface DesembolsoRepository extends JpaRepository<DesembolsoCredito, Long> {
@@ -120,7 +127,16 @@ public class CreditoService {
             BigDecimal importe, Integer plazoMeses, BigDecimal tasaInteres, BigDecimal tasaDesgravamen,
             String unidadTasa, BigDecimal capitalPendiente, BigDecimal interes, BigDecimal desgravamen,
             BigDecimal totalPendiente, BigDecimal encaje, boolean encajeDevuelto, BigDecimal ahorroLetras,
-            String titular, String motivoRechazo, List<Letra> cuotas, List<Integer> cuotasPagadas) {
+            String titular, String motivoRechazo, List<CuotaVista> cuotas, List<Integer> cuotasPagadas) {
+    }
+
+    public record CuotaVista(int numero, LocalDate vencimiento, BigDecimal capital, BigDecimal ahorroLetras,
+            BigDecimal fondoDesgravamen, BigDecimal interes, BigDecimal total, BigDecimal pagado) {
+    }
+
+    /** total es lo que falta por pagar de la cuota, tras los pagos parciales. */
+    public record CuotaVencida(Long creditoId, Long cuotaId, int numero, java.time.LocalDate vencimiento, String familia,
+            String modalidad, BigDecimal total) {
     }
 
     public record ProductoLetras(String modalidad, BigDecimal tasaInteres, BigDecimal porcentajeEncaje) {
@@ -295,8 +311,8 @@ public class CreditoService {
 
         BigDecimal interes = CalculadoraCredito.porcentaje(importe, tasa);
         BigDecimal cargoDesgravamen = CalculadoraCredito.porcentaje(importe, desgravamen);
-        cuotas.save(new CuotaCredito(null, c.getId(), 1, hoy.plusMonths(1), importe, BigDecimal.ZERO.setScale(2),
-                cargoDesgravamen, interes, importe.add(interes).add(cargoDesgravamen), null));
+        cuotas.save(new CuotaCredito(c.getId(), 1, hoy.plusMonths(1), importe, BigDecimal.ZERO.setScale(2),
+                cargoDesgravamen, interes, importe.add(interes).add(cargoDesgravamen)));
         return desembolsar(cuenta, c, importe, clave, usuarioId);
     }
 
@@ -380,7 +396,7 @@ public class CreditoService {
 
     // --- Pagos
 
-    /** Letras y emergente de cliente: se paga la siguiente cuota completa. Cupo: cualquier importe hasta lo adeudado. */
+    /** Letras y emergente de cliente: se paga la siguiente cuota, entera o en parte. Cupo: hasta lo adeudado. */
     @Transactional
     public Long pagar(Long usuarioId, Long creditoId, BigDecimal importe, boolean usarAhorroLetras, boolean usarEncaje,
             String clave) {
@@ -398,13 +414,14 @@ public class CreditoService {
         }
         Long operacion = esLinea(c)
                 ? pagarLinea(cuenta, c, importe, clave, usuarioId)
-                : pagarCuota(cuenta, c, usarAhorroLetras, usarEncaje, clave, usuarioId);
+                : pagarCuota(cuenta, c, importe, usarAhorroLetras, usarEncaje, clave, usuarioId);
         auditoria.registrar(usuarioId, "CREDITO_PAGO", MODULO, "credito", c.getId(), null, operacion.toString(), null);
         return operacion;
     }
 
-    private Long pagarCuota(CuentaPrincipal cuenta, Credito c, boolean usarAhorro, boolean usarEncaje, String clave,
-            Long actorId) {
+    /** Sin importe, o usando encaje o ahorro letras, cubre lo que falta de la cuota. Un pago parcial cobra primero capital. */
+    private Long pagarCuota(CuentaPrincipal cuenta, Credito c, BigDecimal importe, boolean usarAhorro, boolean usarEncaje,
+            String clave, Long actorId) {
         List<CuotaCredito> todas = cuotas.findByCreditoIdOrderByNumero(c.getId());
         CuotaCredito cuota = todas.stream().filter(q -> q.getPagadaEn() == null).findFirst()
                 .orElseThrow(() -> new IllegalStateException("Crédito activo sin cuotas pendientes: " + c.getId()));
@@ -412,8 +429,13 @@ public class CreditoService {
         if ((usarAhorro || usarEncaje) && (!ultima || !LETRAS.equals(c.getFamilia()))) {
             throw NegocioException.conflicto("SOLO_ULTIMA_LETRA", "Ahorro letras y encaje solo pueden cubrir la última letra");
         }
+        BigDecimal pendiente = cuota.pendiente();
+        BigDecimal aPagar = importe == null || usarAhorro || usarEncaje ? pendiente : importe;
+        if (aPagar.compareTo(pendiente) > 0) {
+            throw NegocioException.conflicto("PAGO_EXCEDIDO", "El importe supera lo que falta de esta letra");
+        }
         Instant ahora = Instant.now(reloj);
-        Long operacion = cuentas.crearOperacionInterna("PAGO_CREDITO", cuota.getTotal(), clave, actorId);
+        Long operacion = cuentas.crearOperacionInterna("PAGO_CREDITO", aPagar, clave, actorId);
         // Liberar antes del cobro hace que esos fondos cubran la letra; el remanente queda en la cuenta principal.
         if (usarAhorro) {
             liberarAhorro(cuenta, c, operacion, null, ahora);
@@ -421,24 +443,38 @@ public class CreditoService {
         if (usarEncaje) {
             liberarEncaje(cuenta, c, operacion, ahora);
         }
-        cuentas.mover(cuenta, operacion, SALIDA, cuota.getTotal(), "PAGO_CREDITO");
+        cuentas.mover(cuenta, operacion, SALIDA, aPagar, "PAGO_CREDITO");
 
-        PagoCredito pago = pagos.save(new PagoCredito(null, c.getId(), cuota.getId(), operacion, cuota.getTotal(), ahora));
-        detalle(pago, "CAPITAL", cuota.getCapital());
-        detalle(pago, "INTERES", cuota.getInteres());
-        detalle(pago, "FONDO_DESGRAVAMEN", cuota.getFondoDesgravamen());
-        detalle(pago, "AHORRO_LETRAS", cuota.getAhorroLetras());
+        // Orden de cobro: capital, interés, desgravamen y ahorro letras.
+        BigDecimal aCapital = aPagar.min(cuota.getCapital().subtract(cuota.getCapitalPagado()));
+        BigDecimal resto = aPagar.subtract(aCapital);
+        BigDecimal aInteres = resto.min(cuota.getInteres().subtract(cuota.getInteresPagado()));
+        resto = resto.subtract(aInteres);
+        BigDecimal aDesgravamen = resto.min(cuota.getFondoDesgravamen().subtract(cuota.getDesgravamenPagado()));
+        BigDecimal aAhorro = resto.subtract(aDesgravamen);
 
-        if (cuota.getAhorroLetras().signum() > 0) {
+        PagoCredito pago = pagos.save(new PagoCredito(null, c.getId(), cuota.getId(), operacion, aPagar, ahora));
+        detalle(pago, "CAPITAL", aCapital);
+        detalle(pago, "INTERES", aInteres);
+        detalle(pago, "FONDO_DESGRAVAMEN", aDesgravamen);
+        detalle(pago, "AHORRO_LETRAS", aAhorro);
+
+        if (aAhorro.signum() > 0) {
             AhorroLetrasCredito ahorro = ahorros.findByCreditoId(c.getId())
                     .orElseThrow(() -> new IllegalStateException("Crédito sin ahorro letras: " + c.getId()));
-            ahorro.setSaldo(ahorro.getSaldo().add(cuota.getAhorroLetras()));
-            movimientosAhorro.save(new MovimientoAhorroLetras(null, c.getId(), cuota.getId(), "ACUMULACION",
-                    cuota.getAhorroLetras(), ahora));
+            ahorro.setSaldo(ahorro.getSaldo().add(aAhorro));
+            movimientosAhorro.save(new MovimientoAhorroLetras(null, c.getId(), cuota.getId(), "ACUMULACION", aAhorro, ahora));
         }
-        cuota.setPagadaEn(ahora);
-        c.setCapitalPendiente(c.getCapitalPendiente().subtract(cuota.getCapital()));
-        if (ultima) {
+        cuota.setCapitalPagado(cuota.getCapitalPagado().add(aCapital));
+        cuota.setInteresPagado(cuota.getInteresPagado().add(aInteres));
+        cuota.setDesgravamenPagado(cuota.getDesgravamenPagado().add(aDesgravamen));
+        cuota.setAhorroPagado(cuota.getAhorroPagado().add(aAhorro));
+        c.setCapitalPendiente(c.getCapitalPendiente().subtract(aCapital));
+        boolean completa = cuota.pendiente().signum() == 0;
+        if (completa) {
+            cuota.setPagadaEn(ahora);
+        }
+        if (ultima && completa) {
             if (LETRAS.equals(c.getFamilia())) {
                 liberarAhorro(cuenta, c, operacion, cuota.getId(), ahora);
                 liberarEncaje(cuenta, c, operacion, ahora);
@@ -523,6 +559,16 @@ public class CreditoService {
 
     // --- Consultas
 
+    /** Cuotas sin pagar con el vencimiento ya pasado, la más antigua primero. El cupo de socio no tiene vencimiento. */
+    @Transactional(readOnly = true)
+    public List<CuotaVencida> cuotasVencidas(Long personaId) {
+        return cuotas.vencidas(personaId, hoy()).stream().map(q -> {
+            Credito c = creditos.findById(q.getCreditoId()).orElseThrow();
+            return new CuotaVencida(q.getCreditoId(), q.getId(), q.getNumero(), q.getVencimiento(), c.getFamilia(),
+                    c.getModalidad(), q.pendiente());
+        }).toList();
+    }
+
     @Transactional(readOnly = true)
     public List<CreditoVista> misCreditos(Long usuarioId) {
         return creditos.findByPersonaIdOrderByIdDesc(personaDe(usuarioId)).stream().map(this::vista).toList();
@@ -550,12 +596,12 @@ public class CreditoService {
             desgravamen = desgravamen.add(CalculadoraCredito.devengo(c.getCapitalPendiente(), c.getTasaDesgravamen(), dias));
         }
         List<CuotaCredito> propias = cuotas.findByCreditoIdOrderByNumero(c.getId());
-        List<Letra> letras = propias.stream().map(q -> new Letra(q.getNumero(), q.getVencimiento(), q.getCapital(),
-                q.getAhorroLetras(), q.getFondoDesgravamen(), q.getInteres(), q.getTotal())).toList();
+        List<CuotaVista> letras = propias.stream().map(q -> new CuotaVista(q.getNumero(), q.getVencimiento(), q.getCapital(),
+                q.getAhorroLetras(), q.getFondoDesgravamen(), q.getInteres(), q.getTotal(), q.pagado())).toList();
         List<Integer> pagadas = propias.stream().filter(q -> q.getPagadaEn() != null).map(CuotaCredito::getNumero).toList();
         BigDecimal pendiente = esLinea(c)
                 ? interes.setScale(2, RoundingMode.HALF_UP).add(desgravamen.setScale(2, RoundingMode.HALF_UP)).add(c.getCapitalPendiente())
-                : propias.stream().filter(q -> q.getPagadaEn() == null).map(CuotaCredito::getTotal).reduce(BigDecimal.ZERO, BigDecimal::add);
+                : propias.stream().map(CuotaCredito::pendiente).reduce(BigDecimal.ZERO, BigDecimal::add);
         EncajeCredito encaje = encajes.findByCreditoId(c.getId()).orElse(null);
         BigDecimal ahorro = ahorros.findByCreditoId(c.getId()).map(AhorroLetrasCredito::getSaldo).orElse(null);
         return new CreditoVista(c.getId(), c.getFamilia(), c.getModalidad(), c.getPerfil(), c.getEstado(), c.getImporte(),
@@ -568,8 +614,8 @@ public class CreditoService {
     // --- Apoyo
 
     private void guardarCuotas(Long creditoId, List<Letra> letras) {
-        letras.forEach(l -> cuotas.save(new CuotaCredito(null, creditoId, l.numero(), l.vencimiento(), l.capital(),
-                l.ahorroLetras(), l.fondoDesgravamen(), l.interes(), l.total(), null)));
+        letras.forEach(l -> cuotas.save(new CuotaCredito(creditoId, l.numero(), l.vencimiento(), l.capital(),
+                l.ahorroLetras(), l.fondoDesgravamen(), l.interes(), l.total())));
     }
 
     private Credito nuevo(Long personaId, String familia, String modalidad, String perfil, String estado, String unidad,

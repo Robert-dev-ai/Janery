@@ -11,6 +11,12 @@ export interface Pagina<T> {
   total: number;
 }
 
+export interface EstadoSimulacion {
+  fecha: string;
+  ahora: string;
+  diasAdelantados: number;
+}
+
 export interface Perfil {
   nombres: string;
   apellidos: string;
@@ -105,7 +111,7 @@ export interface Credito {
   ahorroLetras: number | null;
   titular: string;
   motivoRechazo: string | null;
-  cuotas: Letra[];
+  cuotas: (Letra & { pagado: number })[];
   cuotasPagadas: number[];
 }
 
@@ -173,8 +179,14 @@ export interface ResumenSocio {
   socioId: number;
   nombre: string;
   desde: string;
+  totalInicial: number;
   totalObligatorio: number;
   totalPersonal: number;
+  compraventas: number;
+  ganancias: number;
+  gananciasDisponibles: number;
+  obligacionesPendientes: number;
+  retiroAutorizado: boolean;
   totalCajaChica: number;
   valorActual: number;
   porcentaje: number;
@@ -183,6 +195,23 @@ export interface ResumenSocio {
   periodoActual: string;
   obligatorioDelMesPagado: boolean;
   cajaChicaDelMesPagado: boolean;
+}
+
+export interface Obligacion {
+  tipo: string;
+  periodo: string | null;
+  cuotaId: number | null;
+  descripcion: string;
+  importe: number;
+}
+
+export interface MenuObligaciones {
+  socioId: number;
+  nombre: string;
+  gananciasDisponibles: number;
+  retiroAutorizado: boolean;
+  obligaciones: Obligacion[];
+  total: number;
 }
 
 export interface Aporte {
@@ -204,6 +233,7 @@ export interface Resultado {
   id: number;
   tipo: string;
   importe: number;
+  reserva: number;
   concepto: string;
   fecha: string;
 }
@@ -422,6 +452,36 @@ export class ApiService {
     return this.http.get<ResumenSocio[]>(`${this.base}/admin/socios`);
   }
 
+  obligaciones(socioId: number): Observable<MenuObligaciones> {
+    return this.http.get<MenuObligaciones>(`${this.base}/admin/socios/${socioId}/obligaciones`);
+  }
+
+  descontarObligaciones(socioId: number, descuentos: { tipo: string; periodo: string | null; cuotaId: number | null; importe: number | null }[],
+      clave: string): Observable<void> {
+    return this.http.post<void>(`${this.base}/admin/socios/${socioId}/descuentos`, { descuentos }, conClave(clave));
+  }
+
+  autorizarRetiro(socioId: number): Observable<void> {
+    return this.http.post<void>(`${this.base}/admin/socios/${socioId}/autorizacion-retiro`, null);
+  }
+
+  revocarRetiro(socioId: number): Observable<void> {
+    return this.http.delete<void>(`${this.base}/admin/socios/${socioId}/autorizacion-retiro`);
+  }
+
+  retirarGanancias(importe: number, clave: string): Observable<unknown> {
+    return this.http.post(`${this.base}/socios/me/retiro-ganancias`, { importe }, conClave(clave));
+  }
+
+  registrarCompraventa(vendedorId: number, compradorId: number, capital: number, precio: number, clave: string): Observable<unknown> {
+    return this.http.post(`${this.base}/admin/socios/compraventas`, { vendedorId, compradorId, capital, precio }, conClave(clave));
+  }
+
+  registrarAporteInicial(socioId: number, importe: number, metodoPago: string, referencia: string | null,
+      clave: string): Observable<unknown> {
+    return this.http.post(`${this.base}/admin/socios/${socioId}/aporte-inicial`, { importe, metodoPago, referencia }, conClave(clave));
+  }
+
   resultados(pagina: number): Observable<Pagina<Resultado>> {
     return this.http.get<Pagina<Resultado>>(`${this.base}/admin/resultados`, { params: new HttpParams().set('pagina', pagina) });
   }
@@ -466,7 +526,7 @@ export class ApiService {
     return this.http.get<Credito[]>(`${this.base}/creditos/me`);
   }
 
-  pagarCredito(id: number, cuerpo: { importe?: number; usarAhorroLetras?: boolean; usarEncaje?: boolean },
+  pagarCredito(id: number, cuerpo: { importe?: number | null; usarAhorroLetras?: boolean; usarEncaje?: boolean },
       clave: string): Observable<unknown> {
     return this.http.post(`${this.base}/creditos/${id}/pagos`, cuerpo, conClave(clave));
   }
@@ -505,5 +565,13 @@ export class ApiService {
 
   retirarAhorro(id: number, importe: number | null, clave: string): Observable<unknown> {
     return this.http.post(`${this.base}/ahorros/${id}/retiros`, { importe }, conClave(clave));
+  }
+
+  estadoSimulacion(): Observable<EstadoSimulacion> {
+    return this.http.get<EstadoSimulacion>(`${this.base}/simulacion`);
+  }
+
+  avanzarSimulacion(destino: { dias?: number; fecha?: string }): Observable<EstadoSimulacion> {
+    return this.http.post<EstadoSimulacion>(`${this.base}/simulacion/avanzar`, destino);
   }
 }

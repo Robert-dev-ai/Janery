@@ -85,6 +85,11 @@ export const routes: Routes = [
         loadComponent: () => import('./features/admin/reportes').then((m) => m.AdminReportes),
       },
       {
+        path: 'admin/retiros',
+        canActivate: [permisoGuard('GESTIONAR_RESULTADOS')],
+        loadComponent: () => import('./features/admin/retiros').then((m) => m.AdminRetiros),
+      },
+      {
         path: 'admin/resultados',
         canActivate: [permisoGuard('GESTIONAR_RESULTADOS')],
         loadComponent: () => import('./features/admin/resultados').then((m) => m.AdminResultados),

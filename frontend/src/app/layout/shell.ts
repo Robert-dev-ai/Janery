@@ -2,11 +2,17 @@ import { Component, inject } from '@angular/core';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 
 import { AuthService } from '../core/auth/auth';
+import { TiempoRealService } from '../core/services/tiempo-real';
+import { environment } from '../../environments/environment';
+import { BarraSimulacion } from './barra-simulacion';
 
 @Component({
   selector: 'app-shell',
-  imports: [RouterLink, RouterLinkActive, RouterOutlet],
+  imports: [BarraSimulacion, RouterLink, RouterLinkActive, RouterOutlet],
   template: `
+    @if (simulacion && auth.autenticado()) {
+      <app-barra-simulacion />
+    }
     <header class="barra">
       <a class="marca" routerLink="/">Janery</a>
       <nav aria-label="Principal">
@@ -18,7 +24,7 @@ import { AuthService } from '../core/auth/auth';
             <a routerLink="/app/creditos" routerLinkActive="activo">Créditos</a>
             <a routerLink="/app/ahorros" routerLinkActive="activo">Ahorros</a>
             @if (auth.yo()?.esSocio) {
-              <a routerLink="/app/inversiones" routerLinkActive="activo">Mi participación</a>
+              <a routerLink="/app/inversiones" routerLinkActive="activo">Mi fondo personal</a>
             }
             <a routerLink="/app/perfil" routerLinkActive="activo">Perfil</a>
           } @else {
@@ -44,6 +50,7 @@ import { AuthService } from '../core/auth/auth';
           }
           @if (auth.tienePermiso('GESTIONAR_RESULTADOS')) {
             <a routerLink="/admin/resultados" routerLinkActive="activo">Resultados</a>
+            <a routerLink="/admin/retiros" routerLinkActive="activo">Retiros de socios</a>
           }
           @if (auth.tienePermiso('ADMIN_PARAMETROS')) {
             <a routerLink="/admin/parametros" routerLinkActive="activo">Parámetros</a>
@@ -57,6 +64,11 @@ import { AuthService } from '../core/auth/auth';
           @if (auth.tienePermiso('CONSULTAR_AUDITORIA')) {
             <a routerLink="/admin/auditoria" routerLinkActive="activo">Auditoría</a>
           }
+          @if (vivo.conectado()) {
+            <span class="en-vivo" title="Los datos se actualizan solos"><i></i>En vivo</span>
+          } @else {
+            <span class="sin-conexion">Reconectando…</span>
+          }
           <button type="button" class="secundario" (click)="salir()">Cerrar sesión</button>
         } @else {
           <a routerLink="/iniciar-sesion" routerLinkActive="activo">Iniciar sesión</a>
@@ -69,6 +81,8 @@ import { AuthService } from '../core/auth/auth';
 })
 export class Shell {
   protected readonly auth = inject(AuthService);
+  protected readonly vivo = inject(TiempoRealService);
+  protected readonly simulacion = environment.simulacion;
   private readonly router = inject(Router);
 
   protected salir(): void {

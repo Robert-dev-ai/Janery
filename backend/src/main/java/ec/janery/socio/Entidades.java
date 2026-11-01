@@ -64,6 +64,8 @@ final class Entidades {
         private BigDecimal importe;
         private String concepto;
         private LocalDate fecha;
+        private BigDecimal reserva;
+        private BigDecimal porcentajeReserva;
         private Long actorId;
         private Instant creadoEn;
     }
@@ -82,6 +84,39 @@ final class Entidades {
         private BigDecimal porcentajeReserva;
         private BigDecimal reserva;
         private BigDecimal distribuido;
+        private Long actorId;
+        private Instant creadoEn;
+    }
+
+    @Entity(name = "AutorizacionRetiro")
+    @Table(name = "autorizaciones_retiro")
+    @Getter
+    @NoArgsConstructor
+    @AllArgsConstructor
+    static class AutorizacionRetiro {
+        @Id
+        @GeneratedValue(strategy = GenerationType.IDENTITY)
+        private Long id;
+        private Long socioId;
+        private Integer anio;
+        private Long autorizadoPor;
+        private Instant creadoEn;
+    }
+
+    @Entity(name = "CompraventaCapital")
+    @Table(name = "compraventas_capital")
+    @Getter
+    @NoArgsConstructor
+    @AllArgsConstructor
+    static class CompraventaCapital {
+        @Id
+        @GeneratedValue(strategy = GenerationType.IDENTITY)
+        private Long id;
+        private Long vendedorId;
+        private Long compradorId;
+        private BigDecimal capital;
+        private BigDecimal precio;
+        private Long operacionId;
         private Long actorId;
         private Instant creadoEn;
     }

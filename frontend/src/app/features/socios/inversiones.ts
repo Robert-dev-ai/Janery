@@ -4,11 +4,17 @@ import { FormsModule } from '@angular/forms';
 import { forkJoin, Observable } from 'rxjs';
 
 import { Aporte, ApiService, PeriodoParticipacion, ResumenSocio } from '../../core/services/api';
+import { alCambiar } from '../../core/services/tiempo-real';
 import { mensajeDeError } from '../../shared/utils/errores';
 
 const TIPOS: Record<string, string> = {
-  APORTE_OBLIGATORIO: 'Aporte obligatorio',
+  APORTE_INICIAL: 'Aporte inicial',
+  APORTE_OBLIGATORIO: 'Aporte mensual',
   APORTE_PERSONAL: 'Aporte personal',
+  APORTE_COMPRA: 'Compra de capital',
+  APORTE_VENTA: 'Venta de capital',
+  RETIRO_GANANCIA: 'Retiro de ganancias',
+  DESCUENTO_OBLIGACION: 'Descuento por obligaciones',
   GANANCIA: 'Ganancia',
   PERDIDA: 'Pérdida',
   RESERVA: 'Fondo de reserva',
@@ -19,19 +25,50 @@ const TIPOS: Record<string, string> = {
   selector: 'app-inversiones',
   imports: [CurrencyPipe, DatePipe, DecimalPipe, FormsModule],
   template: `
-    <h1>Mi participación</h1>
+    <h1>Mi fondo personal</h1>
     @if (error()) { <p class="error" role="alert">{{ error() }}</p> }
     @if (aviso()) { <p class="exito" role="status">{{ aviso() }}</p> }
 
     @if (resumen(); as r) {
       <div class="importes">
         <section class="tarjeta">
-          <h2>Valor actual</h2>
+          <h2>Valor total</h2>
           <p class="importe">{{ r.valorActual | currency: 'USD' }}</p>
           <p class="suave">{{ r.porcentaje | number: '1.2-4' }} % de la participación</p>
         </section>
         <section class="tarjeta">
-          <h2>Aportes obligatorios</h2>
+          <h2>Aportes iniciales</h2>
+          <p class="importe">{{ r.totalInicial | currency: 'USD' }}</p>
+        </section>
+        <section class="tarjeta">
+          <h2>Ganancias</h2>
+          <p class="importe">{{ r.ganancias | currency: 'USD' }}</p>
+          <p class="suave">Ya descontados el fondo de reserva y las pérdidas.</p>
+          <p>Disponible para retirar: <strong>{{ r.gananciasDisponibles | currency: 'USD' }}</strong></p>
+          <p class="suave">Las ganancias de cada año se liberan el 1 de enero siguiente, cuando el presidente lo autoriza. Van a su cuenta principal.</p>
+          @if (r.obligacionesPendientes > 0) {
+            <p class="error">Obligaciones vencidas: {{ r.obligacionesPendientes | currency: 'USD' }}.</p>
+          }
+          @if (r.gananciasDisponibles > 0 && !r.retiroAutorizado) {
+            <p class="suave">Su retiro aún no está autorizado.</p>
+          }
+          @if (r.gananciasDisponibles > 0 && r.retiroAutorizado) {
+            <form class="acciones" (ngSubmit)="retirar()">
+              <label>Importe (USD)
+                <input type="number" min="0.01" step="0.01" name="retiro" [(ngModel)]="importeRetiro" />
+              </label>
+              <button type="submit" [disabled]="!importeRetiro || importeRetiro <= 0">Retirar</button>
+            </form>
+          }
+        </section>
+        @if (r.compraventas !== 0) {
+          <section class="tarjeta">
+            <h2>Compraventas de capital</h2>
+            <p class="importe">{{ r.compraventas | currency: 'USD' }}</p>
+          </section>
+        }
+        <section class="tarjeta">
+          <h2>Aportes mensuales</h2>
           <p class="importe">{{ r.totalObligatorio | currency: 'USD' }}</p>
           @if (r.obligatorioDelMesPagado) {
             <p class="suave">{{ r.periodoActual }} pagado.</p>
@@ -95,7 +132,7 @@ const TIPOS: Record<string, string> = {
       <h2>Mis aportes</h2>
       <div class="importes">
         <section class="tarjeta">
-          <h3>Obligatorios</h3>
+          <h3>Mensuales</h3>
           @for (a of obligatorios(); track a.id) { <p>{{ a.periodo }}: {{ a.importe | currency: 'USD' }}</p> } @empty { <p class="suave">Sin aportes.</p> }
         </section>
         <section class="tarjeta">
@@ -118,9 +155,14 @@ export class Inversiones implements OnInit {
   protected readonly aviso = signal<string | null>(null);
 
   protected importe: number | null = null;
+  protected importeRetiro: number | null = null;
 
   // Una clave por intento: se renueva solo tras un éxito, para que reintentar no duplique.
   private clave: string = crypto.randomUUID();
+
+  constructor() {
+    alCambiar(() => this.cargar());
+  }
 
   ngOnInit(): void {
     this.cargar();
@@ -134,8 +176,14 @@ export class Inversiones implements OnInit {
     return Math.abs(valor);
   }
 
+  protected retirar(): void {
+    this.ejecutar(this.api.retirarGanancias(this.importeRetiro!, this.clave), 'Ganancias enviadas a su cuenta principal.', () => {
+      this.importeRetiro = null;
+    });
+  }
+
   protected obligatorio(): void {
-    this.ejecutar(this.api.aportar('OBLIGATORIO', null, this.clave), 'Aporte obligatorio registrado.');
+    this.ejecutar(this.api.aportar('OBLIGATORIO', null, this.clave), 'Aporte mensual registrado.');
   }
 
   protected personal(): void {

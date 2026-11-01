@@ -8,6 +8,7 @@
 - Formularios reactivos.
 - Servicios HTTP para comunicación con API REST.
 - Guards para experiencia de navegación; no sustituyen autorización del backend.
+- Tailwind CSS 4, integrado mediante PostCSS.
 
 ## 2. Experiencia y rutas conceptuales
 
@@ -93,6 +94,27 @@ Adaptar al crecimiento real. No crear capas vacías sin necesidad.
 - Mostrar en CMS unidad y vigencia de cada parámetro.
 - No permitir que el usuario introduzca o modifique directamente el saldo oficial.
 
-## 5. Accesibilidad y calidad
+## 5. Base de construcción: dinámica y con Tailwind
+
+Toda pantalla nueva o modificada sigue estas reglas.
+
+### Aplicación dinámica
+- Navegar, enviar un formulario o ejecutar una acción no recarga la página.
+- Tiempo real (decisión del propietario): lo que hace una persona aparece solo en las pantallas de las demás, sin recargar. Toda pantalla que muestra datos llama a `alCambiar` con su función de carga.
+- Tras una operación, la pantalla pide de nuevo los datos al backend y muestra saldos y estados actualizados.
+- El aviso en tiempo real (`GET /api/v1/eventos`) solo indica el módulo que cambió, nunca datos: cada pantalla los pide a la API, que valida permisos. Toda acción que cambie datos debe pasar por `AuditoriaService.registrar`, que es quien avisa.
+- El estado de cada pantalla se guarda en signals de Angular.
+- Cada acción muestra su resultado en la misma pantalla: cargando, éxito o error.
+- Los importes oficiales siempre vienen del backend; la pantalla no los calcula por su cuenta.
+
+### Estilos con Tailwind
+- Los estilos se escriben con clases de Tailwind en la plantilla.
+- No se usan atributos `style` ni archivos CSS por componente.
+- Lo que se repite en muchas pantallas (tarjeta, botón, tabla) se define una sola vez en `src/styles.css`, en `@layer components`, o como componente en `shared`.
+- Colores (decisión del propietario): todo el sitio va del blanco al verde, también errores y acciones peligrosas, que se distinguen con símbolo, borde y verde oscuro. Se definen en el bloque `@theme` de `src/styles.css`, no como valores sueltos.
+- Interacciones: enlaces, botones, tarjetas y filas reaccionan al pasar el cursor, con transiciones cortas. El menú cambia de color y crece. Quien tenga activada la opción de reducir movimiento en su sistema no las ve.
+- Diseño adaptable: primero móvil, con los prefijos `sm:`, `md:` y `lg:`.
+
+## 6. Accesibilidad y calidad
 
 Diseño adaptable a escritorio y móvil, etiquetas accesibles, estados de carga/error/vacío, validación de formularios y mensajes claros. Los errores financieros deben explicar qué regla impidió la operación sin exponer datos sensibles.

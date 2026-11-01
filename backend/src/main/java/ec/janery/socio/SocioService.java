@@ -45,6 +45,10 @@ public class SocioService {
         java.util.Optional<Socio> findByPersonaIdAndEstado(Long personaId, String estado);
 
         java.util.List<Socio> findByEstadoOrderById(String estado);
+
+        @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+        @org.springframework.data.jpa.repository.Query("select s from Socio s where s.id = :id")
+        java.util.Optional<Socio> bloquear(@org.springframework.data.repository.query.Param("id") Long id);
     }
 
     private final SocioRepository repository;
@@ -72,6 +76,17 @@ public class SocioService {
     @Transactional(readOnly = true)
     java.util.List<Socio> activos() {
         return repository.findByEstadoOrderById("ACTIVO");
+    }
+
+    @Transactional(readOnly = true)
+    Socio porId(Long socioId) {
+        return repository.findById(socioId).orElseThrow(() -> NegocioException.noEncontrado("Socio no encontrado"));
+    }
+
+    /** Serializa las operaciones sobre las ganancias de un socio. Requiere transacción. */
+    @Transactional
+    Socio bloquear(Long socioId) {
+        return repository.bloquear(socioId).orElseThrow(() -> NegocioException.noEncontrado("Socio no encontrado"));
     }
 
     @Transactional(readOnly = true)

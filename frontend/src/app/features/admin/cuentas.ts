@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { Observable } from 'rxjs';
 
 import { ApiService, Cuenta, Pagina } from '../../core/services/api';
+import { alCambiar } from '../../core/services/tiempo-real';
 import { mensajeDeError } from '../../shared/utils/errores';
 
 interface Formulario {
@@ -104,6 +105,10 @@ export class AdminCuentas implements OnInit {
   protected readonly formulario = signal<Formulario | null>(null);
   protected readonly error = signal<string | null>(null);
   protected readonly aviso = signal<string | null>(null);
+
+  constructor() {
+    alCambiar(() => this.cargar(this.datos()?.pagina ?? 0));
+  }
 
   ngOnInit(): void {
     this.cargar(0);

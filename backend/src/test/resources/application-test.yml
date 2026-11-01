@@ -1,7 +1,9 @@
 # Esquema aislado: las pruebas nunca tocan los datos del esquema janery.
 spring:
   datasource:
-    url: jdbc:postgresql://${JANERY_DB_HOST:localhost}:${JANERY_DB_PORT:5432}/${JANERY_DB_NAME:janery}?currentSchema=janery_test
+    url: jdbc:postgresql://${JANERY_DB_HOST:localhost}:${JANERY_DB_PORT:5432}/${JANERY_DB_NAME:janery}?currentSchema=janery_test&sslmode=${JANERY_DB_SSLMODE:prefer}
+    hikari:
+      connection-init-sql: SET search_path TO janery_test
   jpa:
     properties:
       hibernate:

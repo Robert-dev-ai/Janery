@@ -19,22 +19,22 @@ final class CalculadoraCredito {
     }
 
     /**
-     * Capital constante; interés y desgravamen sobre el capital pendiente. El ahorro letras completa cada letra
-     * hasta el dólar entero, y la última absorbe el redondeo del capital.
+     * Letra fija de principio a fin, en dólares enteros. Interés y desgravamen son fijos sobre el capital sacado. La
+     * última letra lleva los centavos que faltan de capital, y por eso esos mismos centavos menos de ahorro letras.
      */
     static List<Letra> letras(BigDecimal importe, int meses, BigDecimal tasaInteres, BigDecimal tasaDesgravamen,
             LocalDate inicio) {
         BigDecimal capitalBase = importe.divide(BigDecimal.valueOf(meses), 2, RoundingMode.DOWN);
-        BigDecimal pendiente = importe;
+        BigDecimal capitalUltima = importe.subtract(capitalBase.multiply(BigDecimal.valueOf(meses - 1)));
+        BigDecimal interes = porcentaje(importe, tasaInteres);
+        BigDecimal desgravamen = porcentaje(importe, tasaDesgravamen);
+        // Se calcula con la última, la de más capital: así el ahorro letras nunca queda negativo.
+        BigDecimal total = capitalUltima.add(interes).add(desgravamen).setScale(0, RoundingMode.CEILING).setScale(2);
         List<Letra> letras = new ArrayList<>(meses);
         for (int n = 1; n <= meses; n++) {
-            BigDecimal capital = n == meses ? pendiente : capitalBase;
-            BigDecimal interes = porcentaje(pendiente, tasaInteres);
-            BigDecimal desgravamen = porcentaje(pendiente, tasaDesgravamen);
-            BigDecimal suma = capital.add(interes).add(desgravamen);
-            BigDecimal total = suma.setScale(0, RoundingMode.CEILING).setScale(2);
-            letras.add(new Letra(n, inicio.plusMonths(n), capital, total.subtract(suma), desgravamen, interes, total));
-            pendiente = pendiente.subtract(capital);
+            BigDecimal capital = n == meses ? capitalUltima : capitalBase;
+            BigDecimal ahorro = total.subtract(capital).subtract(interes).subtract(desgravamen);
+            letras.add(new Letra(n, inicio.plusMonths(n), capital, ahorro, desgravamen, interes, total));
         }
         return letras;
     }

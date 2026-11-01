@@ -3,6 +3,7 @@ import { Component, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
 import { ApiService, CajaChica } from '../../core/services/api';
+import { alCambiar } from '../../core/services/tiempo-real';
 import { mensajeDeError } from '../../shared/utils/errores';
 
 @Component({
@@ -63,6 +64,10 @@ export class AreaCajaChica implements OnInit {
 
   // Una clave por intento: se renueva solo tras un éxito, para que reintentar no duplique.
   private clave: string = crypto.randomUUID();
+
+  constructor() {
+    alCambiar(() => this.cargar(this.datos()?.movimientos?.pagina ?? 0));
+  }
 
   ngOnInit(): void {
     this.cargar(0);

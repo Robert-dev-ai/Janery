@@ -13,6 +13,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -29,6 +30,7 @@ import ec.janery.auditoria.AuditoriaService;
 import ec.janery.caja.CajaService;
 import ec.janery.caja.MovimientoCaja;
 import ec.janery.common.NegocioException;
+import ec.janery.credito.CreditoService;
 import ec.janery.cuenta.CuentaPrincipal;
 import ec.janery.cuenta.CuentaService;
 import ec.janery.cuenta.RestriccionCierre;
@@ -36,7 +38,9 @@ import ec.janery.parametros.ParametroService;
 import ec.janery.persona.PersonaService;
 import ec.janery.socio.Entidades.AporteCajaChica;
 import ec.janery.socio.Entidades.AporteSocio;
+import ec.janery.socio.Entidades.AutorizacionRetiro;
 import ec.janery.socio.Entidades.CierreAnual;
+import ec.janery.socio.Entidades.CompraventaCapital;
 import ec.janery.socio.Entidades.Resultado;
 import ec.janery.socio.Entidades.VariacionParticipacion;
 import lombok.RequiredArgsConstructor;
@@ -56,6 +60,16 @@ public class ParticipacionService {
 
         @Query("select coalesce(sum(a.importe), 0) from AporteSocio a where a.socioId = :socioId and a.tipo = :tipo")
         BigDecimal total(@Param("socioId") Long socioId, @Param("tipo") String tipo);
+
+        @Query("select a.periodo from AporteSocio a where a.socioId = :socioId and a.tipo = 'OBLIGATORIO'")
+        Set<String> periodosObligatorios(@Param("socioId") Long socioId);
+    }
+
+    interface CompraventaRepository extends JpaRepository<CompraventaCapital, Long> {
+    }
+
+    interface AutorizacionRepository extends JpaRepository<AutorizacionRetiro, Long> {
+        Optional<AutorizacionRetiro> findBySocioIdAndAnio(Long socioId, Integer anio);
     }
 
     interface AporteCajaChicaRepository extends JpaRepository<AporteCajaChica, Long> {
@@ -65,6 +79,9 @@ public class ParticipacionService {
 
         @Query("select coalesce(sum(a.importe), 0) from AporteCajaChica a where a.socioId = :socioId")
         BigDecimal total(@Param("socioId") Long socioId);
+
+        @Query("select a.periodo from AporteCajaChica a where a.socioId = :socioId")
+        Set<String> periodos(@Param("socioId") Long socioId);
     }
 
     interface ResultadoRepository extends JpaRepository<Resultado, Long> {
@@ -73,6 +90,9 @@ public class ParticipacionService {
                 from Resultado r where r.fecha >= :desde and r.fecha <= :hasta
                 """)
         BigDecimal neto(@Param("desde") LocalDate desde, @Param("hasta") LocalDate hasta);
+
+        @Query("select coalesce(sum(r.reserva), 0) from Resultado r where r.fecha >= :desde and r.fecha <= :hasta")
+        BigDecimal reserva(@Param("desde") LocalDate desde, @Param("hasta") LocalDate hasta);
     }
 
     interface CierreRepository extends JpaRepository<CierreAnual, Long> {
@@ -84,13 +104,57 @@ public class ParticipacionService {
 
         @Query("select coalesce(sum(v.importe), 0) from VariacionParticipacion v where v.socioId = :socioId")
         BigDecimal valor(@Param("socioId") Long socioId);
+
+        /** Lo que no es aporte: ganancias menos pérdidas. */
+        @Query("""
+                select coalesce(sum(v.importe), 0) from VariacionParticipacion v
+                where v.socioId = :socioId and v.tipo not like 'APORTE%'
+                """)
+        BigDecimal resultados(@Param("socioId") Long socioId);
+
+        /** Ganancias de años anteriores, menos todo lo ya retirado o descontado. */
+        @Query("""
+                select coalesce(sum(v.importe), 0) from VariacionParticipacion v
+                where v.socioId = :socioId and v.tipo not like 'APORTE%'
+                and (v.tipo in ('RETIRO_GANANCIA', 'DESCUENTO_OBLIGACION') or v.fecha < :inicioDeAnio)
+                """)
+        BigDecimal gananciasLiberadas(@Param("socioId") Long socioId, @Param("inicioDeAnio") LocalDate inicioDeAnio);
+
+        /** Lo que representa capital: aportes, más compras, menos ventas. */
+        @Query("""
+                select coalesce(sum(v.importe), 0) from VariacionParticipacion v
+                where v.socioId = :socioId and v.tipo like 'APORTE%'
+                """)
+        BigDecimal capital(@Param("socioId") Long socioId);
+
+        @Query("""
+                select coalesce(sum(v.importe), 0) from VariacionParticipacion v
+                where v.socioId = :socioId and v.tipo in ('APORTE_COMPRA', 'APORTE_VENTA')
+                """)
+        BigDecimal compraventas(@Param("socioId") Long socioId);
+    }
+
+    /** Una línea del menú de obligaciones. cuotaId solo en cuotas; periodo solo en aportes. */
+    public record Obligacion(String tipo, String periodo, Long cuotaId, String descripcion, BigDecimal importe) {
+    }
+
+    public record MenuObligaciones(Long socioId, String nombre, BigDecimal gananciasDisponibles, boolean retiroAutorizado,
+            List<Obligacion> obligaciones, BigDecimal total) {
+    }
+
+    /** Lo que el presidente elige descontar. El importe solo aplica a cuotas: vacío, la cuota completa. */
+    public record Descuento(String tipo, String periodo, Long cuotaId, BigDecimal importe) {
     }
 
     public record AporteVista(Long id, String tipo, BigDecimal importe, String periodo, Instant fecha) {
     }
 
-    public record ResumenSocio(Long socioId, String nombre, Instant desde, BigDecimal totalObligatorio,
-            BigDecimal totalPersonal, BigDecimal totalCajaChica, BigDecimal valorActual, BigDecimal porcentaje,
+    /** valorActual es el fondo personal: la suma de los tres aportes y las ganancias netas. Caja chica va aparte. */
+    public record ResumenSocio(Long socioId, String nombre, Instant desde, BigDecimal totalInicial,
+            BigDecimal totalObligatorio, BigDecimal totalPersonal, BigDecimal compraventas, BigDecimal ganancias,
+            BigDecimal gananciasDisponibles, BigDecimal obligacionesPendientes, boolean retiroAutorizado,
+            BigDecimal totalCajaChica,
+            BigDecimal valorActual, BigDecimal porcentaje,
             BigDecimal aporteObligatorio, BigDecimal aporteCajaChica, String periodoActual,
             boolean obligatorioDelMesPagado, boolean cajaChicaDelMesPagado) {
     }
@@ -102,13 +166,15 @@ public class ParticipacionService {
             BigDecimal valorFinal) {
     }
 
-    public record ResultadoVista(Long id, String tipo, BigDecimal importe, String concepto, LocalDate fecha) {
+    public record ResultadoVista(Long id, String tipo, BigDecimal importe, BigDecimal reserva, String concepto,
+            LocalDate fecha) {
     }
 
     public record CierreVista(Integer anio, BigDecimal resultadoNeto, BigDecimal porcentajeReserva, BigDecimal reserva,
             BigDecimal distribuido, Instant fecha) {
     }
 
+    private static final String INICIAL = "INICIAL";
     private static final String OBLIGATORIO = "OBLIGATORIO";
     private static final String PERSONAL = "PERSONAL";
     private static final String GANANCIA = "GANANCIA";
@@ -125,6 +191,9 @@ public class ParticipacionService {
     private final SocioService socios;
     private final CuentaService cuentas;
     private final CajaService cajas;
+    private final CreditoService creditos;
+    private final CompraventaRepository compraventas;
+    private final AutorizacionRepository autorizaciones;
     private final PersonaService personas;
     private final ParametroService parametros;
     private final AuditoriaService auditoria;
@@ -161,6 +230,26 @@ public class ParticipacionService {
         variaciones.save(new VariacionParticipacion(null, socio.getId(), "APORTE_" + tipo, importe, hoy(), aporte.getId(),
                 null, null, ahora));
         auditoria.registrar(usuarioId, "APORTE_" + tipo, MODULO, "socio", socio.getId(), null, importe.toPlainString(), periodo);
+        return operacion;
+    }
+
+    /** Capital con el que entra el socio. El dinero se recibe fuera del sistema y entra a la caja principal. */
+    @Transactional
+    public Long registrarAporteInicial(Long actorId, Long socioId, BigDecimal importe, String metodo, String referencia,
+            String clave) {
+        socios.personaDe(socioId);
+        Optional<Long> previa = cuentas.operacionPrevia(clave, "APORTE_INICIAL", importe, actorId);
+        if (previa.isPresent()) {
+            return previa.get();
+        }
+        Instant ahora = Instant.now(reloj);
+        Long operacion = cuentas.crearOperacionExterna("APORTE_INICIAL", importe, metodo, referencia, clave, actorId);
+        cajas.registrar(CajaService.PRINCIPAL, operacion, ENTRADA, importe, "APORTE_INICIAL", null);
+        AporteSocio aporte = aportes.save(new AporteSocio(null, socioId, INICIAL, importe, YearMonth.now(reloj).toString(),
+                operacion, ahora));
+        variaciones.save(new VariacionParticipacion(null, socioId, "APORTE_" + INICIAL, importe, hoy(), aporte.getId(),
+                null, null, ahora));
+        auditoria.registrar(actorId, "APORTE_INICIAL", MODULO, "socio", socioId, null, importe.toPlainString(), null);
         return operacion;
     }
 
@@ -259,7 +348,10 @@ public class ParticipacionService {
 
     // --- Resultados
 
-    /** Se reparte entre los socios según su valor actual, y se refleja en su participación desde ese momento. */
+    /**
+     * Una ganancia separa al momento su reserva y reparte el resto entre los fondos personales, según el valor de cada
+     * uno. Una pérdida se reparte igual, sin tocar la reserva.
+     */
     @Transactional
     public void registrarResultado(Long actorId, String tipo, BigDecimal importe, String concepto, LocalDate fechaPedida) {
         LocalDate fecha = fechaPedida == null ? hoy() : fechaPedida;
@@ -278,9 +370,18 @@ public class ParticipacionService {
         if (!ganancia && importe.compareTo(total) > 0) {
             throw NegocioException.conflicto("PERDIDA_EXCEDE_CAPITAL", "La pérdida supera el capital de los socios");
         }
+        BigDecimal porcentaje = ganancia ? parametros.valorVigente("FONDO_RESERVA") : BigDecimal.ZERO;
+        BigDecimal reserva = importe.multiply(porcentaje).divide(CIEN, 2, RoundingMode.HALF_UP);
+        BigDecimal aRepartir = importe.subtract(reserva);
         Instant ahora = Instant.now(reloj);
-        Resultado resultado = resultados.save(new Resultado(null, tipo, importe, concepto, fecha, actorId, ahora));
-        RepartoProporcional.repartir(importe, valores).forEach((socioId, parte) -> {
+        Resultado resultado = resultados.save(new Resultado(null, tipo, importe, concepto, fecha, reserva, porcentaje,
+                actorId, ahora));
+        if (reserva.signum() > 0) {
+            Long op = cuentas.crearOperacionInterna("RESERVA", reserva, null, actorId);
+            cajas.registrar(CajaService.PRINCIPAL, op, SALIDA, reserva, "TRASPASO_A_RESERVA", concepto);
+            cajas.registrar(CajaService.FONDO_RESERVA, op, ENTRADA, reserva, "RESERVA_DE_GANANCIA", concepto);
+        }
+        RepartoProporcional.repartir(aRepartir, valores).forEach((socioId, parte) -> {
             if (parte.signum() > 0) {
                 variaciones.save(new VariacionParticipacion(null, socioId, tipo, ganancia ? parte : parte.negate(), fecha,
                         null, resultado.getId(), null, ahora));
@@ -293,14 +394,249 @@ public class ParticipacionService {
     @Transactional(readOnly = true)
     public Page<ResultadoVista> listarResultados(int pagina, int tamano) {
         return resultados.findAll(PageRequest.of(pagina, tamano, Sort.by(Sort.Direction.DESC, "fecha", "id")))
-                .map(r -> new ResultadoVista(r.getId(), r.getTipo(), r.getImporte(), r.getConcepto(), r.getFecha()));
+                .map(r -> new ResultadoVista(r.getId(), r.getTipo(), r.getImporte(), r.getReserva(), r.getConcepto(),
+                        r.getFecha()));
+    }
+
+    // --- Retiro de ganancias
+
+    /**
+     * Las ganancias de un año se liberan el 1 de enero siguiente. Solo puede retirar el socio que el presidente haya
+     * autorizado ese año y que esté al día. Los aportes nunca se retiran.
+     */
+    @Transactional
+    public Long retirarGanancias(Long usuarioId, BigDecimal importe, String clave) {
+        SocioService.Socio socio = socios.deUsuario(usuarioId);
+        CuentaPrincipal cuenta = cuentas.cuentaActivaBloqueada(socio.getPersonaId());
+        Optional<Long> previa = cuentas.operacionPrevia(clave, "RETIRO_GANANCIA", importe, usuarioId);
+        if (previa.isPresent()) {
+            return previa.get();
+        }
+        socios.bloquear(socio.getId());
+        if (!retiroAutorizado(socio.getId())) {
+            throw NegocioException.conflicto("RETIRO_NO_AUTORIZADO", "El presidente aún no ha autorizado su retiro de este año");
+        }
+        if (obligacionesPendientes(socio).signum() > 0) {
+            throw NegocioException.conflicto("OBLIGACIONES_PENDIENTES", "Tiene obligaciones pendientes; póngase al día para retirar");
+        }
+        if (importe.compareTo(gananciasDisponibles(socio.getId())) > 0) {
+            throw NegocioException.conflicto("GANANCIA_NO_DISPONIBLE", "El importe supera sus ganancias disponibles para retirar");
+        }
+        Long operacion = cuentas.crearOperacionInterna("RETIRO_GANANCIA", importe, clave, usuarioId);
+        cuentas.mover(cuenta, operacion, ENTRADA, importe, "RETIRO_GANANCIA");
+        variacion(socio.getId(), "RETIRO_GANANCIA", importe.negate(), null);
+        auditoria.registrar(usuarioId, "RETIRO_GANANCIA", MODULO, "socio", socio.getId(), null, importe.toPlainString(), null);
+        return operacion;
+    }
+
+    /** Lo que el presidente ve para decidir: cuánto tiene el socio liberado y qué debe, línea por línea. */
+    @Transactional(readOnly = true)
+    public MenuObligaciones menuObligaciones(Long socioId) {
+        SocioService.Socio socio = socios.porId(socioId);
+        List<Obligacion> lista = obligaciones(socio);
+        return new MenuObligaciones(socioId, personas.nombreCompleto(socio.getPersonaId()), gananciasDisponibles(socioId),
+                retiroAutorizado(socioId), lista,
+                lista.stream().map(Obligacion::importe).reduce(BigDecimal.ZERO, BigDecimal::add));
+    }
+
+    /** El presidente autoriza el retiro de este año. Exige que el socio esté al día. */
+    @Transactional
+    public void autorizarRetiro(Long actorId, Long socioId) {
+        SocioService.Socio socio = socios.bloquear(socioId);
+        int anio = hoy().getYear();
+        if (autorizaciones.findBySocioIdAndAnio(socioId, anio).isPresent()) {
+            return;
+        }
+        if (obligacionesPendientes(socio).signum() > 0) {
+            throw NegocioException.conflicto("OBLIGACIONES_PENDIENTES", "El socio debe estar al día para autorizar su retiro");
+        }
+        autorizaciones.save(new AutorizacionRetiro(null, socioId, anio, actorId, Instant.now(reloj)));
+        auditoria.registrar(actorId, "RETIRO_AUTORIZADO", MODULO, "socio", socioId, null, String.valueOf(anio), null);
+    }
+
+    @Transactional
+    public void revocarRetiro(Long actorId, Long socioId) {
+        int anio = hoy().getYear();
+        socios.bloquear(socioId);
+        autorizaciones.findBySocioIdAndAnio(socioId, anio).ifPresent(a -> {
+            autorizaciones.delete(a);
+            auditoria.registrar(actorId, "RETIRO_REVOCADO", MODULO, "socio", socioId, String.valueOf(anio), null, null);
+        });
+    }
+
+    /** Descuenta de las ganancias liberadas lo que el presidente eligió, todo o nada. La clave evita repetirlo. */
+    @Transactional
+    public void descontar(Long actorId, Long socioId, List<Descuento> elegidos, String clave) {
+        if (cuentas.claveUsada(clave)) {
+            return;
+        }
+        Long personaId = socios.personaDe(socioId);
+        CuentaPrincipal cuenta = cuentas.bloquearSiActiva(personaId).orElse(null);
+        SocioService.Socio socio = socios.bloquear(socioId);
+        String claveLibre = clave;
+        for (Descuento d : elegidos) {
+            switch (d.tipo()) {
+                case "APORTE_MENSUAL" -> descontarAporte(actorId, socio, d.periodo(), claveLibre);
+                case "CAJA_CHICA" -> descontarCajaChica(actorId, socio, d.periodo(), claveLibre);
+                case "CUOTA" -> descontarCuota(actorId, socio, cuenta, d, claveLibre);
+                default -> throw new NegocioException(HttpStatus.BAD_REQUEST, "TIPO_INVALIDO", "Tipo de obligación no válido");
+            }
+            claveLibre = null;
+        }
+    }
+
+    private void descontarAporte(Long actorId, SocioService.Socio socio, String periodo, String clave) {
+        Long socioId = socio.getId();
+        exigirVencido(mesesVencidos(socio, aportes.periodosObligatorios(socioId)), periodo);
+        BigDecimal importe = dinero(parametros.valorVigente("APORTE_OBLIGATORIO"));
+        exigirGanancias(socioId, importe);
+        Long operacion = cuentas.crearOperacionInterna("APORTE_CAPITAL", importe, clave, actorId);
+        AporteSocio aporte = aportes.save(new AporteSocio(null, socioId, OBLIGATORIO, importe, periodo, operacion, Instant.now(reloj)));
+        variacion(socioId, "APORTE_OBLIGATORIO", importe, aporte.getId());
+        variacion(socioId, "DESCUENTO_OBLIGACION", importe.negate(), null);
+        auditoria.registrar(actorId, "DESCUENTO_APORTE_MENSUAL", MODULO, "socio", socioId, null, importe.toPlainString(), periodo);
+    }
+
+    private void descontarCajaChica(Long actorId, SocioService.Socio socio, String periodo, String clave) {
+        Long socioId = socio.getId();
+        exigirVencido(mesesVencidos(socio, aportesCajaChica.periodos(socioId)), periodo);
+        BigDecimal importe = dinero(parametros.valorVigente("APORTE_CAJA_CHICA"));
+        exigirGanancias(socioId, importe);
+        Long operacion = cuentas.crearOperacionInterna("APORTE_CAJA_CHICA", importe, clave, actorId);
+        cajas.registrar(CajaService.PRINCIPAL, operacion, SALIDA, importe, "TRASPASO_A_CAJA_CHICA", null);
+        cajas.registrar(CajaService.CHICA, operacion, ENTRADA, importe, "APORTE_SOCIO", periodo);
+        aportesCajaChica.save(new AporteCajaChica(null, socioId, importe, periodo, operacion, Instant.now(reloj)));
+        variacion(socioId, "DESCUENTO_OBLIGACION", importe.negate(), null);
+        auditoria.registrar(actorId, "DESCUENTO_CAJA_CHICA", MODULO, "socio", socioId, null, importe.toPlainString(), periodo);
+    }
+
+    /** Admite importe parcial. Pasa por la cuenta principal para que el crédito aplique su pago normal. */
+    private void descontarCuota(Long actorId, SocioService.Socio socio, CuentaPrincipal cuenta, Descuento d, String clave) {
+        Long socioId = socio.getId();
+        List<CreditoService.CuotaVencida> vencidas = creditos.cuotasVencidas(socio.getPersonaId());
+        CreditoService.CuotaVencida cuota = vencidas.stream().filter(q -> q.cuotaId().equals(d.cuotaId())).findFirst()
+                .orElseThrow(() -> NegocioException.conflicto("OBLIGACION_INEXISTENTE", "Esa cuota no está vencida"));
+        boolean hayAnterior = vencidas.stream().anyMatch(q -> q.creditoId().equals(cuota.creditoId())
+                && q.numero() < cuota.numero());
+        if (hayAnterior) {
+            throw NegocioException.conflicto("CUOTA_ANTERIOR_PENDIENTE", "Primero debe cubrirse la cuota más antigua de ese crédito");
+        }
+        BigDecimal importe = d.importe() == null ? cuota.total() : d.importe();
+        if (importe.signum() <= 0 || importe.compareTo(cuota.total()) > 0) {
+            throw NegocioException.conflicto("PAGO_EXCEDIDO", "El importe supera lo que falta de esa cuota");
+        }
+        if (cuenta == null) {
+            throw NegocioException.conflicto("CUENTA_INACTIVA", "El socio necesita una cuenta principal activa");
+        }
+        exigirGanancias(socioId, importe);
+        Long operacion = cuentas.crearOperacionInterna("RETIRO_GANANCIA", importe, clave, actorId);
+        cuentas.mover(cuenta, operacion, ENTRADA, importe, "DESCUENTO_DE_GANANCIAS");
+        variacion(socioId, "DESCUENTO_OBLIGACION", importe.negate(), null);
+        creditos.pagar(personas.usuarioDe(socio.getPersonaId()), cuota.creditoId(), importe, false, false,
+                "descuento-" + java.util.UUID.randomUUID());
+        auditoria.registrar(actorId, "DESCUENTO_CUOTA", MODULO, "socio", socioId, null, importe.toPlainString(), cuota.cuotaId().toString());
+    }
+
+    private void exigirGanancias(Long socioId, BigDecimal importe) {
+        if (importe.compareTo(gananciasDisponibles(socioId)) > 0) {
+            throw NegocioException.conflicto("GANANCIAS_INSUFICIENTES", "Las ganancias liberadas no alcanzan para lo elegido");
+        }
+    }
+
+    private static void exigirVencido(List<String> vencidos, String periodo) {
+        if (!vencidos.contains(periodo)) {
+            throw NegocioException.conflicto("OBLIGACION_INEXISTENTE", "Ese mes no está pendiente");
+        }
+    }
+
+    private List<Obligacion> obligaciones(SocioService.Socio socio) {
+        List<Obligacion> lista = new ArrayList<>();
+        BigDecimal mensual = dinero(parametros.valorVigente("APORTE_OBLIGATORIO"));
+        mesesVencidos(socio, aportes.periodosObligatorios(socio.getId())).forEach(p ->
+                lista.add(new Obligacion("APORTE_MENSUAL", p, null, "Aporte mensual de " + p, mensual)));
+        BigDecimal cajaChica = dinero(parametros.valorVigente("APORTE_CAJA_CHICA"));
+        mesesVencidos(socio, aportesCajaChica.periodos(socio.getId())).forEach(p ->
+                lista.add(new Obligacion("CAJA_CHICA", p, null, "Caja chica de " + p, cajaChica)));
+        creditos.cuotasVencidas(socio.getPersonaId()).forEach(q -> lista.add(new Obligacion("CUOTA", null, q.cuotaId(),
+                "Letra " + q.numero() + " de " + (q.modalidad() == null ? q.familia() : q.modalidad()) + ", venció el " + q.vencimiento(),
+                q.total())));
+        return lista;
+    }
+
+    private boolean retiroAutorizado(Long socioId) {
+        return autorizaciones.findBySocioIdAndAnio(socioId, hoy().getYear()).isPresent();
+    }
+
+    private BigDecimal gananciasDisponibles(Long socioId) {
+        LocalDate inicioDeAnio = hoy().withDayOfYear(1);
+        // Una pérdida de este año también limita lo que se puede sacar.
+        return variaciones.gananciasLiberadas(socioId, inicioDeAnio).min(variaciones.resultados(socioId)).max(BigDecimal.ZERO);
+    }
+
+    private BigDecimal obligacionesPendientes(SocioService.Socio socio) {
+        return obligaciones(socio).stream().map(Obligacion::importe).reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    /** Meses sin pagar desde que entró el socio hasta el mes pasado. El mes en curso aún no está vencido. */
+    private List<String> mesesVencidos(SocioService.Socio socio, Set<String> pagados) {
+        List<String> vencidos = new ArrayList<>();
+        YearMonth actual = YearMonth.now(reloj);
+        for (YearMonth mes = YearMonth.from(socio.getDesde().atZone(reloj.getZone())); mes.isBefore(actual); mes = mes.plusMonths(1)) {
+            if (!pagados.contains(mes.toString())) {
+                vencidos.add(mes.toString());
+            }
+        }
+        return vencidos;
+    }
+
+    private void variacion(Long socioId, String tipo, BigDecimal importe, Long aporteId) {
+        variaciones.save(new VariacionParticipacion(null, socioId, tipo, importe, hoy(), aporteId, null, null, Instant.now(reloj)));
+    }
+
+// --- Compraventa interna
+
+    /**
+     * Un socio vende capital a otro al precio que acuerden. El comprador paga desde su cuenta principal al vendedor;
+     * Janery no recibe ni entrega dinero. Solo se vende capital: las ganancias no cambian de manos.
+     */
+    @Transactional
+    public Long registrarCompraventa(Long actorId, Long vendedorId, Long compradorId, BigDecimal capital, BigDecimal precio,
+            String clave) {
+        if (vendedorId.equals(compradorId)) {
+            throw new NegocioException(HttpStatus.BAD_REQUEST, "MISMO_SOCIO", "Vendedor y comprador deben ser distintos");
+        }
+        Long personaVendedor = socios.personaDe(vendedorId);
+        Long personaComprador = socios.personaDe(compradorId);
+        // Siempre en el mismo orden, para que dos compraventas cruzadas no se bloqueen entre sí.
+        boolean vendedorPrimero = personaVendedor < personaComprador;
+        CuentaPrincipal primera = cuentas.cuentaActivaBloqueada(vendedorPrimero ? personaVendedor : personaComprador);
+        CuentaPrincipal segunda = cuentas.cuentaActivaBloqueada(vendedorPrimero ? personaComprador : personaVendedor);
+        CuentaPrincipal cuentaVendedor = vendedorPrimero ? primera : segunda;
+        CuentaPrincipal cuentaComprador = vendedorPrimero ? segunda : primera;
+        Optional<Long> previa = cuentas.operacionPrevia(clave, "COMPRAVENTA_CAPITAL", precio, actorId);
+        if (previa.isPresent()) {
+            return previa.get();
+        }
+        if (capital.compareTo(variaciones.capital(vendedorId)) > 0) {
+            throw NegocioException.conflicto("CAPITAL_INSUFICIENTE", "El vendedor no tiene ese capital");
+        }
+        Long operacion = cuentas.crearOperacionInterna("COMPRAVENTA_CAPITAL", precio, clave, actorId);
+        cuentas.mover(cuentaComprador, operacion, SALIDA, precio, "COMPRA_DE_CAPITAL");
+        cuentas.mover(cuentaVendedor, operacion, ENTRADA, precio, "VENTA_DE_CAPITAL");
+        CompraventaCapital venta = compraventas.save(new CompraventaCapital(null, vendedorId, compradorId, capital, precio,
+                operacion, actorId, Instant.now(reloj)));
+        variacion(vendedorId, "APORTE_VENTA", capital.negate(), null);
+        variacion(compradorId, "APORTE_COMPRA", capital, null);
+        auditoria.registrar(actorId, "COMPRAVENTA_CAPITAL", MODULO, "compraventa", venta.getId(), null,
+                capital.toPlainString() + " por " + precio.toPlainString(), null);
+        return operacion;
     }
 
     // --- Cierre anual
 
     /**
-     * Con resultado neto positivo, separa la reserva y paga el resto a la cuenta principal de cada socio, en proporción
-     * a su valor actual. Ambos importes salen de su participación. Un año solo se cierra una vez.
+     * Totaliza el año y lo bloquea. No mueve dinero: reserva y reparto ya ocurrieron con cada resultado.
+     * El campo distribuido es lo que llegó a los fondos personales: ganancias sin reserva, menos pérdidas.
      */
     @Transactional
     public CierreVista cerrarAnio(Long actorId, int anio) {
@@ -310,34 +646,12 @@ public class ParticipacionService {
         if (cierres.existsByAnio(anio)) {
             throw NegocioException.conflicto("ANIO_CERRADO", "El año " + anio + " ya está cerrado");
         }
-        BigDecimal neto = resultados.neto(LocalDate.of(anio, 1, 1), LocalDate.of(anio, 12, 31));
-        BigDecimal porcentaje = parametros.valorVigente("FONDO_RESERVA");
-        BigDecimal reserva = neto.signum() > 0
-                ? neto.multiply(porcentaje).divide(CIEN, 2, RoundingMode.HALF_UP) : BigDecimal.ZERO.setScale(2);
-        BigDecimal distribuible = neto.signum() > 0 ? neto.subtract(reserva) : BigDecimal.ZERO.setScale(2);
-        Instant ahora = Instant.now(reloj);
-        CierreAnual cierre = cierres.save(new CierreAnual(null, anio, neto, porcentaje, reserva, distribuible, actorId, ahora));
-
-        if (neto.signum() > 0) {
-            Map<Long, BigDecimal> valores = valoresPositivos();
-            if (valores.isEmpty()) {
-                throw NegocioException.conflicto("SIN_CAPITAL", "No hay capital de socios sobre el que repartir");
-            }
-            if (reserva.signum() > 0) {
-                Long op = cuentas.crearOperacionInterna("RESERVA", reserva, null, actorId);
-                cajas.registrar(CajaService.PRINCIPAL, op, SALIDA, reserva, "TRASPASO_A_RESERVA", String.valueOf(anio));
-                cajas.registrar(CajaService.FONDO_RESERVA, op, ENTRADA, reserva, "RESERVA_ANUAL", String.valueOf(anio));
-                registrarParte(RepartoProporcional.repartir(reserva, valores), "RESERVA", cierre.getId(), ahora);
-            }
-            if (distribuible.signum() > 0) {
-                Long op = cuentas.crearOperacionInterna("DISTRIBUCION", distribuible, null, actorId);
-                Map<Long, BigDecimal> partes = RepartoProporcional.repartir(distribuible, valores);
-                registrarParte(partes, "DISTRIBUCION", cierre.getId(), ahora);
-                partes.entrySet().stream().filter(p -> p.getValue().signum() > 0).sorted(Map.Entry.comparingByKey())
-                        .forEach(p -> cuentas.mover(cuentas.cuentaActivaBloqueada(socios.personaDe(p.getKey())), op, ENTRADA,
-                                p.getValue(), "DISTRIBUCION_GANANCIAS"));
-            }
-        }
+        LocalDate desde = LocalDate.of(anio, 1, 1);
+        LocalDate hasta = LocalDate.of(anio, 12, 31);
+        BigDecimal neto = resultados.neto(desde, hasta);
+        BigDecimal reserva = resultados.reserva(desde, hasta);
+        CierreAnual cierre = cierres.save(new CierreAnual(null, anio, neto, parametros.valorVigente("FONDO_RESERVA"), reserva,
+                neto.subtract(reserva), actorId, Instant.now(reloj)));
         auditoria.registrar(actorId, "CIERRE_ANUAL", MODULO, "cierre", cierre.getId(), null, neto.toPlainString(), String.valueOf(anio));
         return vista(cierre);
     }
@@ -352,15 +666,6 @@ public class ParticipacionService {
                 c.getDistribuido(), c.getCreadoEn());
     }
 
-    private void registrarParte(Map<Long, BigDecimal> partes, String tipo, Long cierreId, Instant ahora) {
-        partes.forEach((socioId, parte) -> {
-            if (parte.signum() > 0) {
-                variaciones.save(new VariacionParticipacion(null, socioId, tipo, parte.negate(), hoy(), null, null,
-                        cierreId, ahora));
-            }
-        });
-    }
-
     // --- Apoyo
 
     private ResumenSocio resumen(SocioService.Socio s, BigDecimal total) {
@@ -369,7 +674,9 @@ public class ParticipacionService {
                 ? valor.multiply(CIEN).divide(total, 4, RoundingMode.HALF_UP) : BigDecimal.ZERO;
         String periodo = YearMonth.now(reloj).toString();
         return new ResumenSocio(s.getId(), personas.nombreCompleto(s.getPersonaId()), s.getDesde(),
-                aportes.total(s.getId(), OBLIGATORIO), aportes.total(s.getId(), PERSONAL),
+                aportes.total(s.getId(), INICIAL), aportes.total(s.getId(), OBLIGATORIO),
+                aportes.total(s.getId(), PERSONAL), variaciones.compraventas(s.getId()), variaciones.resultados(s.getId()),
+                gananciasDisponibles(s.getId()), obligacionesPendientes(s), retiroAutorizado(s.getId()),
                 aportesCajaChica.total(s.getId()), valor, porcentaje,
                 parametros.valorVigente("APORTE_OBLIGATORIO"), parametros.valorVigente("APORTE_CAJA_CHICA"), periodo,
                 aportes.existsBySocioIdAndTipoAndPeriodo(s.getId(), OBLIGATORIO, periodo),
@@ -416,7 +723,7 @@ public class ParticipacionService {
         return LocalDate.now(reloj);
     }
 
-    /** Sin regla aún para retirar el capital: un socio activo no puede cerrar su cuenta. */
+    /** El capital no se retira, solo se vende a otro socio: un socio activo no puede cerrar su cuenta. */
     @Component
     @RequiredArgsConstructor
     static class SociosCierre implements RestriccionCierre {

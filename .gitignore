@@ -21,3 +21,5 @@ frontend/.angular/
 *.iml
 .DS_Store
 Thumbs.db
+.neon
+node_modules/

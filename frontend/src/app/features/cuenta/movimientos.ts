@@ -2,6 +2,7 @@ import { CurrencyPipe, DatePipe } from '@angular/common';
 import { Component, inject, OnInit, signal } from '@angular/core';
 
 import { ApiService, MovimientoCuenta, Pagina } from '../../core/services/api';
+import { alCambiar } from '../../core/services/tiempo-real';
 import { descargar } from '../../shared/utils/descarga';
 import { mensajeDeError } from '../../shared/utils/errores';
 
@@ -48,6 +49,10 @@ export class Movimientos implements OnInit {
 
   protected readonly datos = signal<Pagina<MovimientoCuenta> | null>(null);
   protected readonly error = signal<string | null>(null);
+
+  constructor() {
+    alCambiar(() => this.cargar(this.datos()?.pagina ?? 0));
+  }
 
   ngOnInit(): void {
     this.cargar(0);

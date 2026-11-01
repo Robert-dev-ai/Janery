@@ -53,6 +53,12 @@ public class PersonaService {
     }
 
     @Transactional(readOnly = true)
+    public Long usuarioDe(Long personaId) {
+        return repository.findById(personaId).map(Persona::getUsuarioId)
+                .orElseThrow(() -> NegocioException.noEncontrado("Persona no encontrada"));
+    }
+
+    @Transactional(readOnly = true)
     public boolean tienePerfil(Long usuarioId) {
         return repository.existsByUsuarioId(usuarioId);
     }

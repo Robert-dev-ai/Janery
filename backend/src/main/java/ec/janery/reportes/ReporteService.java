@@ -89,7 +89,9 @@ public class ReporteService {
                     SELECT p.nombres || ' ' || p.apellidos AS "Titular", c.familia AS "Familia", q.numero AS "N.º",
                            q.vencimiento AS "Vencimiento", q.capital AS "Capital", q.interes AS "Interés",
                            q.fondo_desgravamen AS "Desgravamen", q.ahorro_letras AS "Ahorro letras", q.total AS "Total",
-                           CASE WHEN q.pagada_en IS NULL THEN 'PENDIENTE' ELSE 'PAGADA' END AS "Estado"
+                           q.capital_pagado + q.interes_pagado + q.desgravamen_pagado + q.ahorro_pagado AS "Pagado",
+                           CASE WHEN q.pagada_en IS NOT NULL THEN 'PAGADA'
+                                WHEN q.capital_pagado > 0 THEN 'PARCIAL' ELSE 'PENDIENTE' END AS "Estado"
                     FROM cuotas_credito q
                     JOIN creditos c ON c.id = q.credito_id
                     JOIN personas p ON p.id = c.persona_id
@@ -149,9 +151,23 @@ public class ReporteService {
                     WINDOW w AS (PARTITION BY t.socio_id ORDER BY t.mes)
                     ORDER BY "Socio", t.mes
                     """),
-            new Reporte(new Definicion("RESERVA_DISTRIBUCION", "Reserva y distribución", "Resultado de cada cierre anual", false), """
-                    SELECT anio AS "Año", resultado_neto AS "Resultado neto", porcentaje_reserva AS "% reserva",
-                           reserva AS "Reserva", distribuido AS "Distribuido"
+            new Reporte(new Definicion("FONDO_PERSONAL", "Fondo personal por origen", "Valor de cada socio, separado en aportes iniciales, mensuales, personales y ganancias", false), """
+                    SELECT p.nombres || ' ' || p.apellidos AS "Socio",
+                           COALESCE(SUM(v.importe) FILTER (WHERE v.tipo = 'APORTE_INICIAL'), 0) AS "Aportes iniciales",
+                           COALESCE(SUM(v.importe) FILTER (WHERE v.tipo = 'APORTE_OBLIGATORIO'), 0) AS "Aportes mensuales",
+                           COALESCE(SUM(v.importe) FILTER (WHERE v.tipo = 'APORTE_PERSONAL'), 0) AS "Aportes personales",
+                           COALESCE(SUM(v.importe) FILTER (WHERE v.tipo IN ('APORTE_COMPRA', 'APORTE_VENTA')), 0) AS "Compraventas",
+                           COALESCE(SUM(v.importe) FILTER (WHERE v.tipo NOT LIKE 'APORTE%'), 0) AS "Ganancias netas",
+                           COALESCE(SUM(v.importe), 0) AS "Fondo personal"
+                    FROM socios s
+                    JOIN personas p ON p.id = s.persona_id
+                    LEFT JOIN variaciones_participacion v ON v.socio_id = s.id
+                    GROUP BY s.id, p.nombres, p.apellidos
+                    ORDER BY "Socio"
+                    """),
+            new Reporte(new Definicion("RESERVA_DISTRIBUCION", "Cierres anuales", "Resultado, reserva separada y lo que llegó a los fondos personales en cada año cerrado", false), """
+                    SELECT anio AS "Año", resultado_neto AS "Resultado neto", reserva AS "Reserva",
+                           distribuido AS "A fondos personales"
                     FROM cierres_anuales ORDER BY anio
                     """),
             new Reporte(new Definicion("ACTIVIDAD", "Actividad", "Acciones registradas, con el usuario y sus cargos actuales", true), """
