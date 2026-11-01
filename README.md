@@ -33,7 +33,6 @@ Leer todos los documentos de `docs/` antes de programar:
 - Crear Janery desde cero en esta carpeta nueva. No intentar reutilizar el antiguo proyecto de prueba.
 - Mantener las reglas de negocio documentadas. No reinterpretar, simplificar, cambiar ni completar tasas, porcentajes, límites, fórmulas o condiciones sin preguntar al propietario.
 - Si una regla está pendiente, documentarla y no implementarla por suposición.
-- El propietario ha indicado que las tablas actuales de prueba de Janery deben eliminarse y recrearse desde cero.
 - Esta autorización se refiere a los objetos de Janery dentro de la base `janery`; NO autoriza borrar la base completa, otros esquemas, otras bases ni datos ajenos.
 - Antes de eliminar objetos: comprobar conexión, host/puerto, base actual (`janery`), esquema objetivo, listar objetos afectados y realizar respaldo lógico si existen datos que se puedan respaldar. Mostrar el plan de eliminación y solicitar confirmación explícita justo antes del primer `DROP`.
 - Nunca ejecutar `DROP DATABASE`. No borrar objetos de `public` ni de otros esquemas sin demostrar que pertenecen exclusivamente a Janery y obtener confirmación expresa.
