@@ -36,7 +36,8 @@ import ec.janery.simulacion.RelojDePrueba;
 
 /** El reloj simulado sobre los flujos reales, en un esquema propio para no alterar el de las demás pruebas. */
 @SpringBootTest(properties = {
-        "spring.datasource.url=jdbc:postgresql://${JANERY_DB_HOST:localhost}:${JANERY_DB_PORT:5432}/${JANERY_DB_NAME:janery}?currentSchema=janery_simulacion_test",
+        "spring.datasource.url=jdbc:postgresql://${JANERY_DB_HOST:localhost}:${JANERY_DB_PORT:5432}/${JANERY_DB_NAME:janery}?currentSchema=janery_simulacion_test&sslmode=${JANERY_DB_SSLMODE:prefer}",
+        "spring.datasource.hikari.connection-init-sql=SET search_path TO janery_simulacion_test",
         "spring.jpa.properties.hibernate.default_schema=janery_simulacion_test",
         "spring.flyway.schemas=janery_simulacion_test",
         "spring.flyway.default-schema=janery_simulacion_test" })
