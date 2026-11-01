@@ -20,6 +20,8 @@
 - Angular Router.
 - Formularios reactivos para formularios complejos.
 - Cliente HTTP mediante servicios Angular e interceptores cuando corresponda.
+- Tailwind CSS para todos los estilos (decisión del propietario, 31/10/2026).
+- Aplicación dinámica: las pantallas se actualizan sin recargar la página (ver `frontend.md`, sección 5).
 
 ### Herramientas
 - Maven para backend.

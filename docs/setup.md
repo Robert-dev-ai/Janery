@@ -48,7 +48,7 @@ Configurar `application.yml` para leer variables de entorno, no credenciales lit
 
 ## 4. Frontend
 
-Generar Angular 20.x con TypeScript y routing. Usar standalone components. Configurar environments sin secretos. Crear layouts públicos, panel autenticado y administración solo cuando se implementen las fases correspondientes.
+Generar Angular 20.x con TypeScript y routing. Usar standalone components. Instalar Tailwind CSS 4 con `@tailwindcss/postcss`, declarado en `.postcssrc.json` e importado en `src/styles.css`. Configurar environments sin secretos. Crear layouts públicos, panel autenticado y administración solo cuando se implementen las fases correspondientes.
 
 ## 5. PostgreSQL
 

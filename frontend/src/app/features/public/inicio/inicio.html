@@ -1,5 +1,11 @@
-<h1>Janery</h1>
-<p>Caja de ahorro y crédito.</p>
+<section class="portada">
+  <h1>Janery</h1>
+  <p>Caja de ahorro y crédito.</p>
+  <div class="acciones">
+    <a class="boton" routerLink="/informacion">Conocer Janery</a>
+    <a class="boton-claro" routerLink="/registro">Registrarse</a>
+  </div>
+</section>
 
 <p class="suave" role="status" aria-live="polite">
   @switch (conexion()) {
@@ -8,7 +14,3 @@
     @case ('no-disponible') { No se pudo conectar con el servidor. }
   }
 </p>
-
-<div class="acciones">
-  <a routerLink="/informacion">Conocer Janery</a>
-</div>

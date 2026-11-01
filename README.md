@@ -50,7 +50,7 @@ Leer todos los documentos de `docs/` antes de programar:
 ## Tecnologías acordadas
 
 - Backend: Java 21, Spring Boot 3.5.x, Spring Data JPA, Bean Validation, Spring Security, OAuth2 Resource Server/JWT, Flyway, PostgreSQL; Lombok solo si aporta claridad.
-- Frontend: Angular 20.x y TypeScript, componentes standalone y routing.
+- Frontend: Angular 20.x y TypeScript, componentes standalone y routing; aplicación dinámica, con estilos en Tailwind CSS.
 - Backend: monolito modular organizado por funcionalidades.
 - Frontend: organizado por funcionalidades; `core` para infraestructura global y `shared` para elementos realmente reutilizables.
 - No usar microservicios inicialmente.

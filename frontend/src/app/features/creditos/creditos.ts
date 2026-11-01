@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { forkJoin, Observable } from 'rxjs';
 
 import { ApiService, Credito, ProductosCredito, Simulacion } from '../../core/services/api';
+import { alCambiar } from '../../core/services/tiempo-real';
 import { mensajeDeError } from '../../shared/utils/errores';
 
 const FAMILIAS: Record<string, string> = {
@@ -62,7 +63,15 @@ const FAMILIAS: Record<string, string> = {
                         <td class="num">{{ l.fondoDesgravamen | currency: 'USD' }}</td>
                         <td class="num">{{ l.ahorroLetras | currency: 'USD' }}</td>
                         <td class="num">{{ l.total | currency: 'USD' }}</td>
-                        <td>{{ c.cuotasPagadas.includes(l.numero) ? 'Pagada' : 'Pendiente' }}</td>
+                        <td>
+                          @if (c.cuotasPagadas.includes(l.numero)) {
+                            Pagada
+                          } @else if (l.pagado > 0) {
+                            Pagado {{ l.pagado | currency: 'USD' }}
+                          } @else {
+                            Pendiente
+                          }
+                        </td>
                       </tr>
                     }
                   </tbody>
@@ -72,7 +81,14 @@ const FAMILIAS: Record<string, string> = {
                 <label><input type="checkbox" style="display:inline;width:auto" [(ngModel)]="usarAhorro" /> Usar ahorro letras en esta última letra</label>
                 <label><input type="checkbox" style="display:inline;width:auto" [(ngModel)]="usarEncaje" /> Usar encaje en esta última letra</label>
               }
-              <button type="button" (click)="pagarCuota(c)">Pagar siguiente letra</button>
+              <p>Falta de la siguiente letra: <strong>{{ pendienteSiguiente(c) | currency: 'USD' }}</strong></p>
+              <form class="acciones" (ngSubmit)="pagarCuota(c)">
+                <label>Importe (USD; vacío, lo que falta)
+                  <input type="number" min="0.01" step="0.01" name="letra{{ c.id }}" [(ngModel)]="importeLetra" />
+                </label>
+                <button type="submit">Pagar</button>
+              </form>
+              <p class="suave">Si paga solo una parte, lo primero que se cobra es el capital.</p>
             }
           }
         </section>
@@ -163,12 +179,17 @@ export class Creditos implements OnInit {
   protected plazo: number | null = null;
   protected importeEmergente: number | null = null;
   protected importePago: number | null = null;
+  protected importeLetra: number | null = null;
   protected promocion: string | null = null;
   protected usarAhorro = false;
   protected usarEncaje = false;
 
   // Una clave por intento: se renueva solo tras un éxito, para que reintentar no duplique.
   private clave: string = crypto.randomUUID();
+
+  constructor() {
+    alCambiar(() => this.cargar());
+  }
 
   ngOnInit(): void {
     this.cargar();
@@ -217,8 +238,15 @@ export class Creditos implements OnInit {
 
   protected pagarCuota(c: Credito): void {
     const final = this.esUltima(c) && c.familia === 'LETRAS';
-    const cuerpo = { usarAhorroLetras: final && this.usarAhorro, usarEncaje: final && this.usarEncaje };
-    this.ejecutar(this.api.pagarCredito(c.id, cuerpo, this.clave), 'Letra pagada.');
+    const cuerpo = { importe: this.importeLetra || null, usarAhorroLetras: final && this.usarAhorro, usarEncaje: final && this.usarEncaje };
+    this.ejecutar(this.api.pagarCredito(c.id, cuerpo, this.clave), 'Pago registrado.', () => {
+      this.importeLetra = null;
+    });
+  }
+
+  protected pendienteSiguiente(c: Credito): number {
+    const siguiente = c.cuotas.find((l) => !c.cuotasPagadas.includes(l.numero));
+    return siguiente ? siguiente.total - siguiente.pagado : 0;
   }
 
   private ejecutar(accion: Observable<unknown>, aviso: string, alTerminar?: () => void): void {

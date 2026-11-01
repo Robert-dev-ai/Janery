@@ -2,6 +2,7 @@ import { CurrencyPipe, DatePipe } from '@angular/common';
 import { Component, inject, OnInit, signal } from '@angular/core';
 
 import { ApiService, Tesoreria } from '../../core/services/api';
+import { alCambiar } from '../../core/services/tiempo-real';
 import { mensajeDeError } from '../../shared/utils/errores';
 
 @Component({
@@ -44,6 +45,10 @@ export class AreaTesoreria implements OnInit {
 
   protected readonly datos = signal<Tesoreria | null>(null);
   protected readonly error = signal<string | null>(null);
+
+  constructor() {
+    alCambiar(() => this.ngOnInit());
+  }
 
   ngOnInit(): void {
     this.api.tesoreria().subscribe({

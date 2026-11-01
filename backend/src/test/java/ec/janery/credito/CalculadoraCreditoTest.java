@@ -19,31 +19,46 @@ class CalculadoraCreditoTest {
     }
 
     @Test
-    void letraCompletaHastaElDolarEnteroConAhorroLetras() {
-        List<Letra> letras = CalculadoraCredito.letras(bd("1000.00"), 10, bd("1"), bd("0.1"), INICIO);
+    void ejemploDelPropietarioCienATresMeses() {
+        List<Letra> letras = CalculadoraCredito.letras(bd("100.00"), 3, bd("1"), bd("0.1"), INICIO);
 
-        // 100 + 10 + 1 = 111: ya es entero.
-        assertThat(letras.get(0).total()).isEqualByComparingTo("111");
-        assertThat(letras.get(0).ahorroLetras()).isEqualByComparingTo("0");
-        // 100 + 9 + 0,90 = 109,90: se completa con 0,10.
-        assertThat(letras.get(1).interes()).isEqualByComparingTo("9");
-        assertThat(letras.get(1).fondoDesgravamen()).isEqualByComparingTo("0.90");
-        assertThat(letras.get(1).ahorroLetras()).isEqualByComparingTo("0.10");
-        assertThat(letras.get(1).total()).isEqualByComparingTo("110");
+        // Interés 1 y desgravamen 0,10 fijos; la última lleva el centavo de capital y un centavo menos de ahorro.
+        assertThat(letras).extracting(Letra::capital).usingElementComparator(BigDecimal::compareTo)
+                .containsExactly(bd("33.33"), bd("33.33"), bd("33.34"));
+        assertThat(letras).extracting(Letra::ahorroLetras).usingElementComparator(BigDecimal::compareTo)
+                .containsExactly(bd("0.57"), bd("0.57"), bd("0.56"));
+        assertThat(letras).allSatisfy(l -> {
+            assertThat(l.interes()).isEqualByComparingTo("1");
+            assertThat(l.fondoDesgravamen()).isEqualByComparingTo("0.10");
+            assertThat(l.total()).isEqualByComparingTo("35");
+        });
     }
 
     @Test
-    void todasLasLetrasSonEnterasYElCapitalSumaExactamenteElImporte() {
-        List<Letra> letras = CalculadoraCredito.letras(bd("1000.00"), 7, bd("1.5"), bd("0.1"), INICIO);
+    void laLetraEsIgualHastaElFinalYElCapitalSumaExactamenteElImporte() {
+        for (String importe : new String[] { "1000.00", "100.00", "333.33", "777.77" }) {
+            for (int meses : new int[] { 3, 6, 7, 11, 36 }) {
+                List<Letra> letras = CalculadoraCredito.letras(bd(importe), meses, bd("1.5"), bd("0.1"), INICIO);
 
-        assertThat(letras).hasSize(7);
-        assertThat(letras.stream().map(Letra::capital).reduce(BigDecimal.ZERO, BigDecimal::add)).isEqualByComparingTo("1000");
-        assertThat(letras).allSatisfy(l -> {
-            assertThat(l.total().stripTrailingZeros().scale()).isLessThanOrEqualTo(0);
-            assertThat(l.capital().add(l.interes()).add(l.fondoDesgravamen()).add(l.ahorroLetras()))
-                    .isEqualByComparingTo(l.total());
-            assertThat(l.ahorroLetras()).isLessThan(BigDecimal.ONE);
-        });
+                assertThat(letras).hasSize(meses);
+                assertThat(letras.stream().map(Letra::capital).reduce(BigDecimal.ZERO, BigDecimal::add)).isEqualByComparingTo(importe);
+                assertThat(letras).allSatisfy(l -> {
+                    assertThat(l.total()).isEqualByComparingTo(letras.get(0).total());
+                    assertThat(l.total().stripTrailingZeros().scale()).isLessThanOrEqualTo(0);
+                    assertThat(l.ahorroLetras().signum()).isGreaterThanOrEqualTo(0);
+                    assertThat(l.capital().add(l.interes()).add(l.fondoDesgravamen()).add(l.ahorroLetras()))
+                            .isEqualByComparingTo(l.total());
+                });
+            }
+        }
+    }
+
+    @Test
+    void siLaSumaYaEsEnteraEnLaBaseElAhorroNoQuedaNegativo() {
+        // 33,33 + 0,67 = 34 exactos; con la última (33,34) el total sube a 35.
+        List<Letra> letras = CalculadoraCredito.letras(bd("100.00"), 3, bd("0.67"), bd("0"), INICIO);
+        assertThat(letras.get(2).ahorroLetras().signum()).isGreaterThanOrEqualTo(0);
+        assertThat(letras.get(0).total()).isEqualByComparingTo(letras.get(2).total());
     }
 
     @Test

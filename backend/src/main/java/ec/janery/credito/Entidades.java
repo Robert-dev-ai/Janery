@@ -55,7 +55,6 @@ final class Entidades {
     @Getter
     @Setter
     @NoArgsConstructor
-    @AllArgsConstructor
     static class CuotaCredito {
         @Id
         @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -68,7 +67,31 @@ final class Entidades {
         private BigDecimal fondoDesgravamen;
         private BigDecimal interes;
         private BigDecimal total;
+        private BigDecimal capitalPagado = BigDecimal.ZERO;
+        private BigDecimal interesPagado = BigDecimal.ZERO;
+        private BigDecimal desgravamenPagado = BigDecimal.ZERO;
+        private BigDecimal ahorroPagado = BigDecimal.ZERO;
         private Instant pagadaEn;
+
+        CuotaCredito(Long creditoId, Integer numero, LocalDate vencimiento, BigDecimal capital, BigDecimal ahorroLetras,
+                BigDecimal fondoDesgravamen, BigDecimal interes, BigDecimal total) {
+            this.creditoId = creditoId;
+            this.numero = numero;
+            this.vencimiento = vencimiento;
+            this.capital = capital;
+            this.ahorroLetras = ahorroLetras;
+            this.fondoDesgravamen = fondoDesgravamen;
+            this.interes = interes;
+            this.total = total;
+        }
+
+        BigDecimal pagado() {
+            return capitalPagado.add(interesPagado).add(desgravamenPagado).add(ahorroPagado);
+        }
+
+        BigDecimal pendiente() {
+            return total.subtract(pagado());
+        }
     }
 
     @Entity(name = "DesembolsoCredito")

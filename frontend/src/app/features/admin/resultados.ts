@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { forkJoin, Observable } from 'rxjs';
 
 import { ApiService, CierreAnual, Pagina, Resultado, ResumenSocio } from '../../core/services/api';
+import { alCambiar } from '../../core/services/tiempo-real';
 import { mensajeDeError } from '../../shared/utils/errores';
 
 @Component({
@@ -20,26 +21,65 @@ import { mensajeDeError } from '../../shared/utils/errores';
     } @else {
       <div class="tabla">
         <table>
-          <thead><tr><th>Socio</th><th class="num">Obligatorios</th><th class="num">Personales</th><th class="num">Caja chica</th><th class="num">Valor</th><th class="num">Participación</th></tr></thead>
+          <thead><tr><th>Socio</th><th class="num">Iniciales</th><th class="num">Mensuales</th><th class="num">Personales</th><th class="num">Ganancias</th><th class="num">Fondo personal</th><th class="num">Participación</th><th class="num">Caja chica</th></tr></thead>
           <tbody>
             @for (s of socios(); track s.socioId) {
               <tr>
                 <td>{{ s.nombre }}</td>
+                <td class="num">{{ s.totalInicial | currency: 'USD' }}</td>
                 <td class="num">{{ s.totalObligatorio | currency: 'USD' }}</td>
                 <td class="num">{{ s.totalPersonal | currency: 'USD' }}</td>
-                <td class="num">{{ s.totalCajaChica | currency: 'USD' }}</td>
+                <td class="num">{{ s.ganancias | currency: 'USD' }}</td>
                 <td class="num">{{ s.valorActual | currency: 'USD' }}</td>
                 <td class="num">{{ s.porcentaje | number: '1.2-4' }} %</td>
+                <td class="num">{{ s.totalCajaChica | currency: 'USD' }}</td>
               </tr>
             }
           </tbody>
         </table>
       </div>
+
+      <form class="tarjeta estrecho" style="margin-top:1rem" (ngSubmit)="registrarInicial()">
+        <h2>Registrar aporte inicial</h2>
+        <p class="suave">Dinero recibido fuera del sistema. Entra a la caja principal y al fondo personal del socio.</p>
+        <label>Socio
+          <select name="socioInicial" [(ngModel)]="socioInicial">
+            @for (s of socios(); track s.socioId) { <option [ngValue]="s.socioId">{{ s.nombre }}</option> }
+          </select>
+        </label>
+        <label>Importe (USD) <input type="number" min="0.01" step="0.01" name="importeInicial" [(ngModel)]="importeInicial" /></label>
+        <label>Forma de pago
+          <select name="metodoInicial" [(ngModel)]="metodoInicial">
+            <option value="EFECTIVO">Efectivo</option>
+            <option value="TRANSFERENCIA">Transferencia</option>
+          </select>
+        </label>
+        <label>Referencia <input name="referenciaInicial" maxlength="100" [(ngModel)]="referenciaInicial" /></label>
+        <button type="submit" [disabled]="!socioInicial || !importeInicial || importeInicial <= 0">Registrar</button>
+      </form>
+
+      <form class="tarjeta estrecho" (ngSubmit)="registrarCompraventa()">
+        <h2>Compraventa de capital entre socios</h2>
+        <p class="suave">Regístrela cuando ambos socios la hayan acordado. El comprador paga al vendedor desde su cuenta principal.</p>
+        <label>Vendedor
+          <select name="vendedor" [(ngModel)]="vendedor">
+            @for (s of socios(); track s.socioId) { <option [ngValue]="s.socioId">{{ s.nombre }}</option> }
+          </select>
+        </label>
+        <label>Comprador
+          <select name="comprador" [(ngModel)]="comprador">
+            @for (s of socios(); track s.socioId) { <option [ngValue]="s.socioId">{{ s.nombre }}</option> }
+          </select>
+        </label>
+        <label>Capital que cambia de manos (USD) <input type="number" min="0.01" step="0.01" name="capital" [(ngModel)]="capitalVenta" /></label>
+        <label>Precio acordado (USD) <input type="number" min="0.01" step="0.01" name="precio" [(ngModel)]="precioVenta" /></label>
+        <button type="submit" [disabled]="!vendedor || !comprador || vendedor === comprador || !capitalVenta || !precioVenta">Registrar</button>
+      </form>
     }
 
     <form class="tarjeta estrecho" style="margin-top:1rem" (ngSubmit)="registrar()">
       <h2>Registrar ganancia o pérdida</h2>
-      <p class="suave">Se reparte al momento entre los socios, según el valor de cada uno.</p>
+      <p class="suave">Con cada ganancia se separa al momento el fondo de reserva, y el resto va a los fondos personales según el valor de cada socio. La pérdida se reparte igual, sin tocar la reserva.</p>
       <label>Tipo
         <select name="tipo" [(ngModel)]="tipo">
           <option value="GANANCIA">Ganancia</option>
@@ -59,13 +99,14 @@ import { mensajeDeError } from '../../shared/utils/errores';
       } @else {
         <div class="tabla">
           <table>
-            <thead><tr><th>Fecha</th><th>Concepto</th><th class="num">Importe</th></tr></thead>
+            <thead><tr><th>Fecha</th><th>Concepto</th><th class="num">Importe</th><th class="num">A reserva</th></tr></thead>
             <tbody>
               @for (x of r.contenido; track x.id) {
                 <tr>
                   <td>{{ x.fecha | date: 'mediumDate' : 'UTC' }}</td>
                   <td>{{ x.concepto }}</td>
                   <td class="num">{{ x.tipo === 'PERDIDA' ? '−' : '+' }}{{ x.importe | currency: 'USD' }}</td>
+                  <td class="num">{{ x.reserva | currency: 'USD' }}</td>
                 </tr>
               }
             </tbody>
@@ -81,7 +122,7 @@ import { mensajeDeError } from '../../shared/utils/errores';
 
     <section class="tarjeta" style="margin-top:1rem">
       <h2>Cierre anual</h2>
-      <p class="suave">Si el año tuvo ganancia, separa el fondo de reserva y paga el resto a la cuenta principal de cada socio. No se puede deshacer.</p>
+      <p class="suave">Totaliza el año y bloquea nuevos resultados en él. No mueve dinero: la reserva y el reparto ya ocurrieron con cada resultado. No se puede deshacer.</p>
       <form class="acciones" (ngSubmit)="cerrar()">
         <label>Año <input type="number" step="1" name="anio" [(ngModel)]="anio" /></label>
         <button type="submit" class="peligro" [disabled]="!anio">Cerrar año</button>
@@ -89,13 +130,13 @@ import { mensajeDeError } from '../../shared/utils/errores';
       @if (cierres().length) {
         <div class="tabla">
           <table>
-            <thead><tr><th>Año</th><th class="num">Resultado neto</th><th class="num">Reserva</th><th class="num">Distribuido</th></tr></thead>
+            <thead><tr><th>Año</th><th class="num">Resultado neto</th><th class="num">Reserva</th><th class="num">A fondos personales</th></tr></thead>
             <tbody>
               @for (c of cierres(); track c.anio) {
                 <tr>
                   <td>{{ c.anio }}</td>
                   <td class="num">{{ c.resultadoNeto | currency: 'USD' }}</td>
-                  <td class="num">{{ c.reserva | currency: 'USD' }} ({{ c.porcentajeReserva | number: '1.0-2' }} %)</td>
+                  <td class="num">{{ c.reserva | currency: 'USD' }}</td>
                   <td class="num">{{ c.distribuido | currency: 'USD' }}</td>
                 </tr>
               }
@@ -120,9 +161,47 @@ export class AdminResultados implements OnInit {
   protected concepto = '';
   protected fecha = '';
   protected anio: number | null = new Date().getFullYear() - 1;
+  protected socioInicial: number | null = null;
+  protected importeInicial: number | null = null;
+  protected metodoInicial = 'EFECTIVO';
+  protected referenciaInicial = '';
+
+  // Una clave por intento: se renueva solo tras un éxito, para que reintentar no duplique.
+  private claveInicial: string = crypto.randomUUID();
+  private claveVenta: string = crypto.randomUUID();
+
+  protected vendedor: number | null = null;
+  protected comprador: number | null = null;
+  protected capitalVenta: number | null = null;
+  protected precioVenta: number | null = null;
+
+  constructor() {
+    alCambiar(() => this.cargar());
+  }
 
   ngOnInit(): void {
     this.cargar();
+  }
+
+  protected registrarCompraventa(): void {
+    this.ejecutar(
+      this.api.registrarCompraventa(this.vendedor!, this.comprador!, this.capitalVenta!, this.precioVenta!, this.claveVenta),
+      'Compraventa registrada.', () => {
+        this.claveVenta = crypto.randomUUID();
+        this.capitalVenta = null;
+        this.precioVenta = null;
+      });
+  }
+
+  protected registrarInicial(): void {
+    this.ejecutar(
+      this.api.registrarAporteInicial(this.socioInicial!, this.importeInicial!, this.metodoInicial,
+        this.referenciaInicial.trim() || null, this.claveInicial),
+      'Aporte inicial registrado.', () => {
+        this.claveInicial = crypto.randomUUID();
+        this.importeInicial = null;
+        this.referenciaInicial = '';
+      });
   }
 
   protected registrar(): void {

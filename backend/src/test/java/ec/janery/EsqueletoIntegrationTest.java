@@ -77,6 +77,13 @@ class EsqueletoIntegrationTest {
     }
 
     @Test
+    void sinElPerfilDeSimulacionNoExisteLaRuta() throws Exception {
+        mvc.perform(post("/api/v1/simulacion/avanzar").header(HttpHeaders.AUTHORIZATION, bearer(presidente()))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"dias\":1}"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
     void corsSoloAceptaOrigenesExplicitos() throws Exception {
         mvc.perform(options("/api/v1/public/estado")
                         .header(HttpHeaders.ORIGIN, "http://origen-permitido.test")

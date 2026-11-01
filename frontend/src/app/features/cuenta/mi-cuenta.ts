@@ -5,6 +5,7 @@ import { switchMap } from 'rxjs';
 
 import { AuthService } from '../../core/auth/auth';
 import { ApiService, Cuenta } from '../../core/services/api';
+import { alCambiar } from '../../core/services/tiempo-real';
 import { mensajeDeError } from '../../shared/utils/errores';
 
 @Component({
@@ -44,6 +45,10 @@ export class MiCuenta implements OnInit {
 
   protected readonly cuenta = signal<Cuenta | null>(null);
   protected readonly error = signal<string | null>(null);
+
+  constructor() {
+    alCambiar(() => this.ngOnInit());
+  }
 
   ngOnInit(): void {
     this.api.miCuenta().subscribe({

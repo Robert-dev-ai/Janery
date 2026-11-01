@@ -5,6 +5,7 @@ import { switchMap } from 'rxjs';
 
 import { AuthService } from '../../core/auth/auth';
 import { ApiService, Cuenta } from '../../core/services/api';
+import { alCambiar } from '../../core/services/tiempo-real';
 import { mensajeDeError } from '../../shared/utils/errores';
 
 @Component({
@@ -79,6 +80,10 @@ export class ActivarCuenta implements OnInit {
   protected readonly cuenta = signal<Cuenta | null>(null);
   protected readonly error = signal<string | null>(null);
   protected readonly enviando = signal(false);
+
+  constructor() {
+    alCambiar(() => this.actualizar());
+  }
 
   ngOnInit(): void {
     this.apertura.controls.metodoPago.valueChanges.subscribe((m) => this.metodo.set(m));

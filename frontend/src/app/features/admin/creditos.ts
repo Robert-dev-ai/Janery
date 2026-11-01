@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { Observable } from 'rxjs';
 
 import { ApiService, Credito, Pagina } from '../../core/services/api';
+import { alCambiar } from '../../core/services/tiempo-real';
 import { mensajeDeError } from '../../shared/utils/errores';
 
 @Component({
@@ -66,6 +67,10 @@ export class AdminCreditos implements OnInit {
   protected readonly estado = signal('SOLICITADO');
   protected readonly datos = signal<Pagina<Credito> | null>(null);
   protected readonly error = signal<string | null>(null);
+
+  constructor() {
+    alCambiar(() => this.cargar(this.datos()?.pagina ?? 0));
+  }
 
   ngOnInit(): void {
     this.cargar(0);

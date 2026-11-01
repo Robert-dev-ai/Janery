@@ -1,6 +1,7 @@
 package ec.janery;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -50,7 +51,7 @@ class SociosIntegrationTest {
     /** Cada prueba reparte solo entre sus socios. TRUNCATE no dispara los triggers de solo inserción. */
     @BeforeEach
     void aislarSocios() {
-        jdbc.execute("TRUNCATE variaciones_participacion, aportes_socios, aportes_caja_chica, resultados, cierres_anuales");
+        jdbc.execute("TRUNCATE variaciones_participacion, aportes_socios, aportes_caja_chica, resultados, cierres_anuales, compraventas_capital, autorizaciones_retiro");
         jdbc.update("update socios set estado = 'INACTIVO'");
     }
 
@@ -122,22 +123,26 @@ class SociosIntegrationTest {
         aportar(a, "{\"tipo\":\"PERSONAL\",\"importe\":300.00}").andExpect(status().isOk());
         aportar(b, "{\"tipo\":\"PERSONAL\",\"importe\":100.00}").andExpect(status().isOk());
 
+        // Ganancia de 100: 10 a reserva y 90 repartidos 3:1.
         resultado("GANANCIA", "100.00", null).andExpect(status().isNoContent());
-        assertThat(resumen(a).get("valorActual").decimalValue()).isEqualByComparingTo("375");
-        assertThat(resumen(b).get("valorActual").decimalValue()).isEqualByComparingTo("125");
+        assertThat(resumen(a).get("valorActual").decimalValue()).isEqualByComparingTo("367.50");
+        assertThat(resumen(b).get("valorActual").decimalValue()).isEqualByComparingTo("122.50");
 
-        resultado("PERDIDA", "50.00", null).andExpect(status().isNoContent());
-        assertThat(resumen(a).get("valorActual").decimalValue()).isEqualByComparingTo("337.50");
-        assertThat(resumen(b).get("valorActual").decimalValue()).isEqualByComparingTo("112.50");
+        // La pérdida se reparte completa, y no toca la reserva.
+        BigDecimal reservaTrasGanancia = reserva();
+        resultado("PERDIDA", "49.00", null).andExpect(status().isNoContent());
+        assertThat(resumen(a).get("valorActual").decimalValue()).isEqualByComparingTo("330.75");
+        assertThat(resumen(b).get("valorActual").decimalValue()).isEqualByComparingTo("110.25");
+        assertThat(reserva()).isEqualByComparingTo(reservaTrasGanancia);
 
         JsonNode periodo = json.readTree(mvc.perform(get("/api/v1/socios/me/participacion").header(HttpHeaders.AUTHORIZATION, bearer(a.token())))
                 .andReturn().getResponse().getContentAsString()).get(0);
         assertThat(periodo.get("periodo").asText()).isEqualTo(YearMonth.now(ZoneId.of("America/Guayaquil")).toString());
         assertThat(periodo.get("valorInicial").decimalValue()).isEqualByComparingTo("0");
         assertThat(periodo.get("variaciones")).hasSize(3);
-        assertThat(periodo.get("valorFinal").decimalValue()).isEqualByComparingTo("337.50");
+        assertThat(periodo.get("valorFinal").decimalValue()).isEqualByComparingTo("330.75");
 
-        resultado("PERDIDA", "450.01", null).andExpect(status().isConflict())
+        resultado("PERDIDA", "441.01", null).andExpect(status().isConflict())
                 .andExpect(jsonPath("$.codigo").value("PERDIDA_EXCEDE_CAPITAL"));
         resultado("GANANCIA", "1.00", "2999-01-01").andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.codigo").value("FECHA_FUTURA"));
@@ -154,39 +159,45 @@ class SociosIntegrationTest {
                 .andReturn().getResponse().getContentAsString());
         // Tres meses: el de la ganancia, uno sin movimientos y el actual.
         assertThat(periodos).hasSize(3);
-        assertThat(periodos.get(2).get("valorFinal").decimalValue()).isEqualByComparingTo("10");
-        assertThat(periodos.get(1).get("valorInicial").decimalValue()).isEqualByComparingTo("10");
+        // Ganancia de 10, sin los 1 de reserva.
+        assertThat(periodos.get(2).get("valorFinal").decimalValue()).isEqualByComparingTo("9");
+        assertThat(periodos.get(1).get("valorInicial").decimalValue()).isEqualByComparingTo("9");
         assertThat(periodos.get(1).get("variaciones")).isEmpty();
-        assertThat(periodos.get(0).get("valorInicial").decimalValue()).isEqualByComparingTo("10");
-        assertThat(periodos.get(0).get("valorFinal").decimalValue()).isEqualByComparingTo("60");
+        assertThat(periodos.get(0).get("valorInicial").decimalValue()).isEqualByComparingTo("9");
+        assertThat(periodos.get(0).get("valorFinal").decimalValue()).isEqualByComparingTo("59");
     }
 
     @Test
-    void cierreAnualSeparaDiezPorCientoYPagaElRestoUnaSolaVez() throws Exception {
+    void cadaGananciaSeparaSuReservaAlMomentoYElCierreSoloTotaliza() throws Exception {
         Persona a = socio("300.00");
         Persona b = socio("100.00");
         aportar(a, "{\"tipo\":\"PERSONAL\",\"importe\":300.00}").andExpect(status().isOk());
         aportar(b, "{\"tipo\":\"PERSONAL\",\"importe\":100.00}").andExpect(status().isOk());
         String fecha = ANIO_ANTERIOR + "-06-30";
-        resultado("GANANCIA", "120.00", fecha).andExpect(status().isNoContent());
-        resultado("PERDIDA", "20.00", fecha).andExpect(status().isNoContent());
         BigDecimal reservaAntes = reserva();
         BigDecimal principalAntes = saldoDe("/api/v1/tesoreria");
 
+        resultado("GANANCIA", "120.00", fecha).andExpect(status().isNoContent());
+        assertThat(reserva()).isEqualByComparingTo(reservaAntes.add(new BigDecimal("12")));
+        assertThat(saldoDe("/api/v1/tesoreria")).isEqualByComparingTo(principalAntes.subtract(new BigDecimal("12")));
+        resultado("PERDIDA", "20.00", fecha).andExpect(status().isNoContent());
+
+        BigDecimal valorA = resumen(a).get("valorActual").decimalValue();
+        BigDecimal reservaAntesDelCierre = reserva();
         mvc.perform(post("/api/v1/admin/cierres").header(HttpHeaders.AUTHORIZATION, bearer(presidente()))
                         .contentType(MediaType.APPLICATION_JSON).content("{\"anio\":" + ANIO_ANTERIOR + "}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.resultadoNeto").value(100.0))
-                .andExpect(jsonPath("$.reserva").value(10.0))
-                .andExpect(jsonPath("$.distribuido").value(90.0));
+                .andExpect(jsonPath("$.reserva").value(12.0))
+                .andExpect(jsonPath("$.distribuido").value(88.0));
 
-        // Neto 100: reserva 10, y 90 repartidos 3:1 según el valor de cada socio.
-        assertThat(reserva()).isEqualByComparingTo(reservaAntes.add(BigDecimal.TEN));
-        assertThat(saldoDe("/api/v1/tesoreria")).isEqualByComparingTo(principalAntes.subtract(BigDecimal.TEN));
-        assertThat(saldo(a)).isEqualByComparingTo("67.50");
-        assertThat(saldo(b)).isEqualByComparingTo("22.50");
-        assertThat(resumen(a).get("valorActual").decimalValue()).isEqualByComparingTo("300");
-        assertThat(resumen(b).get("valorActual").decimalValue()).isEqualByComparingTo("100");
+        // 108 repartidos y 20 de pérdida: todo queda en los fondos personales, sin pagos a las cuentas.
+        assertThat(valorA).isEqualByComparingTo("366");
+        assertThat(resumen(b).get("valorActual").decimalValue()).isEqualByComparingTo("122");
+        assertThat(resumen(a).get("valorActual").decimalValue()).isEqualByComparingTo(valorA);
+        assertThat(saldo(a)).isEqualByComparingTo("0");
+        assertThat(saldo(b)).isEqualByComparingTo("0");
+        assertThat(reserva()).isEqualByComparingTo(reservaAntesDelCierre);
 
         mvc.perform(post("/api/v1/admin/cierres").header(HttpHeaders.AUTHORIZATION, bearer(presidente()))
                         .contentType(MediaType.APPLICATION_JSON).content("{\"anio\":" + ANIO_ANTERIOR + "}"))
@@ -203,9 +214,239 @@ class SociosIntegrationTest {
         BigDecimal reservaAntes = reserva();
         mvc.perform(post("/api/v1/admin/cierres").header(HttpHeaders.AUTHORIZATION, bearer(presidente()))
                         .contentType(MediaType.APPLICATION_JSON).content("{\"anio\":" + ANIO_ANTERIOR + "}"))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.reserva").value(0.0)).andExpect(jsonPath("$.distribuido").value(0.0));
+                .andExpect(status().isOk()).andExpect(jsonPath("$.reserva").value(0.0)).andExpect(jsonPath("$.distribuido").value(-10.0));
         assertThat(reserva()).isEqualByComparingTo(reservaAntes);
         assertThat(resumen(a).get("valorActual").decimalValue()).isEqualByComparingTo("90");
+    }
+
+    @Test
+    void elFondoPersonalEsUnoSoloPeroSeSeparaPorOrigen() throws Exception {
+        Persona a = socio("100.00");
+        long socioId = resumen(a).get("socioId").asLong();
+        BigDecimal caja = saldoDe("/api/v1/tesoreria");
+        String clave = UUID.randomUUID().toString();
+        String cuerpo = "{\"importe\":200.00,\"metodoPago\":\"EFECTIVO\"}";
+        for (int intento = 0; intento < 2; intento++) {
+            mvc.perform(post("/api/v1/admin/socios/" + socioId + "/aporte-inicial").header(HttpHeaders.AUTHORIZATION, bearer(presidente()))
+                            .header("Idempotency-Key", clave).contentType(MediaType.APPLICATION_JSON).content(cuerpo))
+                    .andExpect(status().isOk());
+        }
+        // El dinero entra de fuera y no sale de su cuenta principal; el reintento no duplica.
+        assertThat(saldoDe("/api/v1/tesoreria")).isEqualByComparingTo(caja.add(new BigDecimal("200")));
+        assertThat(saldo(a)).isEqualByComparingTo("100");
+
+        aportar(a, "{\"tipo\":\"OBLIGATORIO\"}").andExpect(status().isOk());
+        aportar(a, "{\"tipo\":\"PERSONAL\",\"importe\":7.50}").andExpect(status().isOk());
+        resultado("GANANCIA", "10.00", null).andExpect(status().isNoContent());
+
+        JsonNode r = resumen(a);
+        assertThat(r.get("totalInicial").decimalValue()).isEqualByComparingTo("200");
+        assertThat(r.get("totalObligatorio").decimalValue()).isEqualByComparingTo("2.50");
+        assertThat(r.get("totalPersonal").decimalValue()).isEqualByComparingTo("7.50");
+        assertThat(r.get("ganancias").decimalValue()).isEqualByComparingTo("9");
+        assertThat(r.get("valorActual").decimalValue()).isEqualByComparingTo("219");
+    }
+
+    @Test
+    void aporteInicialExigePermiso() throws Exception {
+        Persona a = socio("0");
+        long socioId = resumen(a).get("socioId").asLong();
+        conClave(a.token(), "/api/v1/admin/socios/" + socioId + "/aporte-inicial", "{\"importe\":1.00,\"metodoPago\":\"EFECTIVO\"}")
+                .andExpect(status().isForbidden());
+    }
+
+    // --- Retiro de ganancias
+
+    @Test
+    void gananciaDelAnioEnCursoNoSeRetiraYLaDeAniosAnterioresSi() throws Exception {
+        Persona a = socio("100.00");
+        aportar(a, "{\"tipo\":\"PERSONAL\",\"importe\":100.00}").andExpect(status().isOk());
+        autorizar(a).andExpect(status().isNoContent());
+        resultado("GANANCIA", "10.00", null).andExpect(status().isNoContent());
+        assertThat(resumen(a).get("gananciasDisponibles").decimalValue()).isEqualByComparingTo("0");
+        retirarGanancia(a, "1.00").andExpect(status().isConflict()).andExpect(jsonPath("$.codigo").value("GANANCIA_NO_DISPONIBLE"));
+
+        resultado("GANANCIA", "100.00", ANIO_ANTERIOR + "-06-30").andExpect(status().isNoContent());
+        assertThat(resumen(a).get("gananciasDisponibles").decimalValue()).isEqualByComparingTo("90");
+        retirarGanancia(a, "90.01").andExpect(status().isConflict());
+
+        retirarGanancia(a, "40.00").andExpect(status().isOk());
+        assertThat(saldo(a)).isEqualByComparingTo("40");
+        assertThat(resumen(a).get("gananciasDisponibles").decimalValue()).isEqualByComparingTo("50");
+        assertThat(resumen(a).get("totalPersonal").decimalValue()).isEqualByComparingTo("100");
+    }
+
+    @Test
+    void sinAutorizacionDelPresidenteNoHayRetiroYPuedeRevocarse() throws Exception {
+        Persona a = socio("100.00");
+        aportar(a, "{\"tipo\":\"PERSONAL\",\"importe\":100.00}").andExpect(status().isOk());
+        resultado("GANANCIA", "100.00", ANIO_ANTERIOR + "-06-30").andExpect(status().isNoContent());
+        retirarGanancia(a, "1.00").andExpect(status().isConflict()).andExpect(jsonPath("$.codigo").value("RETIRO_NO_AUTORIZADO"));
+
+        autorizar(a).andExpect(status().isNoContent());
+        assertThat(resumen(a).get("retiroAutorizado").asBoolean()).isTrue();
+        retirarGanancia(a, "1.00").andExpect(status().isOk());
+
+        mvc.perform(delete("/api/v1/admin/socios/" + resumen(a).get("socioId").asLong() + "/autorizacion-retiro")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(presidente())))
+                .andExpect(status().isNoContent());
+        retirarGanancia(a, "1.00").andExpect(status().isConflict()).andExpect(jsonPath("$.codigo").value("RETIRO_NO_AUTORIZADO"));
+    }
+
+    @Test
+    void perdidaDeEsteAnioLimitaElRetiro() throws Exception {
+        Persona a = socio("100.00");
+        aportar(a, "{\"tipo\":\"PERSONAL\",\"importe\":100.00}").andExpect(status().isOk());
+        resultado("GANANCIA", "100.00", ANIO_ANTERIOR + "-06-30").andExpect(status().isNoContent());
+        resultado("PERDIDA", "30.00", null).andExpect(status().isNoContent());
+        assertThat(resumen(a).get("gananciasDisponibles").decimalValue()).isEqualByComparingTo("60");
+    }
+
+    @Test
+    void losAportesNuncaSeRetiran() throws Exception {
+        Persona a = socio("100.00");
+        aportar(a, "{\"tipo\":\"PERSONAL\",\"importe\":100.00}").andExpect(status().isOk());
+        autorizar(a).andExpect(status().isNoContent());
+        retirarGanancia(a, "1.00").andExpect(status().isConflict()).andExpect(jsonPath("$.codigo").value("GANANCIA_NO_DISPONIBLE"));
+    }
+
+    @Test
+    void elMenuMuestraLoQueDebeYSoloSeDescuentaLoElegido() throws Exception {
+        Persona a = socio("100.00");
+        aportar(a, "{\"tipo\":\"PERSONAL\",\"importe\":100.00}").andExpect(status().isOk());
+        long socioId = resumen(a).get("socioId").asLong();
+        resultado("GANANCIA", "100.00", ANIO_ANTERIOR + "-06-30").andExpect(status().isNoContent());
+        entroHaceMeses(socioId, 2);
+
+        // Nada se descuenta por sí solo.
+        JsonNode menu = menu(socioId);
+        assertThat(menu.get("obligaciones")).hasSize(4);
+        assertThat(menu.get("total").decimalValue()).isEqualByComparingTo("10");
+        assertThat(menu.get("gananciasDisponibles").decimalValue()).isEqualByComparingTo("90");
+        autorizar(a).andExpect(status().isConflict()).andExpect(jsonPath("$.codigo").value("OBLIGACIONES_PENDIENTES"));
+
+        String periodo = menu.get("obligaciones").get(0).get("periodo").asText();
+        BigDecimal chica = saldoDe("/api/v1/caja-chica");
+        String clave = UUID.randomUUID().toString();
+        String cuerpo = "{\"descuentos\":[{\"tipo\":\"APORTE_MENSUAL\",\"periodo\":\"" + periodo + "\"},{\"tipo\":\"CAJA_CHICA\",\"periodo\":\"" + periodo + "\"}]}";
+        for (int intento = 0; intento < 2; intento++) {
+            descontar(socioId, cuerpo, clave).andExpect(status().isNoContent());
+        }
+
+        JsonNode r = resumen(a);
+        assertThat(r.get("obligacionesPendientes").decimalValue()).isEqualByComparingTo("5");
+        assertThat(r.get("totalObligatorio").decimalValue()).isEqualByComparingTo("2.50");
+        assertThat(r.get("totalCajaChica").decimalValue()).isEqualByComparingTo("2.50");
+        assertThat(r.get("gananciasDisponibles").decimalValue()).isEqualByComparingTo("85");
+        assertThat(saldoDe("/api/v1/caja-chica")).isEqualByComparingTo(chica.add(new BigDecimal("2.50")));
+        // El aporte mensual sigue en el fondo; lo de caja chica sale de él.
+        assertThat(r.get("valorActual").decimalValue()).isEqualByComparingTo("187.50");
+
+        descontar(socioId, cuerpo, UUID.randomUUID().toString())
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.codigo").value("OBLIGACION_INEXISTENTE"));
+    }
+
+    @Test
+    void descuentoNoSuperaLasGananciasYNoAplicaNadaSiFallaUnaParte() throws Exception {
+        Persona a = socio("100.00");
+        aportar(a, "{\"tipo\":\"PERSONAL\",\"importe\":100.00}").andExpect(status().isOk());
+        long socioId = resumen(a).get("socioId").asLong();
+        resultado("GANANCIA", "3.00", ANIO_ANTERIOR + "-06-30").andExpect(status().isNoContent());
+        entroHaceMeses(socioId, 1);
+        String periodo = menu(socioId).get("obligaciones").get(0).get("periodo").asText();
+
+        descontar(socioId, "{\"descuentos\":[{\"tipo\":\"APORTE_MENSUAL\",\"periodo\":\"" + periodo + "\"},{\"tipo\":\"CAJA_CHICA\",\"periodo\":\"" + periodo + "\"}]}", UUID.randomUUID().toString())
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.codigo").value("GANANCIAS_INSUFICIENTES"));
+
+        JsonNode r = resumen(a);
+        assertThat(r.get("totalObligatorio").decimalValue()).isEqualByComparingTo("0");
+        assertThat(r.get("gananciasDisponibles").decimalValue()).isEqualByComparingTo("2.70");
+    }
+
+    @Test
+    void elMesEnCursoNoCuentaComoVencido() throws Exception {
+        Persona a = socio("0");
+        assertThat(resumen(a).get("obligacionesPendientes").decimalValue()).isEqualByComparingTo("0");
+    }
+
+    @Test
+    void cuotaVencidaSePuedeDescontarEnParteCobrandoPrimeroElCapital() throws Exception {
+        Persona a = socio("100.00");
+        aportar(a, "{\"tipo\":\"PERSONAL\",\"importe\":100.00}").andExpect(status().isOk());
+        long socioId = resumen(a).get("socioId").asLong();
+        resultado("GANANCIA", "1000.00", ANIO_ANTERIOR + "-06-30").andExpect(status().isNoContent());
+        String r = mvc.perform(post("/api/v1/creditos/letras/solicitudes").header(HttpHeaders.AUTHORIZATION, bearer(a.token()))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"modalidad\":\"NORMAL\",\"importe\":300.00,\"plazoMeses\":3}"))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        long credito = json.readTree(r).get("id").asLong();
+        mvc.perform(post("/api/v1/admin/creditos/" + credito + "/aprobar").header(HttpHeaders.AUTHORIZATION, bearer(presidente())))
+                .andExpect(status().isNoContent());
+        BigDecimal saldoAntes = saldo(a);
+        jdbc.update("update cuotas_credito set vencimiento = current_date - 1 where credito_id = ? and numero = 1", credito);
+        BigDecimal cuota = jdbc.queryForObject("select total from cuotas_credito where credito_id = ? and numero = 1", BigDecimal.class, credito);
+        JsonNode linea = menu(socioId).get("obligaciones").get(0);
+        assertThat(linea.get("tipo").asText()).isEqualTo("CUOTA");
+        assertThat(linea.get("importe").decimalValue()).isEqualByComparingTo(cuota);
+        long cuotaId = linea.get("cuotaId").asLong();
+
+        descontar(socioId, "{\"descuentos\":[{\"tipo\":\"CUOTA\",\"cuotaId\":" + cuotaId + ",\"importe\":60.00}]}", UUID.randomUUID().toString())
+                .andExpect(status().isNoContent());
+
+        // Los 60 van a capital, y la cuota sigue pendiente por lo que falta.
+        assertThat(jdbc.queryForObject("select capital_pagado from cuotas_credito where id = ?", BigDecimal.class, cuotaId)).isEqualByComparingTo("60");
+        assertThat(jdbc.queryForObject("select interes_pagado from cuotas_credito where id = ?", BigDecimal.class, cuotaId)).isEqualByComparingTo("0");
+        assertThat(jdbc.queryForObject("select capital_pendiente from creditos where id = ?", BigDecimal.class, credito)).isEqualByComparingTo("240");
+        assertThat(menu(socioId).get("obligaciones").get(0).get("importe").decimalValue()).isEqualByComparingTo(cuota.subtract(new BigDecimal("60")));
+        assertThat(saldo(a)).isEqualByComparingTo(saldoAntes);
+
+        descontar(socioId, "{\"descuentos\":[{\"tipo\":\"CUOTA\",\"cuotaId\":" + cuotaId + "}]}", UUID.randomUUID().toString())
+                .andExpect(status().isNoContent());
+        assertThat(jdbc.queryForObject("select pagada_en is not null from cuotas_credito where id = ?", Boolean.class, cuotaId)).isTrue();
+        assertThat(resumen(a).get("gananciasDisponibles").decimalValue()).isEqualByComparingTo(new BigDecimal("900").subtract(cuota));
+        assertThat(saldo(a)).isEqualByComparingTo(saldoAntes);
+    }
+
+    @Test
+    void decidirRetirosExigePermiso() throws Exception {
+        Persona a = socio("0");
+        long socioId = resumen(a).get("socioId").asLong();
+        String auth = bearer(a.token());
+        mvc.perform(get("/api/v1/admin/socios/" + socioId + "/obligaciones").header(HttpHeaders.AUTHORIZATION, auth)).andExpect(status().isForbidden());
+        mvc.perform(post("/api/v1/admin/socios/" + socioId + "/autorizacion-retiro").header(HttpHeaders.AUTHORIZATION, auth)).andExpect(status().isForbidden());
+        conClave(a.token(), "/api/v1/admin/socios/" + socioId + "/descuentos", "{\"descuentos\":[]}").andExpect(status().isForbidden());
+    }
+
+// --- Compraventa
+
+    @Test
+    void compraventaMueveCapitalYPagaAlVendedorSinTocarLaCaja() throws Exception {
+        Persona v = socio("100.00");
+        Persona c = socio("150.00");
+        aportar(v, "{\"tipo\":\"PERSONAL\",\"importe\":100.00}").andExpect(status().isOk());
+        long vendedor = resumen(v).get("socioId").asLong();
+        long comprador = resumen(c).get("socioId").asLong();
+        BigDecimal caja = saldoDe("/api/v1/tesoreria");
+
+        compraventa(vendedor, comprador, "100.01", "10.00").andExpect(status().isConflict()).andExpect(jsonPath("$.codigo").value("CAPITAL_INSUFICIENTE"));
+        compraventa(vendedor, vendedor, "1.00", "1.00").andExpect(status().isBadRequest());
+        compraventa(vendedor, comprador, "40.00", "150.01").andExpect(status().isConflict()).andExpect(jsonPath("$.codigo").value("SALDO_INSUFICIENTE"));
+
+        compraventa(vendedor, comprador, "40.00", "50.00").andExpect(status().isOk());
+
+        assertThat(resumen(v).get("valorActual").decimalValue()).isEqualByComparingTo("60");
+        assertThat(resumen(c).get("valorActual").decimalValue()).isEqualByComparingTo("40");
+        assertThat(resumen(c).get("compraventas").decimalValue()).isEqualByComparingTo("40");
+        assertThat(resumen(c).get("ganancias").decimalValue()).isEqualByComparingTo("0");
+        assertThat(saldo(v)).isEqualByComparingTo("50");
+        assertThat(saldo(c)).isEqualByComparingTo("100");
+        assertThat(saldoDe("/api/v1/tesoreria")).isEqualByComparingTo(caja);
+    }
+
+    @Test
+    void compraventaExigePermiso() throws Exception {
+        Persona a = socio("0");
+        conClave(a.token(), "/api/v1/admin/socios/compraventas",
+                "{\"vendedorId\":1,\"compradorId\":2,\"capital\":1.00,\"precio\":1.00}").andExpect(status().isForbidden());
     }
 
     @Test
@@ -248,6 +489,35 @@ class SociosIntegrationTest {
     }
 
     // --- Ayudas
+
+    private ResultActions autorizar(Persona p) throws Exception {
+        return mvc.perform(post("/api/v1/admin/socios/" + resumen(p).get("socioId").asLong() + "/autorizacion-retiro")
+                .header(HttpHeaders.AUTHORIZATION, bearer(presidente())));
+    }
+
+    private JsonNode menu(long socioId) throws Exception {
+        return json.readTree(mvc.perform(get("/api/v1/admin/socios/" + socioId + "/obligaciones").header(HttpHeaders.AUTHORIZATION, bearer(presidente())))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+    }
+
+    private ResultActions descontar(long socioId, String cuerpo, String clave) throws Exception {
+        return mvc.perform(post("/api/v1/admin/socios/" + socioId + "/descuentos").header(HttpHeaders.AUTHORIZATION, bearer(presidente()))
+                .header("Idempotency-Key", clave).contentType(MediaType.APPLICATION_JSON).content(cuerpo));
+    }
+
+    private ResultActions retirarGanancia(Persona p, String importe) throws Exception {
+        return conClave(p.token(), "/api/v1/socios/me/retiro-ganancias", "{\"importe\":" + importe + "}");
+    }
+
+    private ResultActions compraventa(long vendedor, long comprador, String capital, String precio) throws Exception {
+        return conClave(presidente(), "/api/v1/admin/socios/compraventas", "{\"vendedorId\":" + vendedor + ",\"compradorId\":" + comprador
+                + ",\"capital\":" + capital + ",\"precio\":" + precio + "}");
+    }
+
+    /** Fecha de entrada al primer día de hace N meses, para que esos meses cuenten como vencidos. */
+    private void entroHaceMeses(long socioId, int meses) {
+        jdbc.update("update socios set desde = date_trunc('month', now() AT TIME ZONE 'America/Guayaquil') AT TIME ZONE 'America/Guayaquil' - make_interval(months => ?) + interval '1 day' where id = ?", meses, socioId);
+    }
 
     private ResultActions resultado(String tipo, String importe, String fecha) throws Exception {
         String extra = fecha == null ? "" : ",\"fecha\":\"" + fecha + "\"";

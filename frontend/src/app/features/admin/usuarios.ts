@@ -2,6 +2,7 @@ import { Component, inject, OnInit, signal } from '@angular/core';
 import { Observable } from 'rxjs';
 
 import { ApiService, Pagina, UsuarioResumen } from '../../core/services/api';
+import { alCambiar } from '../../core/services/tiempo-real';
 import { mensajeDeError } from '../../shared/utils/errores';
 
 @Component({
@@ -61,6 +62,10 @@ export class AdminUsuarios implements OnInit {
     'CAJA_CHICA', 'COMITE_CREDITO', 'ASUNTOS_SOCIALES'];
   protected readonly datos = signal<Pagina<UsuarioResumen> | null>(null);
   protected readonly error = signal<string | null>(null);
+
+  constructor() {
+    alCambiar(() => this.cargar(this.datos()?.pagina ?? 0));
+  }
 
   ngOnInit(): void {
     this.cargar(0);

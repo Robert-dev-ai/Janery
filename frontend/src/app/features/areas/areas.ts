@@ -2,6 +2,7 @@ import { Component, inject, OnInit, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
 import { ApiService, CargoVista } from '../../core/services/api';
+import { alCambiar } from '../../core/services/tiempo-real';
 import { mensajeDeError } from '../../shared/utils/errores';
 
 const FUNCIONES: Record<string, { ruta: string; titulo: string }> = {
@@ -50,6 +51,10 @@ export class Areas implements OnInit {
 
   protected readonly areas = signal<CargoVista[] | null>(null);
   protected readonly error = signal<string | null>(null);
+
+  constructor() {
+    alCambiar(() => this.ngOnInit());
+  }
 
   ngOnInit(): void {
     this.api.misAreas().subscribe({

@@ -189,6 +189,13 @@ public class CuentaService {
         return bloquear(cuenta.getId());
     }
 
+    @Transactional
+    public Optional<CuentaPrincipal> bloquearSiActiva(Long personaId) {
+        return cuentas.vigenteDe(personaId)
+                .filter(c -> CuentaPrincipal.ACTIVA.equals(c.getEstado()))
+                .map(c -> bloquear(c.getId()));
+    }
+
     /** Operación ya confirmada con esa clave, para responder igual a un reintento. Importe nulo: no se compara. */
     @Transactional(readOnly = true)
     public Optional<Long> operacionPrevia(String clave, String tipo, BigDecimal importe, Long actorId) {
@@ -201,9 +208,22 @@ public class CuentaService {
         });
     }
 
+    @Transactional(readOnly = true)
+    public boolean claveUsada(String clave) {
+        return operaciones.findByClaveIdempotencia(clave).isPresent();
+    }
+
     @Transactional
     public Long crearOperacionInterna(String tipo, BigDecimal importe, String clave, Long actorId) {
         return operaciones.save(new OperacionFinanciera(null, tipo, importe, "INTERNO", null, clave, actorId,
+                Instant.now(reloj))).getId();
+    }
+
+    /** Operación con dinero recibido fuera del sistema, en efectivo o por transferencia. */
+    @Transactional
+    public Long crearOperacionExterna(String tipo, BigDecimal importe, String metodo, String referencia, String clave,
+            Long actorId) {
+        return operaciones.save(new OperacionFinanciera(null, tipo, importe, metodo, referencia, clave, actorId,
                 Instant.now(reloj))).getId();
     }
 

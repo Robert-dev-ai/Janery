@@ -43,6 +43,22 @@ No inventar resultados esperados cuando la fórmula siga pendiente; marcar el te
 - No exposición de secretos.
 - Validación de entradas y errores seguros.
 
-## 6. Criterio de aceptación
+## 6. Simular el paso del tiempo
+
+Para ver a mano intereses, vencimientos o el retiro de ganancias del 1 de enero sin esperar:
+
+1. Detener el backend normal, porque usa el mismo puerto.
+2. Ejecutar `.\simulacion.ps1` desde la raíz. Crea la base `janery_simulacion` si falta y arranca con el perfil `simulacion`.
+3. Iniciar sesión con un usuario con permiso `ADMIN_PARAMETROS` y avanzar la fecha con la barra amarilla, o con `POST /api/v1/simulacion/avanzar` y `{"dias": 15}` o `{"fecha": "2027-01-01"}`.
+
+Reglas:
+- La fecha solo avanza. Para repetir una prueba, `.\simulacion.ps1 -Reiniciar` borra los datos simulados y vuelve a la fecha real.
+- Al cruzar cada día 1 se ejecuta el abono mensual de intereses de ahorros.
+- La fecha simulada se conserva al reiniciar el backend.
+- Las columnas con `DEFAULT now()` que la aplicación no llena muestran la fecha real.
+- Un salto de más de 7 días vence la sesión de refresco: habrá que volver a iniciar sesión.
+- El perfil no arranca sobre una base o esquema sin "simulacion" en su URL. Nunca activarlo en producción.
+
+## 7. Criterio de aceptación
 
 Cada módulo debe tener pruebas relevantes aprobadas, migraciones verificadas en base de prueba y revisión manual de los flujos financieros antes de habilitarse.

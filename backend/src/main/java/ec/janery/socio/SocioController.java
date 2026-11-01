@@ -9,7 +9,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -58,6 +60,21 @@ public class SocioController {
     public record CierreRequest(@Min(2000) int anio) {
     }
 
+    public record AporteInicialRequest(@NotNull @Positive @Digits(integer = 12, fraction = 2) BigDecimal importe,
+            @NotNull @Pattern(regexp = "EFECTIVO|TRANSFERENCIA") String metodoPago, @Size(max = 100) String referencia) {
+    }
+
+    public record RetiroGananciaRequest(@NotNull @Positive @Digits(integer = 12, fraction = 2) BigDecimal importe) {
+    }
+
+    public record CompraventaRequest(@NotNull Long vendedorId, @NotNull Long compradorId,
+            @NotNull @Positive @Digits(integer = 12, fraction = 2) BigDecimal capital,
+            @NotNull @Positive @Digits(integer = 12, fraction = 2) BigDecimal precio) {
+    }
+
+    public record DescuentosRequest(@NotNull List<ParticipacionService.Descuento> descuentos) {
+    }
+
     public record OperacionResponse(Long operacionId) {
     }
 
@@ -97,6 +114,47 @@ public class SocioController {
         return service.miEvolucion(id(jwt));
     }
 
+    @PostMapping("/socios/me/retiro-ganancias")
+    public OperacionResponse retirarGanancias(@AuthenticationPrincipal Jwt jwt,
+            @RequestHeader("Idempotency-Key") String clave, @Valid @RequestBody RetiroGananciaRequest r) {
+        return new OperacionResponse(service.retirarGanancias(id(jwt), r.importe(), clave));
+    }
+
+    @GetMapping("/admin/socios/{socioId}/obligaciones")
+    @PreAuthorize("hasAuthority('SCOPE_GESTIONAR_RESULTADOS')")
+    public ParticipacionService.MenuObligaciones obligaciones(@PathVariable Long socioId) {
+        return service.menuObligaciones(socioId);
+    }
+
+    @PostMapping("/admin/socios/{socioId}/descuentos")
+    @PreAuthorize("hasAuthority('SCOPE_GESTIONAR_RESULTADOS')")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void descontar(@AuthenticationPrincipal Jwt jwt, @PathVariable Long socioId,
+            @RequestHeader("Idempotency-Key") String clave, @Valid @RequestBody DescuentosRequest r) {
+        service.descontar(id(jwt), socioId, r.descuentos(), clave);
+    }
+
+    @PostMapping("/admin/socios/{socioId}/autorizacion-retiro")
+    @PreAuthorize("hasAuthority('SCOPE_GESTIONAR_RESULTADOS')")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void autorizarRetiro(@AuthenticationPrincipal Jwt jwt, @PathVariable Long socioId) {
+        service.autorizarRetiro(id(jwt), socioId);
+    }
+
+    @DeleteMapping("/admin/socios/{socioId}/autorizacion-retiro")
+    @PreAuthorize("hasAuthority('SCOPE_GESTIONAR_RESULTADOS')")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void revocarRetiro(@AuthenticationPrincipal Jwt jwt, @PathVariable Long socioId) {
+        service.revocarRetiro(id(jwt), socioId);
+    }
+
+    @PostMapping("/admin/socios/compraventas")
+    @PreAuthorize("hasAuthority('SCOPE_GESTIONAR_RESULTADOS')")
+    public OperacionResponse compraventa(@AuthenticationPrincipal Jwt jwt, @RequestHeader("Idempotency-Key") String clave,
+            @Valid @RequestBody CompraventaRequest r) {
+        return new OperacionResponse(service.registrarCompraventa(id(jwt), r.vendedorId(), r.compradorId(), r.capital(), r.precio(), clave));
+    }
+
     @GetMapping("/caja-chica")
     @PreAuthorize("hasAuthority('SCOPE_GESTIONAR_CAJA_CHICA')")
     public CajaChicaResponse cajaChica(@RequestParam(defaultValue = "0") int pagina,
@@ -118,6 +176,14 @@ public class SocioController {
     @PreAuthorize("hasAuthority('SCOPE_GESTIONAR_RESULTADOS')")
     public List<ResumenSocio> socios() {
         return service.listarSocios();
+    }
+
+    @PostMapping("/admin/socios/{socioId}/aporte-inicial")
+    @PreAuthorize("hasAuthority('SCOPE_GESTIONAR_RESULTADOS')")
+    public OperacionResponse aporteInicial(@AuthenticationPrincipal Jwt jwt, @PathVariable Long socioId,
+            @RequestHeader("Idempotency-Key") String clave, @Valid @RequestBody AporteInicialRequest r) {
+        return new OperacionResponse(service.registrarAporteInicial(id(jwt), socioId, r.importe(), r.metodoPago(),
+                r.referencia(), clave));
     }
 
     @GetMapping("/admin/resultados")

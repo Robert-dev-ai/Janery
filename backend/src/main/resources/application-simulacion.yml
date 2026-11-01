@@ -1,0 +1,10 @@
+# Solo para probar el paso del tiempo (docs/testing.md). Nunca activar este perfil en producción.
+spring:
+  datasource:
+    # Base fija y aparte: las fechas futuras no deben mezclarse con otros datos.
+    url: jdbc:postgresql://${JANERY_DB_HOST:localhost}:${JANERY_DB_PORT:5432}/janery_simulacion?currentSchema=${JANERY_DB_SCHEMA:janery}
+
+janery:
+  jwt:
+    # Clave propia: un token con fecha futura no debe servir fuera de la simulación.
+    secret: simulacion-${JANERY_JWT_SECRET:}

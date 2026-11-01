@@ -251,6 +251,7 @@ public class AhorroService {
         Long operacion = cuentas.crearOperacionInterna("INTERES_AHORRO", interes, null, null);
         a.setSaldo(a.getSaldo().add(interes));
         asiento(a, operacion, ENTRADA, interes, "INTERES", clave, tasa);
+        auditoria.registrar(null, "AHORRO_INTERES", MODULO, "ahorro", a.getId(), null, interes.toPlainString(), clave);
         return true;
     }
 
@@ -323,7 +324,7 @@ public class AhorroService {
     /** Cada día 1 abona el mes anterior. Cada ahorro va en su propia transacción: un fallo no frena a los demás. */
     @Component
     @RequiredArgsConstructor
-    static class InteresMensual {
+    public static class InteresMensual {
 
         private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(InteresMensual.class);
 
@@ -331,7 +332,7 @@ public class AhorroService {
         private final Clock reloj;
 
         @Scheduled(cron = "0 0 1 1 * *", zone = "${janery.zona-horaria}")
-        void ejecutar() {
+        public void ejecutar() {
             YearMonth periodo = YearMonth.now(reloj).minusMonths(1);
             for (Long id : service.normalesConSaldo()) {
                 try {
