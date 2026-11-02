@@ -7,6 +7,7 @@ import { filter, map } from 'rxjs';
 import { environment } from '../../environments/environment';
 import { AuthService } from '../core/auth/auth';
 import { TiempoRealService } from '../core/services/tiempo-real';
+import { Arcade } from '../features/arcade/arcade';
 import { PieContacto } from '../shared/components/pie-contacto';
 import { WhatsappFlotante } from '../shared/components/whatsapp-flotante';
 import { AnuncioCabecera } from './anuncio-cabecera';
@@ -18,7 +19,7 @@ import { GrupoMenu, menuAdmin, menuPortal } from './navegacion';
 /** Marco del portal del socio y del panel administrativo; la experiencia la indica la ruta. */
 @Component({
   selector: 'app-layout-panel',
-  imports: [AnuncioCabecera, AvisosPendientes, BarraSimulacion, PieContacto, WhatsappFlotante, LucideAngularModule, MenuConfiguracion, RouterLink, RouterLinkActive, RouterOutlet],
+  imports: [AnuncioCabecera, Arcade, AvisosPendientes, BarraSimulacion, PieContacto, WhatsappFlotante, LucideAngularModule, MenuConfiguracion, RouterLink, RouterLinkActive, RouterOutlet],
   template: `
     <div class="marco">
       @if (menuAbierto()) {
@@ -59,6 +60,7 @@ import { GrupoMenu, menuAdmin, menuPortal } from './navegacion';
             <lucide-icon [img]="iconos.Menu" [size]="22" aria-hidden="true" />
           </button>
           <app-anuncio-cabecera />
+          <app-arcade />
           <div class="cabecera-acciones">
             @if (vivo.conectado()) {
               <span class="en-vivo" title="Los datos se actualizan solos"><i></i>En vivo</span>

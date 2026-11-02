@@ -73,7 +73,7 @@ src/app/
 ├── core/        autenticación, guards y servicios HTTP
 ├── layout/      layout-publico, layout-panel y menús (navegacion.ts)
 ├── shared/      components (estado, indicador, gráfico, paginador, diálogo) y utils
-└── features/    admin, ahorros, areas, auth, configuracion, creditos, cuenta, public, socios
+└── features/    admin, ahorros, arcade, areas, auth, configuracion, creditos, cuenta, public, socios
 ```
 
 Cada pantalla se carga bajo demanda. Adaptar al crecimiento real; no crear capas vacías sin necesidad. El sistema visual y la cobertura del menú están en `diseno.md`.
@@ -110,6 +110,15 @@ Toda pantalla nueva o modificada sigue estas reglas.
 - Colores (decisión del propietario, 01/11/2026; reemplaza a «todo del blanco al verde»): el verde es la identidad y se usa en navegación, acciones principales y estados positivos. Las superficies son blancas y grises, y los colores de apoyo (azul, naranja, rojo) comunican información, avisos y errores, siempre con texto o símbolo. Se definen en el bloque `@theme` de `src/styles.css`, no como valores sueltos.
 - Interacciones: enlaces, botones, indicadores y filas reaccionan al pasar el cursor, con transiciones cortas. Quien tenga activada la opción de reducir movimiento en su sistema no las ve.
 - Diseño adaptable: primero móvil, con los prefijos `sm:`, `md:` y `lg:`.
+
+### Janery Arcade
+Diez minijuegos en el hueco libre de la cabecera de `LayoutPanel`, con la altura del aviso (`h-9`). Si hay un aviso publicado, el aviso tiene prioridad y el arcade solo se ve en pantallas `xl`.
+- `features/arcade/arcade.ts`: la barra y sus estados (invitación, partida, resultado). Al cargar la página elige un juego al azar distinto del anterior (guardado en `sessionStorage`) y no lo cambia durante la partida.
+- `features/arcade/catalogo.ts`: lista de juegos, elección al azar y tope de puntos creíble de cada uno.
+- `features/arcade/motor.ts`: clase base `Juego` y utilidades de dibujo. Cada juego (`juegos/*.ts`) es una clase sin Angular que dibuja en un `canvas` y se descarga solo al jugarlo.
+- `features/arcade/marcas.ts`: récord, fecha y últimas 10 partidas de cada persona en `localStorage`, con la clave `janery-arcade-<id de usuario>`. Decisión del propietario (02/11/2026): el arcade no toca la base de datos. Por eso los récords valen solo en ese navegador, y una marca que supera el tope de su juego se descarta.
+- El bucle y los eventos corren fuera de la detección de cambios de Angular y se limpian al salir, al terminar o al cambiar de juego. Las teclas solo se atienden con el juego enfocado; si pierde el foco, se pausa. En pantalla táctil, `touch-action: none` evita que la página se desplace mientras se juega.
+- Los colores de la barra están en `@theme` (`--color-arcade-*`); los de cada juego forman parte de su dibujo.
 
 ## 6. Accesibilidad y calidad
 
