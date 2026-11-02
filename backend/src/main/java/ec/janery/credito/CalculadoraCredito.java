@@ -14,6 +14,8 @@ final class CalculadoraCredito {
     }
 
     private static final BigDecimal CIEN = BigDecimal.valueOf(100);
+    /** Decisión del propietario: cada letra ahorra al menos 50 centavos, aunque la suma ya dé un dólar exacto. */
+    static final BigDecimal AHORRO_MINIMO = new BigDecimal("0.50");
 
     private CalculadoraCredito() {
     }
@@ -28,8 +30,9 @@ final class CalculadoraCredito {
         BigDecimal capitalUltima = importe.subtract(capitalBase.multiply(BigDecimal.valueOf(meses - 1)));
         BigDecimal interes = porcentaje(importe, tasaInteres);
         BigDecimal desgravamen = porcentaje(importe, tasaDesgravamen);
-        // Se calcula con la última, la de más capital: así el ahorro letras nunca queda negativo.
-        BigDecimal total = capitalUltima.add(interes).add(desgravamen).setScale(0, RoundingMode.CEILING).setScale(2);
+        // Se calcula con la última, la de más capital: así ninguna letra ahorra menos del mínimo.
+        BigDecimal total = capitalUltima.add(interes).add(desgravamen).add(AHORRO_MINIMO)
+                .setScale(0, RoundingMode.CEILING).setScale(2);
         List<Letra> letras = new ArrayList<>(meses);
         for (int n = 1; n <= meses; n++) {
             BigDecimal capital = n == meses ? capitalUltima : capitalBase;

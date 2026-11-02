@@ -11,11 +11,16 @@ import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.CookieValue;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -38,8 +43,11 @@ public class AuthController {
 
     public record RegistroCompletoRequest(@NotBlank @Email @Size(max = 254) String correo,
             @NotBlank @Size(min = 8, max = 72) String contrasena, @NotBlank @Size(max = 100) String nombres,
-            @NotBlank @Size(max = 100) String apellidos, @NotBlank @Size(max = 20) String identificacion,
-            @NotBlank @Size(max = 20) String telefono) {
+            @NotBlank @Size(max = 100) String apellidos,
+            @NotBlank @jakarta.validation.constraints.Pattern(regexp = ec.janery.persona.PersonaController.CEDULA,
+                    message = "debe tener 10 números") String identificacion,
+            @NotBlank @jakarta.validation.constraints.Pattern(regexp = ec.janery.persona.PersonaController.TELEFONO,
+                    message = "solo admite números") String telefono) {
     }
 
     /** El campo correo admite también la cédula o identificación. */
@@ -54,7 +62,11 @@ public class AuthController {
     }
 
     public record YoResponse(Long id, String correo, List<String> cargos, List<String> permisos,
-            boolean tienePerfil, String estadoCuenta, boolean esSocio) {
+            boolean tienePerfil, String estadoCuenta, boolean esSocio, String nombre, boolean tieneFoto,
+            boolean debeCambiarContrasena) {
+    }
+
+    public record RecuperarRequest(@NotBlank @Size(max = 254) String identificador) {
     }
 
     private static final String COOKIE = "janery_refresh";
@@ -65,12 +77,14 @@ public class AuthController {
     private final PersonaService personas;
     private final CuentaService cuentas;
     private final ec.janery.socio.SocioService socios;
+    private final FotoService fotos;
     private final boolean cookieSegura;
 
     AuthController(AuthService service, Repositorios.UsuarioRepository usuarios, PersonaService personas,
-            CuentaService cuentas, ec.janery.socio.SocioService socios,
+            CuentaService cuentas, ec.janery.socio.SocioService socios, FotoService fotos,
             @Value("${janery.cookie-segura}") boolean cookieSegura) {
         this.socios = socios;
+        this.fotos = fotos;
         this.service = service;
         this.usuarios = usuarios;
         this.personas = personas;
@@ -124,13 +138,44 @@ public class AuthController {
         service.cerrarOtrasSesiones(Long.valueOf(jwt.getSubject()), refresh);
     }
 
+    @PostMapping("/recuperar")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public void recuperar(@Valid @RequestBody RecuperarRequest r) {
+        service.solicitarRestablecimiento(r.identificador());
+    }
+
     @GetMapping("/me")
     public YoResponse yo(@AuthenticationPrincipal Jwt jwt) {
         Long id = Long.valueOf(jwt.getSubject());
         Usuario usuario = usuarios.findById(id)
                 .orElseThrow(() -> NegocioException.noEncontrado("Usuario no encontrado"));
+        // Primer nombre, con mayúscula inicial aunque se haya registrado todo en mayúsculas.
+        String nombre = personas.dePorUsuario(id).map(p -> p.getNombres().trim().split("\\s+")[0])
+                .map(n -> n.substring(0, 1).toUpperCase(java.util.Locale.ROOT) + n.substring(1).toLowerCase(java.util.Locale.ROOT))
+                .orElse(null);
         return new YoResponse(id, usuario.getCorreo(), usuarios.cargosVigentes(id), usuarios.permisosVigentes(id),
-                personas.tienePerfil(id), cuentas.estadoCuentaVigente(id).orElse(null), socios.usuarioEsSocio(id));
+                personas.tienePerfil(id), cuentas.estadoCuentaVigente(id).orElse(null), socios.usuarioEsSocio(id),
+                nombre, fotos.tiene(id), usuario.isDebeCambiarContrasena());
+    }
+
+    @GetMapping("/foto")
+    public ResponseEntity<byte[]> foto(@AuthenticationPrincipal Jwt jwt) {
+        return fotos.de(Long.valueOf(jwt.getSubject()))
+                .map(f -> ResponseEntity.ok().contentType(MediaType.parseMediaType(f.tipo()))
+                        .header(HttpHeaders.CACHE_CONTROL, "no-store").body(f.contenido()))
+                .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    @PutMapping(path = "/foto", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void guardarFoto(@AuthenticationPrincipal Jwt jwt, @RequestParam("archivo") MultipartFile archivo) {
+        fotos.guardar(Long.valueOf(jwt.getSubject()), archivo);
+    }
+
+    @DeleteMapping("/foto")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void quitarFoto(@AuthenticationPrincipal Jwt jwt) {
+        fotos.quitar(Long.valueOf(jwt.getSubject()));
     }
 
     private ResponseEntity<TokenResponse> respuesta(AuthService.Sesion sesion) {

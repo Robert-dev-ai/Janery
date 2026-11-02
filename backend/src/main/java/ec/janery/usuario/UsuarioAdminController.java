@@ -8,6 +8,8 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -24,6 +26,28 @@ public class UsuarioAdminController {
 
     private final UsuarioAdminService service;
     private final ec.janery.socio.SocioService socios;
+
+    public record CorreoRequest(@jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Email
+            @jakarta.validation.constraints.Size(max = 254) String correo) {
+    }
+
+    public record TemporalResponse(String contrasenaTemporal) {
+    }
+
+    private final AuthService auth;
+
+    /** La contraseña temporal se muestra una sola vez: quien la genera se la entrega a la persona. */
+    @PostMapping("/{id}/restablecer-contrasena")
+    public TemporalResponse restablecer(@AuthenticationPrincipal Jwt jwt, @PathVariable Long id) {
+        return new TemporalResponse(auth.restablecer(Long.valueOf(jwt.getSubject()), id));
+    }
+
+    @PutMapping("/{id}/correo")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void cambiarCorreo(@AuthenticationPrincipal Jwt jwt, @PathVariable Long id,
+            @jakarta.validation.Valid @RequestBody CorreoRequest r) {
+        auth.cambiarCorreo(Long.valueOf(jwt.getSubject()), id, r.correo());
+    }
 
     @PostMapping("/{id}/socio")
     @ResponseStatus(HttpStatus.NO_CONTENT)

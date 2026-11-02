@@ -191,6 +191,14 @@ class AreaSociosContabilidadIntegrationTest {
         solicitarCon(p, banco, clave).andExpect(status().isCreated()).andExpect(jsonPath("$.banco.banco").value("Pichincha"));
         solicitarCon(p, banco, clave).andExpect(status().isCreated());
         assertThat(saldo(p)).isEqualByComparingTo("40");
+
+        // A otro banco o cooperativa se aparta también el costo de la transferencia; cancelar lo devuelve todo.
+        String otro = banco.replace("Pichincha", "Cooperativa Andina");
+        long id = solicitar(p, otro).andExpect(status().isCreated()).andExpect(jsonPath("$.costo").value(0.41)).andReturn2().get("id").asLong();
+        assertThat(saldo(p)).isEqualByComparingTo("29.59");
+        mvc.perform(post("/api/v1/cuentas-principales/me/retiros/" + id + "/cancelar").header(HttpHeaders.AUTHORIZATION, bearer(p.token())))
+                .andExpect(status().isNoContent());
+        assertThat(saldo(p)).isEqualByComparingTo("40");
     }
 
     @Test
@@ -267,7 +275,7 @@ class AreaSociosContabilidadIntegrationTest {
     @Test
     void registroCompletoCreaLaPersonaYPermiteEntrarConLaCedula() throws Exception {
         String correo = "c" + UUID.randomUUID() + "@janery.test";
-        String cedula = UUID.randomUUID().toString().substring(0, 13);
+        String cedula = String.valueOf(java.util.concurrent.ThreadLocalRandom.current().nextLong(1_000_000_000L, 10_000_000_000L));
         String cuerpo = "{\"correo\":\"" + correo + "\",\"contrasena\":\"" + CLAVE + "\",\"nombres\":\"Ana\",\"apellidos\":\"Paz\",\"identificacion\":\"" + cedula + "\",\"telefono\":\"099\"}";
         mvc.perform(post("/api/v1/auth/registro").contentType(MediaType.APPLICATION_JSON).content(cuerpo)).andExpect(status().isCreated());
 
@@ -309,7 +317,8 @@ class AreaSociosContabilidadIntegrationTest {
                 .contentType(MediaType.APPLICATION_JSON).content("{\"modalidad\":\"NORMAL\",\"importe\":300.00,\"plazoMeses\":3,\"origenEncaje\":\"CREDITO\"}"))
                 .andReturn().getResponse().getContentAsString()).get("id").asLong();
         mvc.perform(post("/api/v1/admin/creditos/" + otro + "/aprobar").header(HttpHeaders.AUTHORIZATION, bearer(presidente()))).andExpect(status().is2xxSuccessful());
-        conClave(auth, "/api/v1/creditos/" + otro + "/pagos", "{\"importe\":210.00}").andExpect(status().isOk());
+        // Dos letras de 300 a 3 meses, con su ahorro letras mínimo de 0,50 cada una, caben en 220.
+        conClave(auth, "/api/v1/creditos/" + otro + "/pagos", "{\"importe\":220.00}").andExpect(status().isOk());
         conClave(auth, "/api/v1/creditos/" + otro + "/precancelacion", "{}").andExpect(status().isOk());
         // Retiro apartado sin entregar, otro entregado, y registro manual.
         solicitar(p, "{\"importe\":10.00,\"medio\":\"EFECTIVO\"}").andExpect(status().isCreated());
@@ -430,7 +439,7 @@ class AreaSociosContabilidadIntegrationTest {
         String token = login(correo);
         String auth = bearer(token);
         mvc.perform(post("/api/v1/personas/perfil").header(HttpHeaders.AUTHORIZATION, auth).contentType(MediaType.APPLICATION_JSON)
-                .content("{\"nombres\":\"Ana\",\"apellidos\":\"Paz\",\"identificacion\":\"" + UUID.randomUUID().toString().substring(0, 13)
+                .content("{\"nombres\":\"Ana\",\"apellidos\":\"Paz\",\"identificacion\":\"" + String.valueOf(java.util.concurrent.ThreadLocalRandom.current().nextLong(1_000_000_000L, 10_000_000_000L))
                         + "\",\"telefono\":\"099\",\"direccion\":\"Quito\"}")).andExpect(status().isCreated());
         mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put("/api/v1/personas/me/datos-credito").header(HttpHeaders.AUTHORIZATION, auth)
                 .contentType(MediaType.APPLICATION_JSON).content("{\"lugarTrabajo\":\"Tienda\",\"ocupacion\":\"Vendedora\",\"antiguedadTrabajo\":\"2 años\",\"ingresosMensuales\":500.00,\"fechaNacimiento\":\"1990-01-01\",\"estadoCivil\":\"SOLTERO\",\"referenciaNombre\":\"Luis\",\"referenciaTelefono\":\"099\",\"banco\":\"Pichincha\",\"tipoCuentaBanco\":\"AHORROS\",\"numeroCuentaBanco\":\"123\"}"))

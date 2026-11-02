@@ -158,7 +158,8 @@ public class CreditoService {
             BigDecimal totalPendiente, BigDecimal encaje, boolean encajeDevuelto, BigDecimal ahorroLetras,
             String titular, String motivoRechazo, List<CuotaVista> cuotas, List<Integer> cuotasPagadas,
             int letrasParaPrecancelar, boolean precancelable, Instant precanceladoEn, Instant creadoEn, Instant finalizadoEn,
-            String origenEncaje, BigDecimal tasaMora, BigDecimal moraPendiente, int letrasAtrasadas) {
+            String origenEncaje, BigDecimal tasaMora, BigDecimal moraPendiente, int letrasAtrasadas, String codigo,
+            List<AprobacionService.Voto> aprobaciones, long documentos) {
     }
 
     public record CuotaVista(int numero, LocalDate vencimiento, BigDecimal capital, BigDecimal ahorroLetras,
@@ -167,7 +168,7 @@ public class CreditoService {
     }
 
     public record SolicitudCupoVista(Long id, String titular, BigDecimal importe, String promocion, String estado,
-            String motivo, Instant creadoEn) {
+            String motivo, Instant creadoEn, String codigo, List<AprobacionService.Voto> aprobaciones) {
     }
 
     /** total es lo que falta por pagar de la cuota, tras los pagos parciales. */
@@ -225,6 +226,11 @@ public class CreditoService {
     private final AuditoriaService auditoria;
     private final Clock reloj;
     private final org.springframework.context.ApplicationEventPublisher eventos;
+    private final AprobacionService aprobaciones;
+    private final DocumentoCreditoService.DocumentoRepository documentos;
+    /** Solo las pruebas de cálculo lo apagan, para aprobar sin subir archivos. */
+    @org.springframework.beans.factory.annotation.Value("${janery.creditos.exigir-solicitud-firmada:true}")
+    private boolean exigirFirmada;
     @jakarta.persistence.PersistenceContext
     private jakarta.persistence.EntityManager em;
 
@@ -240,12 +246,12 @@ public class CreditoService {
         String desgravamen = socio ? "EMERGENTE_SOCIO_DESGRAVAMEN" : "EMERGENTE_CLIENTE_DESGRAVAMEN";
         List<String> codigos = new java.util.ArrayList<>(List.of(cupo, interes, desgravamen, "LETRAS_DESGRAVAMEN", "LETRAS_IMPORTE_MIN",
                 "LETRAS_IMPORTE_MAX", "LETRAS_PLAZO_MIN", "LETRAS_PLAZO_MAX", "ESTACIONAL_LIMITE", "ESTACIONAL_TASA"));
-        MODALIDADES.forEach(m -> {
+        modalidadesDe(perfil).forEach(m -> {
             codigos.add("LETRAS_INTERES_%s_%s".formatted(m, perfil));
             codigos.add("LETRAS_ENCAJE_%s_%s".formatted(m, perfil));
         });
         Map<String, BigDecimal> v = parametros.valoresVigentes(codigos);
-        List<ProductoLetras> letras = MODALIDADES.stream().map(m -> new ProductoLetras(m,
+        List<ProductoLetras> letras = modalidadesDe(perfil).stream().map(m -> new ProductoLetras(m,
                 v.get("LETRAS_INTERES_%s_%s".formatted(m, perfil)), v.get("LETRAS_ENCAJE_%s_%s".formatted(m, perfil)))).toList();
         BigDecimal limite = v.get(cupo);
         BigDecimal utilizado = socio ? creditos.cupoUtilizado(personaId) : BigDecimal.ZERO;
@@ -261,6 +267,7 @@ public class CreditoService {
     public Simulacion simular(Long usuarioId, String modalidad, BigDecimal importe, int plazo) {
         String perfil = perfil(personaDe(usuarioId));
         validarLetras(importe, plazo);
+        exigirModalidad(perfil, modalidad);
         BigDecimal interes = parametros.valorVigente("LETRAS_INTERES_%s_%s".formatted(modalidad, perfil));
         BigDecimal desgravamen = parametros.valorVigente("LETRAS_DESGRAVAMEN");
         BigDecimal encaje = parametros.valorVigente("LETRAS_ENCAJE_%s_%s".formatted(modalidad, perfil));
@@ -275,6 +282,7 @@ public class CreditoService {
         cuentas.cuentaActivaBloqueada(personaId);
         String perfil = perfil(personaId);
         validarLetras(importe, plazo);
+        exigirModalidad(perfil, modalidad);
         if (!personas.datosCreditoCompletos(personaId)) {
             throw NegocioException.conflicto("DATOS_CREDITO_INCOMPLETOS", "Complete la dirección y los datos para crédito antes de solicitarlo");
         }
@@ -297,13 +305,34 @@ public class CreditoService {
         return c.getId();
     }
 
+    /** Voto de aprobación. El dinero se desembolsa cuando votan las tres áreas y todas aprueban. */
     @Transactional
-    public void aprobar(Long actorId, Long creditoId) {
+    public AprobacionService.Resultado aprobar(Long actorId, Long creditoId) {
         Long personaId = creditos.findById(creditoId).map(Credito::getPersonaId)
                 .orElseThrow(() -> NegocioException.noEncontrado("Crédito no encontrado"));
         CuentaPrincipal cuenta = cuentas.cuentaActivaBloqueada(personaId);
         Credito c = bloquear(creditoId);
         exigirSolicitado(c);
+        exigirSolicitudFirmada(c);
+        AprobacionService.Resultado resultado = aprobaciones.votar(actorId, AprobacionService.CREDITO, creditoId, true, null);
+        if (resultado == AprobacionService.Resultado.RECHAZADA) {
+            rechazarDefinitivo(actorId, c, aprobaciones.motivoRechazo(AprobacionService.CREDITO, creditoId, null));
+        } else if (resultado == AprobacionService.Resultado.APROBADA) {
+            desembolsarAprobado(actorId, cuenta, c);
+        }
+        return resultado;
+    }
+
+    /** Decisión del propietario: el cliente sube su solicitud firmada en PDF; sin ella no se aprueba. */
+    private void exigirSolicitudFirmada(Credito c) {
+        boolean exige = exigirFirmada && CLIENTE.equals(c.getPerfil())
+                && (LETRAS.equals(c.getFamilia()) || EMERGENTE_CLIENTE.equals(c.getFamilia()));
+        if (exige && documentos.countByCreditoId(c.getId()) == 0) {
+            throw NegocioException.conflicto("SOLICITUD_FIRMADA_REQUERIDA", "Falta la solicitud firmada en PDF del cliente");
+        }
+    }
+
+    private void desembolsarAprobado(Long actorId, CuentaPrincipal cuenta, Credito c) {
         if (EMERGENTE_CLIENTE.equals(c.getFamilia())) {
             aprobarEmergente(actorId, cuenta, c);
             return;
@@ -349,13 +378,25 @@ public class CreditoService {
         return CLIENTE.equals(c.getPerfil()) ? parametros.valorVigente("MORA_DIARIA") : BigDecimal.ZERO;
     }
 
+    /** Voto de rechazo. Con los tres votos, basta uno en contra para que el crédito quede rechazado. */
     @Transactional
-    public void rechazar(Long actorId, Long creditoId, String motivo) {
+    public AprobacionService.Resultado rechazar(Long actorId, Long creditoId, String motivo) {
+        Long personaId = creditos.findById(creditoId).map(Credito::getPersonaId)
+                .orElseThrow(() -> NegocioException.noEncontrado("Crédito no encontrado"));
+        cuentas.bloquearSiActiva(personaId);
         Credito c = bloquear(creditoId);
         exigirSolicitado(c);
+        AprobacionService.Resultado resultado = aprobaciones.votar(actorId, AprobacionService.CREDITO, creditoId, false, motivo);
+        if (resultado != AprobacionService.Resultado.PENDIENTE) {
+            rechazarDefinitivo(actorId, c, aprobaciones.motivoRechazo(AprobacionService.CREDITO, creditoId, motivo));
+        }
+        return resultado;
+    }
+
+    private void rechazarDefinitivo(Long actorId, Credito c, String motivo) {
         c.setEstado("RECHAZADO");
-        c.setMotivoRechazo(motivo);
-        auditoria.registrar(actorId, "CREDITO_RECHAZADO", MODULO, "credito", c.getId(), SOLICITADO, "RECHAZADO", motivo);
+        c.setMotivoRechazo(motivo == null || motivo.isBlank() ? null : motivo.length() > 300 ? motivo.substring(0, 300) : motivo);
+        auditoria.registrar(actorId, "CREDITO_RECHAZADO", MODULO, "credito", c.getId(), SOLICITADO, "RECHAZADO", c.getMotivoRechazo());
     }
 
     // --- Emergentes
@@ -450,7 +491,7 @@ public class CreditoService {
     }
 
     @Transactional
-    public void aprobarCupo(Long actorId, Long solicitudId) {
+    public AprobacionService.Resultado aprobarCupo(Long actorId, Long solicitudId) {
         Long personaId = solicitudesCupo.findById(solicitudId).map(SolicitudCupo::getPersonaId)
                 .orElseThrow(() -> NegocioException.noEncontrado("Solicitud no encontrada"));
         CuentaPrincipal cuenta = cuentas.cuentaActivaBloqueada(personaId);
@@ -458,6 +499,14 @@ public class CreditoService {
         BigDecimal importe = s.getImporte();
         String promocion = s.getPromocion();
         validarCupo(personaId, importe, promocion, importe);
+        AprobacionService.Resultado resultado = aprobaciones.votar(actorId, AprobacionService.CUPO, solicitudId, true, null);
+        if (resultado == AprobacionService.Resultado.RECHAZADA) {
+            rechazarCupoDefinitivo(actorId, s, aprobaciones.motivoRechazo(AprobacionService.CUPO, solicitudId, null));
+            return resultado;
+        }
+        if (resultado == AprobacionService.Resultado.PENDIENTE) {
+            return resultado;
+        }
         resolver(s, "APROBADA", actorId, null);
         Credito c = promocion == null ? lineaGeneral(personaId) : lineaPromocion(personaId, promocion);
         // Lo ya devengado conserva su tasa; lo nuevo devenga con la vigente.
@@ -472,13 +521,23 @@ public class CreditoService {
         creditos.save(c);
         desembolsar(cuenta, c, importe, null, actorId);
         auditoria.registrar(actorId, "CUPO_APROBADO", MODULO, "solicitud_cupo", s.getId(), PENDIENTE, "APROBADA", null);
+        return resultado;
     }
 
     @Transactional
-    public void rechazarCupo(Long actorId, Long solicitudId, String motivo) {
+    public AprobacionService.Resultado rechazarCupo(Long actorId, Long solicitudId, String motivo) {
         SolicitudCupo s = bloquearSolicitud(solicitudId);
-        resolver(s, "RECHAZADA", actorId, motivo);
-        auditoria.registrar(actorId, "CUPO_RECHAZADO", MODULO, "solicitud_cupo", s.getId(), PENDIENTE, "RECHAZADA", motivo);
+        AprobacionService.Resultado resultado = aprobaciones.votar(actorId, AprobacionService.CUPO, solicitudId, false, motivo);
+        if (resultado != AprobacionService.Resultado.PENDIENTE) {
+            rechazarCupoDefinitivo(actorId, s, aprobaciones.motivoRechazo(AprobacionService.CUPO, solicitudId, motivo));
+        }
+        return resultado;
+    }
+
+    private void rechazarCupoDefinitivo(Long actorId, SolicitudCupo s, String motivo) {
+        String corto = motivo == null || motivo.isBlank() ? null : motivo.length() > 300 ? motivo.substring(0, 300) : motivo;
+        resolver(s, "RECHAZADA", actorId, corto);
+        auditoria.registrar(actorId, "CUPO_RECHAZADO", MODULO, "solicitud_cupo", s.getId(), PENDIENTE, "RECHAZADA", corto);
     }
 
     private SolicitudCupo bloquearSolicitud(Long id) {
@@ -509,7 +568,8 @@ public class CreditoService {
 
     private SolicitudCupoVista vistaSolicitud(SolicitudCupo s) {
         return new SolicitudCupoVista(s.getId(), personas.nombreCompleto(s.getPersonaId()), s.getImporte(), s.getPromocion(),
-                s.getEstado(), s.getMotivo(), s.getCreadoEn());
+                s.getEstado(), s.getMotivo(), s.getCreadoEn(), ec.janery.common.Codigos.cupo(s.getId()),
+                aprobaciones.votos(AprobacionService.CUPO, List.of(s.getId())).getOrDefault(s.getId(), List.of()));
     }
 
     private Credito lineaGeneral(Long personaId) {
@@ -875,11 +935,16 @@ public class CreditoService {
                 .collect(java.util.stream.Collectors.toMap(EncajeCredito::getCreditoId, e -> e));
         Map<Long, BigDecimal> ahorrosPorCredito = ahorros.findByCreditoIdIn(ids).stream()
                 .collect(java.util.stream.Collectors.toMap(AhorroLetrasCredito::getCreditoId, AhorroLetrasCredito::getSaldo));
+        List<Long> solicitados = lista.stream().filter(c -> SOLICITADO.equals(c.getEstado())).map(Credito::getId).toList();
+        Map<Long, List<AprobacionService.Voto>> votos = aprobaciones.votos(AprobacionService.CREDITO, solicitados);
+        Map<Long, Long> docs = documentos.contarPorCredito(ids).stream()
+                .collect(java.util.stream.Collectors.toMap(f -> (Long) f[0], f -> (Long) f[1]));
         return lista.stream().map(c -> vista(c, porCredito.getOrDefault(c.getId(), List.of()), encajesPorCredito.get(c.getId()),
-                ahorrosPorCredito.get(c.getId()))).toList();
+                ahorrosPorCredito.get(c.getId()), votos.getOrDefault(c.getId(), List.of()), docs.getOrDefault(c.getId(), 0L))).toList();
     }
 
-    private CreditoVista vista(Credito c, List<CuotaCredito> propias, EncajeCredito encaje, BigDecimal ahorro) {
+    private CreditoVista vista(Credito c, List<CuotaCredito> propias, EncajeCredito encaje, BigDecimal ahorro,
+            List<AprobacionService.Voto> votos, long docs) {
         BigDecimal interes = c.getInteresAcumulado();
         BigDecimal desgravamen = c.getDesgravamenAcumulado();
         if (esLinea(c)) {
@@ -906,7 +971,8 @@ public class CreditoService {
                 personas.nombreCompleto(c.getPersonaId()), c.getMotivoRechazo(), letras, pagadas, requeridas,
                 LETRAS.equals(c.getFamilia()) && ACTIVO.equals(c.getEstado()) && !letras.isEmpty() && pagadas.size() >= requeridas
                         && c.getCapitalPendiente().signum() > 0,
-                c.getPrecanceladoEn(), c.getCreadoEn(), c.getFinalizadoEn(), c.getOrigenEncaje(), c.getTasaMora(), mora, atrasadas);
+                c.getPrecanceladoEn(), c.getCreadoEn(), c.getFinalizadoEn(), c.getOrigenEncaje(), c.getTasaMora(), mora, atrasadas,
+                ec.janery.common.Codigos.credito(c.getFamilia(), c.getId()), votos, docs);
     }
 
     // --- Apoyo
@@ -931,6 +997,18 @@ public class CreditoService {
         return c;
     }
 
+
+    /** Decisión del propietario: los clientes solo piden el crédito a letras normal; las demás modalidades son de socios. */
+    private static List<String> modalidadesDe(String perfil) {
+        return SOCIO.equals(perfil) ? MODALIDADES : List.of("NORMAL");
+    }
+
+    private static void exigirModalidad(String perfil, String modalidad) {
+        if (!modalidadesDe(perfil).contains(modalidad)) {
+            throw NegocioException.conflicto("MODALIDAD_SOLO_SOCIOS", "El crédito " + modalidad.toLowerCase()
+                    + " es exclusivo de socios. Como cliente puede pedir el crédito a letras normal o el emergente");
+        }
+    }
     private void validarLetras(BigDecimal importe, int plazo) {
         if (importe.compareTo(parametros.valorVigente("LETRAS_IMPORTE_MIN")) < 0
                 || importe.compareTo(parametros.valorVigente("LETRAS_IMPORTE_MAX")) > 0) {

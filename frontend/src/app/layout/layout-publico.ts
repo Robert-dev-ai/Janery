@@ -2,10 +2,12 @@ import { Component, inject } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 
 import { AuthService } from '../core/auth/auth';
+import { PieContacto } from '../shared/components/pie-contacto';
+import { WhatsappFlotante } from '../shared/components/whatsapp-flotante';
 
 @Component({
   selector: 'app-layout-publico',
-  imports: [RouterLink, RouterLinkActive, RouterOutlet],
+  imports: [PieContacto, RouterLink, RouterLinkActive, RouterOutlet, WhatsappFlotante],
   host: { class: 'publico' },
   template: `
     <header class="publico-barra">
@@ -23,7 +25,8 @@ import { AuthService } from '../core/auth/auth';
       </div>
     </header>
     <main class="publico-contenido"><router-outlet /></main>
-    <footer class="publico-pie">Caja Familiar Janery · Caja de ahorro y crédito</footer>
+    <app-pie-contacto class="publico-pie" />
+    <app-whatsapp-flotante />
   `,
 })
 export class LayoutPublico {

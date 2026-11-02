@@ -7,7 +7,7 @@ import { AuthService, Yo } from '../auth/auth';
 import { TiempoRealService } from './tiempo-real';
 
 describe('TiempoRealService', () => {
-  const yo: Yo = { id: 1, correo: 'a@b.c', cargos: [], permisos: [], tienePerfil: true, estadoCuenta: 'ACTIVA', esSocio: false };
+  const yo: Yo = { id: 1, correo: 'a@b.c', cargos: [], permisos: [], tienePerfil: true, estadoCuenta: 'ACTIVA', esSocio: false, nombre: 'Ana', tieneFoto: false, debeCambiarContrasena: false };
   let enviar: (texto: string) => void;
   let llamadas: RequestInit[];
   let auth: AuthService;

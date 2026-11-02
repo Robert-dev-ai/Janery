@@ -2,93 +2,103 @@ import { CurrencyPipe } from '@angular/common';
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
+import { CircleUser, LucideAngularModule } from 'lucide-angular';
 
 import { AuthService } from '../../core/auth/auth';
-import { ApiService, DatosCredito, Perfil } from '../../core/services/api';
+import { ApiService, Perfil } from '../../core/services/api';
+import { FotoPerfilService } from '../../core/services/foto-perfil';
+import { TemaService } from '../../core/services/tema';
+import { CampoTelefono } from '../../shared/components/campo-telefono';
 import { rolDe } from '../../shared/utils/etiquetas';
 import { mensajeDeError } from '../../shared/utils/errores';
+import { erroresDeFormulario, telefonoValido } from '../../shared/utils/validadores';
+import { FormDatosCredito } from './form-datos-credito';
 
 @Component({
   selector: 'app-perfil',
-  imports: [CurrencyPipe, ReactiveFormsModule, RouterLink],
+  imports: [CampoTelefono, CurrencyPipe, FormDatosCredito, LucideAngularModule, ReactiveFormsModule, RouterLink],
   template: `
+    <section class="tarjeta">
+      <div class="flex flex-wrap items-center gap-4">
+        @if (foto.url(); as url) {
+          <img class="avatar-grande" [src]="url" alt="Su foto de perfil" />
+        } @else {
+          <lucide-icon class="text-suave" [img]="iconos.CircleUser" [size]="96" aria-hidden="true" />
+        }
+        <div>
+          <p class="m-0 text-lg font-semibold">{{ nombreCompleto() }}</p>
+          <p class="suave m-0">{{ auth.yo()?.correo }} · {{ rol() }}</p>
+          <div class="acciones mt-3">
+            <label class="boton-claro m-0 cursor-pointer">{{ auth.yo()?.tieneFoto ? 'Cambiar foto' : 'Poner foto' }}
+              <input class="sr-only" type="file" accept="image/jpeg,image/png,image/webp" [disabled]="subiendoFoto()" (change)="subirFoto($event)" />
+            </label>
+            @if (auth.yo()?.tieneFoto) { <button type="button" class="secundario" (click)="quitarFoto()">Quitar foto</button> }
+          </div>
+          <p class="suave mt-2 mb-0">JPG, PNG o WEBP, hasta 2 MB.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="tarjeta">
+      <h2>Apariencia</h2>
+      <label class="fila-opcion">
+        <input type="checkbox" [checked]="tema.oscuro()" (change)="tema.alternar()" />
+        Modo oscuro
+      </label>
+      <p class="suave">Se recuerda en este dispositivo.</p>
+    </section>
+
     @if (!auth.yo()?.tienePerfil) {
       <section class="tarjeta">
-        <p><strong>Correo:</strong> {{ auth.yo()?.correo }}</p>
-        <p><strong>Rol:</strong> {{ rol() }}</p>
         <p>Todavía no ha completado sus datos personales.</p>
         <a class="boton" routerLink="/activar-cuenta">Completar datos</a>
       </section>
     } @else if (perfil(); as p) {
-      <dl class="tarjeta">
-        <dt><strong>Correo</strong></dt><dd>{{ auth.yo()?.correo }}</dd>
-        <dt><strong>Rol</strong></dt><dd>{{ rol() }}</dd>
-        <dt><strong>Nombre</strong></dt><dd>{{ p.nombres }} {{ p.apellidos }}</dd>
-        <dt><strong>Identificación</strong></dt><dd>{{ p.identificacion }}</dd>
-        @if (!editando()) {
-          <dt><strong>Teléfono</strong></dt><dd>{{ p.telefono }}</dd>
-          <dt><strong>Dirección</strong></dt><dd>{{ p.direccion ?? 'Sin registrar' }}</dd>
-        }
-      </dl>
-      @if (editando()) {
-        <form class="tarjeta" [formGroup]="form" (ngSubmit)="guardar()">
-          <h2>Editar datos de contacto</h2>
-          <label>Teléfono <input type="tel" formControlName="telefono" autocomplete="tel" maxlength="20" /></label>
-          <label>Dirección <input formControlName="direccion" autocomplete="street-address" maxlength="200" /></label>
-          <div class="acciones">
-            <button type="submit" [disabled]="form.invalid || enviando()">Guardar</button>
-            <button type="button" class="secundario" (click)="editando.set(false)">Cancelar</button>
-          </div>
-        </form>
-      } @else {
-        <button type="button" (click)="editar(p)">Editar teléfono y dirección</button>
-      }
-      @if (guardado()) { <p class="exito mt-3" role="status">Datos actualizados.</p> }
-
-      <section class="tarjeta mt-4">
-        <h2>Datos para crédito</h2>
-        @if (!p.datosCreditoCompletos) { <p class="suave">Complételos, junto con su dirección, para poder solicitar un crédito a letras.</p> }
-        @if (editandoCredito()) {
-          <form [formGroup]="credito" (ngSubmit)="guardarCredito()">
-            <label>Lugar de trabajo <input formControlName="lugarTrabajo" maxlength="150" /></label>
-            <label>Ocupación <input formControlName="ocupacion" maxlength="100" /></label>
-            <label>Antigüedad en el trabajo <input formControlName="antiguedadTrabajo" maxlength="50" placeholder="Ejemplo: 2 años" /></label>
-            <label>Ingresos mensuales (USD) <input type="number" min="0" step="1" formControlName="ingresosMensuales" /></label>
-            <label>Fecha de nacimiento <input type="date" formControlName="fechaNacimiento" /></label>
-            <label>Estado civil
-              <select formControlName="estadoCivil">
-                <option value="SOLTERO">Soltero/a</option>
-                <option value="CASADO">Casado/a</option>
-                <option value="UNION_LIBRE">Unión libre</option>
-                <option value="DIVORCIADO">Divorciado/a</option>
-                <option value="VIUDO">Viudo/a</option>
-              </select>
-            </label>
-            <label>Nombre de su referencia <input formControlName="referenciaNombre" maxlength="150" /></label>
-            <label>Teléfono de su referencia <input type="tel" formControlName="referenciaTelefono" maxlength="20" /></label>
-            <label>Banco <input formControlName="banco" maxlength="100" /></label>
-            <label>Tipo de cuenta
-              <select formControlName="tipoCuentaBanco">
-                <option value="AHORROS">Ahorros</option>
-                <option value="CORRIENTE">Corriente</option>
-              </select>
-            </label>
-            <label>Número de cuenta <input formControlName="numeroCuentaBanco" maxlength="40" /></label>
-            <div class="acciones">
-              <button type="submit" [disabled]="credito.invalid || enviando()">Guardar</button>
-              <button type="button" class="secundario" (click)="editandoCredito.set(false)">Cancelar</button>
+      <section class="tarjeta">
+        <h2>Datos personales y de contacto</h2>
+        <dl class="ficha-datos">
+          <div><dt>Nombre</dt><dd>{{ p.nombres }} {{ p.apellidos }}</dd></div>
+          <div><dt>Cédula</dt><dd>{{ p.identificacion }}</dd></div>
+          @if (!editando()) {
+            <div><dt>Teléfono</dt><dd>{{ p.telefono }}</dd></div>
+            <div><dt>Dirección</dt><dd>{{ p.direccion ?? 'Sin registrar' }}</dd></div>
+          }
+        </dl>
+        @if (editando()) {
+          <form [formGroup]="form" (ngSubmit)="guardar()">
+            <label for="telefono-perfil">Teléfono</label>
+            <app-campo-telefono class="mb-3 block" idCampo="telefono-perfil" formControlName="telefono" />
+            <label>Dirección <input formControlName="direccion" autocomplete="street-address" maxlength="200" /></label>
+            <div class="pie-formulario">
+              <button type="submit" [disabled]="enviando()">Guardar</button>
+              <button type="button" class="secundario" (click)="editando.set(false)">Cancelar</button>
+              @if (errores().length) {
+                <ul class="errores-formulario" role="alert">@for (e of errores(); track e) { <li>{{ e }}</li> }</ul>
+              }
             </div>
           </form>
         } @else {
-          <dl>
-            <dt><strong>Lugar de trabajo</strong></dt><dd>{{ p.lugarTrabajo ?? '—' }}</dd>
-            <dt><strong>Ocupación y antigüedad</strong></dt><dd>{{ p.ocupacion ?? '—' }} · {{ p.antiguedadTrabajo ?? '—' }}</dd>
-            <dt><strong>Ingresos mensuales</strong></dt><dd>{{ p.ingresosMensuales == null ? '—' : (p.ingresosMensuales | currency: 'USD') }}</dd>
-            <dt><strong>Fecha de nacimiento</strong></dt><dd>{{ p.fechaNacimiento ?? '—' }}</dd>
-            <dt><strong>Referencia</strong></dt><dd>{{ p.referenciaNombre ?? '—' }} · {{ p.referenciaTelefono ?? '—' }}</dd>
-            <dt><strong>Cuenta bancaria</strong></dt><dd>{{ p.banco ?? '—' }} {{ p.numeroCuentaBanco ?? '' }}</dd>
+          <button type="button" (click)="editar(p)">Editar teléfono y dirección</button>
+        }
+        <p class="suave mt-3 mb-0">Para corregir su nombre o su cédula, pídalo a la presidencia.</p>
+      </section>
+      @if (guardado()) { <p class="exito" role="status">Datos actualizados.</p> }
+
+      <section class="tarjeta mt-4">
+        <h2>Datos para crédito</h2>
+        @if (!p.datosCreditoCompletos) { <p class="suave">Complételos para poder solicitar un crédito a letras.</p> }
+        @if (editandoCredito()) {
+          <app-form-datos-credito [perfil]="p" [cancelable]="true" (guardado)="creditoGuardado($event)" (cancelado)="editandoCredito.set(false)" />
+        } @else {
+          <dl class="ficha-datos">
+            <div><dt>Lugar de trabajo</dt><dd>{{ p.lugarTrabajo ?? '—' }}</dd></div>
+            <div><dt>Ocupación y antigüedad</dt><dd>{{ p.ocupacion ?? '—' }} · {{ p.antiguedadTrabajo ?? '—' }}</dd></div>
+            <div><dt>Ingresos mensuales</dt><dd>{{ p.ingresosMensuales == null ? '—' : (p.ingresosMensuales | currency: 'USD') }}</dd></div>
+            <div><dt>Fecha de nacimiento</dt><dd>{{ p.fechaNacimiento ?? '—' }}</dd></div>
+            <div><dt>Referencia personal</dt><dd>{{ p.referenciaNombre ?? '—' }} · {{ p.referenciaTelefono ?? '—' }}</dd></div>
+            <div><dt>Su cuenta bancaria</dt><dd>{{ p.banco ?? '—' }} · {{ p.tipoCuentaBanco ?? '' }} {{ p.numeroCuentaBanco ?? '' }}</dd></div>
           </dl>
-          <button type="button" class="secundario" (click)="editarCredito(p)">Editar datos para crédito</button>
+          <button type="button" class="secundario" (click)="editarCredito()">Editar datos para crédito</button>
         }
       </section>
     } @else if (!error()) {
@@ -99,32 +109,30 @@ import { mensajeDeError } from '../../shared/utils/errores';
 })
 export class PerfilPagina implements OnInit {
   protected readonly auth = inject(AuthService);
+  protected readonly tema = inject(TemaService);
+  protected readonly foto = inject(FotoPerfilService);
   private readonly api = inject(ApiService);
 
+  protected readonly iconos = { CircleUser };
+  private static readonly ETIQUETAS: Record<string, string> = { telefono: 'El teléfono', direccion: 'La dirección' };
+
   protected readonly form = inject(NonNullableFormBuilder).group({
-    telefono: ['', [Validators.required, Validators.pattern(/\S/), Validators.maxLength(20)]],
+    telefono: ['', [Validators.required, telefonoValido]],
     direccion: ['', [Validators.required, Validators.pattern(/\S/), Validators.maxLength(200)]],
   });
-  protected readonly credito = inject(NonNullableFormBuilder).group({
-    lugarTrabajo: ['', [Validators.required, Validators.pattern(/\S/)]],
-    ocupacion: ['', [Validators.required, Validators.pattern(/\S/)]],
-    antiguedadTrabajo: ['', [Validators.required, Validators.pattern(/\S/)]],
-    ingresosMensuales: [0, [Validators.required, Validators.min(0)]],
-    fechaNacimiento: ['', Validators.required],
-    estadoCivil: ['SOLTERO', Validators.required],
-    referenciaNombre: ['', [Validators.required, Validators.pattern(/\S/)]],
-    referenciaTelefono: ['', [Validators.required, Validators.pattern(/\S/)]],
-    banco: ['', [Validators.required, Validators.pattern(/\S/)]],
-    tipoCuentaBanco: ['AHORROS', Validators.required],
-    numeroCuentaBanco: ['', [Validators.required, Validators.pattern(/\S/)]],
-  });
   protected readonly rol = computed(() => rolDe(this.auth.yo()));
-  protected readonly editandoCredito = signal(false);
   protected readonly perfil = signal<Perfil | null>(null);
+  protected readonly nombreCompleto = computed(() => {
+    const p = this.perfil();
+    return p ? `${p.nombres} ${p.apellidos}` : (this.auth.yo()?.nombre ?? '');
+  });
+  protected readonly editandoCredito = signal(false);
   protected readonly error = signal<string | null>(null);
   protected readonly editando = signal(false);
   protected readonly enviando = signal(false);
   protected readonly guardado = signal(false);
+  protected readonly subiendoFoto = signal(false);
+  private readonly intentado = signal(false);
 
   ngOnInit(): void {
     if (this.auth.yo()?.tienePerfil) {
@@ -135,46 +143,65 @@ export class PerfilPagina implements OnInit {
     }
   }
 
+  protected errores(): string[] {
+    return erroresDeFormulario(this.form, PerfilPagina.ETIQUETAS, this.intentado());
+  }
+
+  protected subirFoto(evento: Event): void {
+    const campo = evento.target as HTMLInputElement;
+    const archivo = campo.files?.[0];
+    if (!archivo) {
+      return;
+    }
+    this.subiendoFoto.set(true);
+    this.error.set(null);
+    this.auth.guardarFoto(archivo).subscribe({
+      next: () => {
+        this.subiendoFoto.set(false);
+        campo.value = '';
+      },
+      error: (e) => {
+        this.error.set(mensajeDeError(e));
+        this.subiendoFoto.set(false);
+        campo.value = '';
+      },
+    });
+  }
+
+  protected quitarFoto(): void {
+    this.auth.quitarFoto().subscribe({ error: (e) => this.error.set(mensajeDeError(e)) });
+  }
+
   protected editar(p: Perfil): void {
     this.form.setValue({ telefono: p.telefono, direccion: p.direccion ?? '' });
+    this.form.markAllAsTouched();
     this.guardado.set(false);
     this.error.set(null);
     this.editando.set(true);
   }
 
-  protected editarCredito(p: Perfil): void {
-    this.credito.setValue({
-      lugarTrabajo: p.lugarTrabajo ?? '', ocupacion: p.ocupacion ?? '', antiguedadTrabajo: p.antiguedadTrabajo ?? '',
-      ingresosMensuales: p.ingresosMensuales ?? 0, fechaNacimiento: p.fechaNacimiento ?? '', estadoCivil: p.estadoCivil ?? 'SOLTERO',
-      referenciaNombre: p.referenciaNombre ?? '', referenciaTelefono: p.referenciaTelefono ?? '', banco: p.banco ?? '',
-      tipoCuentaBanco: p.tipoCuentaBanco ?? 'AHORROS', numeroCuentaBanco: p.numeroCuentaBanco ?? '',
-    });
+  protected editarCredito(): void {
     this.guardado.set(false);
     this.error.set(null);
     this.editandoCredito.set(true);
   }
 
-  protected guardarCredito(): void {
-    this.enviando.set(true);
-    this.error.set(null);
-    this.api.actualizarDatosCredito(this.credito.getRawValue() as DatosCredito).subscribe({
-      next: (p) => {
-        this.perfil.set(p);
-        this.editandoCredito.set(false);
-        this.guardado.set(true);
-        this.enviando.set(false);
-      },
-      error: (e) => {
-        this.error.set(mensajeDeError(e));
-        this.enviando.set(false);
-      },
-    });
+  protected creditoGuardado(p: Perfil): void {
+    this.perfil.set(p);
+    this.editandoCredito.set(false);
+    this.guardado.set(true);
   }
 
   protected guardar(): void {
+    this.intentado.set(true);
+    if (this.form.invalid) {
+      this.form.markAllAsTouched();
+      return;
+    }
     this.enviando.set(true);
     this.error.set(null);
-    this.api.actualizarContacto(this.form.getRawValue()).subscribe({
+    const { telefono, direccion } = this.form.getRawValue();
+    this.api.actualizarContacto({ telefono, direccion: direccion.trim() }).subscribe({
       next: (p) => {
         this.perfil.set(p);
         this.editando.set(false);

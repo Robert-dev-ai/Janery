@@ -35,14 +35,15 @@ import { mensajeDeError } from '../../shared/utils/errores';
       } @else {
         <div class="tabla">
           <table>
-            <thead><tr><th>Fecha</th><th>Titular</th><th>Cuenta</th><th class="num">Importe</th><th>Entrega</th><th>Estado</th><th>Acciones</th></tr></thead>
+            <thead><tr><th>Código</th><th>Fecha</th><th>Titular</th><th>Cuenta</th><th class="num">Importe</th><th>Entrega</th><th>Estado</th><th>Acciones</th></tr></thead>
             <tbody>
               @for (s of d.contenido; track s.id) {
                 <tr>
+                  <td class="codigo">{{ s.codigo }}</td>
                   <td>{{ s.fecha | date: 'short' : 'America/Guayaquil' }}</td>
                   <td>{{ s.titular }}</td>
                   <td>{{ s.numeroCuenta }}</td>
-                  <td class="num">{{ s.importe | currency: 'USD' }}</td>
+                  <td class="num">{{ s.importe | currency: 'USD' }}@if (s.costo) { <br /><small class="suave">+ {{ s.costo | currency: 'USD' }} de transferencia</small> }</td>
                   <td>
                     @if (s.banco; as b) {
                       {{ b.banco }} · {{ b.tipoCuenta === 'AHORROS' ? 'Ahorros' : 'Corriente' }} {{ b.numeroCuenta }}<br /><span class="suave">{{ b.titularCuenta }}</span>
@@ -101,7 +102,8 @@ export class SolicitudesRetiro implements OnInit {
   }
 
   protected async entregar(s: SolicitudRetiro): Promise<void> {
-    if (await this.dialogo.confirmar(`¿Confirma que entregó ${s.importe} USD a ${s.titular}? Saldrán de la caja principal.`, 'Confirmar entrega')) {
+    const costo = s.costo ? ` (más ${s.costo} USD del costo de la transferencia)` : '';
+    if (await this.dialogo.confirmar(`¿Confirma que entregó ${s.importe} USD a ${s.titular}${costo}? Saldrán de la caja principal.`, 'Confirmar entrega')) {
       this.ejecutar(this.api.entregarRetiro(s.id, null), 'Entrega registrada.');
     }
   }

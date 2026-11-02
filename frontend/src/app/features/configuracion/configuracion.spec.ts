@@ -10,7 +10,7 @@ import { PerfilPagina } from './perfil';
 
 describe('configuración', () => {
   const api = environment.apiBaseUrl;
-  const perfil = { nombres: 'Ana', apellidos: 'Paz', identificacion: '123', telefono: '099', direccion: 'Quito' };
+  const perfil = { nombres: 'Ana', apellidos: 'Paz', identificacion: '1234567890', telefono: '+593 991234567', direccion: 'Quito' };
   let http: HttpTestingController;
 
   beforeEach(() => {
@@ -33,7 +33,7 @@ describe('configuración', () => {
     expect(fixture.nativeElement.textContent).toContain('Completar datos');
   });
 
-  it('edita solo teléfono y dirección', () => {
+  it('edita solo teléfono (con su prefijo) y dirección', () => {
     sesion(true);
     const fixture = TestBed.createComponent(PerfilPagina);
     fixture.detectChanges();
@@ -43,15 +43,16 @@ describe('configuración', () => {
 
     elemento.querySelector<HTMLButtonElement>('button')!.click();
     fixture.detectChanges();
-    expect(elemento.querySelectorAll('form input').length).toBe(2);
+    // Prefijo y número del teléfono, y la dirección.
+    expect(elemento.querySelectorAll('form input').length).toBe(3);
     elemento.querySelector<HTMLFormElement>('form')!.dispatchEvent(new Event('submit'));
 
     const peticion = http.expectOne(`${api}/personas/me`);
     expect(peticion.request.method).toBe('PUT');
-    expect(peticion.request.body).toEqual({ telefono: '099', direccion: 'Quito' });
-    peticion.flush({ ...perfil, telefono: '098' });
+    expect(peticion.request.body).toEqual({ telefono: '+593 991234567', direccion: 'Quito' });
+    peticion.flush({ ...perfil, telefono: '+593 981234567' });
     fixture.detectChanges();
-    expect(elemento.textContent).toContain('098');
+    expect(elemento.textContent).toContain('+593 981234567');
     expect(elemento.textContent).toContain('Datos actualizados');
   });
 
@@ -83,6 +84,8 @@ describe('configuración', () => {
       expect(peticion.request.withCredentials).toBeTrue();
       expect(peticion.request.body).toEqual({ actual: 'Clave-Actual-1', nueva: 'Clave-Nueva-1' });
       peticion.flush(null);
+      // Al cambiarla se recarga el usuario: así se levanta la obligación de cambiar una contraseña temporal.
+      http.expectOne(`${api}/auth/me`).flush({ correo: 'a@b.ec', debeCambiarContrasena: false });
       fixture.detectChanges();
 
       expect(elemento.textContent).toContain('Contraseña cambiada');

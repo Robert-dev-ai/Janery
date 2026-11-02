@@ -16,6 +16,10 @@ spring:
 
 janery:
   reparto-automatico: false
+  # Las pruebas de cálculo deciden un crédito con un solo voto y sin subir la solicitud firmada.
+  creditos:
+    aprobacion-conjunta: false
+    exigir-solicitud-firmada: false
   jwt:
     secret: secreto-solo-para-pruebas-de-32-bytes-o-mas
   cors:

@@ -9,10 +9,11 @@ import { DialogoService } from '../../shared/components/dialogo';
 import { Estado } from '../../shared/components/estado';
 import { Paginador } from '../../shared/components/paginador';
 import { mensajeDeError } from '../../shared/utils/errores';
+import { Comprobantes } from './comprobantes';
 
 @Component({
   selector: 'app-solicitudes-deposito',
-  imports: [CurrencyPipe, DatePipe, Estado, FormsModule, Paginador],
+  imports: [Comprobantes, CurrencyPipe, DatePipe, Estado, FormsModule, Paginador],
   template: `
     <h1>Depósitos por confirmar</h1>
     <p class="suave">Confirme solo cuando el dinero ya se recibió: en ese momento entra a la cuenta de la persona y a la caja principal.</p>
@@ -35,15 +36,17 @@ import { mensajeDeError } from '../../shared/utils/errores';
       } @else {
         <div class="tabla">
           <table>
-            <thead><tr><th>Fecha</th><th>Titular</th><th>Cuenta</th><th class="num">Importe</th><th>Medio</th><th>Estado</th><th>Acciones</th></tr></thead>
+            <thead><tr><th>Código</th><th>Fecha</th><th>Titular</th><th>Cuenta</th><th class="num">Importe</th><th>Medio</th><th>Comprobante</th><th>Estado</th><th>Acciones</th></tr></thead>
             <tbody>
               @for (s of d.contenido; track s.id) {
                 <tr>
+                  <td class="codigo">{{ s.codigo }}</td>
                   <td>{{ s.fecha | date: 'short' : 'America/Guayaquil' }}</td>
                   <td>{{ s.titular }}</td>
                   <td>{{ s.numeroCuenta }}</td>
                   <td class="num">{{ s.importe | currency: 'USD' }}</td>
                   <td>{{ s.medio === 'EFECTIVO' ? 'Efectivo' : 'Transferencia ' + s.referencia }}</td>
+                  <td><app-comprobantes tipo="DEPOSITO" [referenciaId]="s.id" /></td>
                   <td><app-estado [valor]="s.estado" /></td>
                   <td class="acciones">
                     @if (s.estado === 'PENDIENTE') {

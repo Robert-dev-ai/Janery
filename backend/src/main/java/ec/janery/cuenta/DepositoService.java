@@ -77,7 +77,7 @@ public class DepositoService {
     }
 
     public record Vista(Long id, String numeroCuenta, String titular, BigDecimal importe, String medio, String referencia,
-            String estado, String motivo, Instant fecha, Instant resueltaEn) {
+            String estado, String motivo, Instant fecha, Instant resueltaEn, String codigo, long comprobantes) {
     }
 
     private static final String MODULO = "CUENTA";
@@ -89,6 +89,7 @@ public class DepositoService {
     private final PersonaService personas;
     private final AuditoriaService auditoria;
     private final Clock reloj;
+    private final ComprobanteService comprobantes;
 
     @Transactional
     public Vista solicitar(Long usuarioId, BigDecimal importe, String medio, String referencia, String clave) {
@@ -129,6 +130,7 @@ public class DepositoService {
     @Transactional
     public void confirmar(Long actorId, Long id) {
         SolicitudDeposito s = pendienteBloqueada(id);
+        comprobantes.exigirSiTransferencia(ComprobanteService.DEPOSITO, id, s.getMedio());
         Long operacion = cuentas.depositar(actorId, s.getCuentaId(), s.getImporte(), s.getMedio(), s.getReferencia(),
                 "solicitud-deposito-" + id);
         s.setOperacionId(operacion);
@@ -170,7 +172,8 @@ public class DepositoService {
     private Vista vista(SolicitudDeposito s) {
         String numero = cuentasRepo.findById(s.getCuentaId()).map(CuentaPrincipal::getNumero).orElse(null);
         return new Vista(s.getId(), numero, personas.nombreCompleto(s.getPersonaId()), s.getImporte(), s.getMedio(), s.getReferencia(),
-                s.getEstado(), s.getMotivo(), s.getCreadoEn(), s.getResueltaEn());
+                s.getEstado(), s.getMotivo(), s.getCreadoEn(), s.getResueltaEn(), ec.janery.common.Codigos.deposito(s.getId()),
+                comprobantes.cantidad(ComprobanteService.DEPOSITO, s.getId()));
     }
 
     /** Un depósito por confirmar acabaría en una cuenta ya cerrada: se resuelve antes. */

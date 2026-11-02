@@ -1,8 +1,9 @@
 import { CurrencyPipe, DatePipe, DecimalPipe } from '@angular/common';
 import { Component, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { forkJoin, Observable } from 'rxjs';
+import { forkJoin, Observable, of } from 'rxjs';
 
+import { AuthService } from '../../core/auth/auth';
 import { ApiService, CierreAnual, Pagina, Resultado, ResultadosEnEspera, ResumenSocio } from '../../core/services/api';
 import { alCambiar } from '../../core/services/tiempo-real';
 import { Paginador } from '../../shared/components/paginador';
@@ -13,10 +14,12 @@ import { mensajeDeError } from '../../shared/utils/errores';
   selector: 'app-admin-resultados',
   imports: [CurrencyPipe, DatePipe, DecimalPipe, FormsModule, Paginador],
   template: `
-    <h1>Resultados y socios</h1>
+    <h1>{{ gestiona ? 'Resultados y socios' : 'Resultados' }}</h1>
+    @if (!gestiona) { <p class="suave">Ganancias y pérdidas de Janery y cierres de cada año. Solo para consultar: los registra la presidencia.</p> }
     @if (error()) { <p class="error" role="alert">{{ error() }}</p> }
     @if (aviso()) { <p class="exito" role="status">{{ aviso() }}</p> }
 
+    @if (gestiona) {
     <h2>Socios</h2>
     @if (socios().length === 0) {
       <p class="vacio">Aún no hay socios. Regístrelos en Usuarios.</p>
@@ -79,7 +82,9 @@ import { mensajeDeError } from '../../shared/utils/errores';
         <button type="submit" [disabled]="!vendedor || !comprador || vendedor === comprador || !capitalVenta || !precioVenta">Registrar</button>
       </form>
     }
+    }
 
+    @if (gestiona) {
     <form class="tarjeta estrecho mt-4" (ngSubmit)="registrar()">
       <h2>Registrar ganancia o pérdida</h2>
       <p class="suave"><strong>Intereses, aperturas y lo que entre por el registro manual ya se reparten solos.</strong> Use esto solo para lo extraordinario: registrar aquí algo ya cobrado lo repartiría dos veces.</p>
@@ -95,6 +100,7 @@ import { mensajeDeError } from '../../shared/utils/errores';
       <label>Fecha (vacío: hoy) <input type="date" name="fecha" [(ngModel)]="fecha" /></label>
       <button type="submit" [disabled]="!importe || importe <= 0 || !concepto.trim()">Registrar</button>
     </form>
+    }
 
     @if (enEspera(); as e) {
       @if (e.ganancia > 0 || e.perdida > 0) {
@@ -129,10 +135,12 @@ import { mensajeDeError } from '../../shared/utils/errores';
     <section class="tarjeta mt-4">
       <h2>Cierre anual</h2>
       <p class="suave">Totaliza el año y bloquea nuevos resultados en él. No mueve dinero: la reserva y el reparto ya ocurrieron con cada resultado. No se puede deshacer.</p>
+      @if (gestiona) {
       <form class="acciones" (ngSubmit)="cerrar()">
         <label>Año <input type="number" step="1" name="anio" [(ngModel)]="anio" /></label>
         <button type="submit" class="peligro" [disabled]="!anio">Cerrar año</button>
       </form>
+      }
       @if (cierres().length) {
         <div class="tabla">
           <table>
@@ -156,6 +164,8 @@ import { mensajeDeError } from '../../shared/utils/errores';
 export class AdminResultados implements OnInit {
   private readonly api = inject(ApiService);
   private readonly dialogo = inject(DialogoService);
+  /** Los socios sin cargo solo consultan: no ven los formularios ni la lista de socios. */
+  protected readonly gestiona = inject(AuthService).tienePermiso('GESTIONAR_RESULTADOS');
 
   protected readonly socios = signal<ResumenSocio[]>([]);
   protected readonly resultados = signal<Pagina<Resultado> | null>(null);
@@ -252,7 +262,7 @@ export class AdminResultados implements OnInit {
   }
 
   private cargar(): void {
-    forkJoin([this.api.socios(), this.api.cierres()]).subscribe({
+    forkJoin([this.gestiona ? this.api.socios() : of([] as ResumenSocio[]), this.api.cierres()]).subscribe({
       next: ([socios, cierres]) => {
         this.socios.set(socios);
         this.cierres.set(cierres);

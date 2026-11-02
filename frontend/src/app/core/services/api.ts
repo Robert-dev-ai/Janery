@@ -11,10 +11,64 @@ export interface Pagina<T> {
   total: number;
 }
 
+
+/** Variación de la caja principal en un mes. Mientras el mes corre, cerrado es false y el porcentaje cambia. */
+export interface MesCaja {
+  periodo: string;
+  saldoInicial: number;
+  saldoFinal: number;
+  variacion: number;
+  porcentaje: number | null;
+  cerrado: boolean;
+}
+
+export interface InfoApp {
+  version: string;
+  telefono: string;
+  whatsapp: string;
+  direccion: string;
+  simuladorUrl: string | null;
+  esSimulador: boolean;
+}
+
+export interface Anuncio {
+  texto: string | null;
+  fecha: string | null;
+}
+
+export interface UsoApp {
+  desde: string;
+  hasta: string;
+  visitas: number;
+  personas: number;
+  pantallas: { ruta: string; visitas: number; personas: number }[];
+  dias: { dia: string; visitas: number; personas: number }[];
+  grupos: { grupo: string; visitas: number; personas: number }[];
+}
+
+export interface PersonaTramite {
+  usuarioId: number;
+  nombre: string;
+  identificacion: string;
+  socio: boolean;
+  cuenta: string;
+}
+
+export interface PersonaPrueba {
+  correo: string;
+  contrasena: string;
+  nombre: string;
+  cuenta: string;
+}
+
+/** Estado del simulador. activa: hay una copia de los datos reales en uso. */
 export interface EstadoSimulacion {
   fecha: string;
   ahora: string;
   diasAdelantados: number;
+  activa: boolean;
+  iniciadaEn: string | null;
+  iniciadaPor: string | null;
 }
 
 export interface DatosCredito {
@@ -97,6 +151,9 @@ export interface UsuarioResumen {
   creadoEn: string;
   cargos: string[];
   socio: boolean;
+  nombre: string | null;
+  identificacion: string | null;
+  pideRestablecer: boolean;
 }
 
 export interface Letra {
@@ -140,6 +197,9 @@ export interface Credito {
   tasaMora: number;
   moraPendiente: number;
   letrasAtrasadas: number;
+  codigo: string;
+  aprobaciones: VotoCredito[];
+  documentos: number;
 }
 
 export interface SolicitudCupo {
@@ -150,6 +210,44 @@ export interface SolicitudCupo {
   estado: string;
   motivo: string | null;
   creadoEn: string;
+  codigo: string;
+  aprobaciones: VotoCredito[];
+}
+
+/** Voto de un área: DIRECCION (presidencia o vicepresidencia), TESORERIA o COMITE_CREDITO. */
+export interface VotoCredito {
+  area: string;
+  nombre: string;
+  decision: 'APROBAR' | 'RECHAZAR';
+  motivo: string | null;
+  fecha: string;
+}
+
+export interface Comprobante {
+  id: number;
+  nombre: string;
+  tipoContenido: string;
+  tamano: number;
+  creadoEn: string;
+}
+
+export interface MesAporte {
+  periodo: string;
+  obligatorioPagado: boolean;
+  cajaChicaPagado: boolean;
+}
+
+export interface SocioCajaChica {
+  socioId: number;
+  nombre: string;
+  meses: MesAporte[];
+}
+
+export interface CondicionesSocio {
+  aporteInicial: number;
+  aporteObligatorio: number;
+  aporteCajaChica: number;
+  cupoEmergente: number;
 }
 
 export interface DocumentoCredito {
@@ -206,6 +304,7 @@ export interface Ahorro {
   interesAcumulado: number;
   interesDisponible: number;
   proximaLiberacion: string | null;
+  codigo: string;
 }
 
 export interface EventoAuditoria {
@@ -219,6 +318,11 @@ export interface EventoAuditoria {
   despues: string | null;
   motivo: string | null;
   fecha: string;
+  quien: string | null;
+  cargos: string | null;
+  descripcion: string;
+  afectado: string | null;
+  codigo: string | null;
 }
 
 export interface EstadoCajaRespuesta {
@@ -248,10 +352,12 @@ export interface ResultadosEnEspera {
   perdida: number;
 }
 
+/** Caja principal: saldo, movimientos con de quién son, y la variación de cada mes. */
 export interface Tesoreria {
   saldo: number;
   moneda: string;
-  movimientos: Pagina<{ id: number; sentido: string; importe: number; concepto: string; fecha: string }>;
+  movimientos: Pagina<{ id: number; sentido: string; importe: number; concepto: string; fecha: string; quien: string }>;
+  meses: MesCaja[];
 }
 
 export interface ResumenSocio {
@@ -332,7 +438,7 @@ export interface CierreAnual {
 export interface CajaChica {
   saldo: number;
   moneda: string;
-  movimientos: Pagina<{ id: number; sentido: string; importe: number; concepto: string; detalle: string | null; fecha: string }>;
+  movimientos: Pagina<{ id: number; sentido: string; importe: number; concepto: string; detalle: string | null; fecha: string; quien: string }>;
 }
 
 export interface CargoVista {
@@ -379,6 +485,8 @@ export interface SolicitudRetiro {
   referencia: string | null;
   fecha: string;
   resueltaEn: string | null;
+  costo: number;
+  codigo: string;
 }
 
 export interface SolicitudDeposito {
@@ -392,6 +500,8 @@ export interface SolicitudDeposito {
   motivo: string | null;
   fecha: string;
   resueltaEn: string | null;
+  codigo: string;
+  comprobantes: number;
 }
 
 export interface ResumenGeneral {
@@ -505,6 +615,7 @@ export interface MesResultado {
   resultado: number;
 }
 
+/** Una línea del libro. sube y baja: lo que el rubro aumentó o disminuyó. */
 export interface FilaLibro {
   fecha: string;
   operacionId: number | null;
@@ -514,12 +625,22 @@ export interface FilaLibro {
   debe: number;
   haber: number;
   saldo: number | null;
+  sube: number;
+  baja: number;
+  /** De quién es el movimiento: una persona, «Socios» o «Janery». */
+  quien: string;
+  /** Solo en movimientos de la caja: cuánto queda en ella después de este. */
+  cajaDespues: number | null;
 }
 
 export interface LibroDiario {
   totalDebe: number;
   totalHaber: number;
   movimientos: Pagina<FilaLibro>;
+  entradasCaja: number;
+  salidasCaja: number;
+  /** Dinero en la caja principal hoy. */
+  saldoCaja: number;
 }
 
 export interface LibroMayor {
@@ -817,6 +938,65 @@ export class ApiService {
     return this.http.post<{ id: number }>(`${this.base}/creditos/letras/solicitudes`, { modalidad, importe, plazoMeses, origenEncaje, ahorroEncajeId });
   }
 
+  /** tipo: APERTURA (id de la cuenta) o DEPOSITO (id del aviso). */
+  subirComprobantes(tipo: 'APERTURA' | 'DEPOSITO', id: number, archivos: File[]): Observable<Comprobante[]> {
+    const datos = new FormData();
+    archivos.forEach((a) => datos.append('archivos', a, a.name));
+    return this.http.post<Comprobante[]>(`${this.base}/comprobantes/${tipo}/${id}`, datos);
+  }
+
+  misComprobantes(tipo: 'APERTURA' | 'DEPOSITO', id: number): Observable<Comprobante[]> {
+    return this.http.get<Comprobante[]>(`${this.base}/comprobantes/${tipo}/${id}`);
+  }
+
+  comprobantesAdmin(tipo: 'APERTURA' | 'DEPOSITO', id: number): Observable<Comprobante[]> {
+    return this.http.get<Comprobante[]>(`${this.base}/admin/comprobantes/${tipo}/${id}`);
+  }
+
+  descargarComprobante(id: number): Observable<Blob> {
+    return this.http.get(`${this.base}/admin/comprobantes/archivo/${id}`, { responseType: 'blob' });
+  }
+
+  renombrarAhorro(id: number, nombre: string): Observable<Ahorro> {
+    return this.http.put<Ahorro>(`${this.base}/ahorros/${id}/nombre`, { nombre });
+  }
+
+  eliminarAhorro(id: number): Observable<void> {
+    return this.http.delete<void>(`${this.base}/ahorros/${id}`);
+  }
+
+  pagarPeriodos(tipo: 'OBLIGATORIO' | 'CAJA_CHICA', periodos: string[], clave: string): Observable<unknown> {
+    return this.http.post(`${this.base}/socios/me/aportes/periodos`, { tipo, periodos }, conClave(clave));
+  }
+
+  miCalendario(): Observable<MesAporte[]> {
+    return this.http.get<MesAporte[]>(`${this.base}/socios/me/calendario`);
+  }
+
+  condicionesSocio(): Observable<CondicionesSocio> {
+    return this.http.get<CondicionesSocio>(`${this.base}/socios/condiciones`);
+  }
+
+  hacermeSocio(clave: string): Observable<unknown> {
+    return this.http.post(`${this.base}/socios/hacerme-socio`, null, conClave(clave));
+  }
+
+  sociosCajaChica(): Observable<SocioCajaChica[]> {
+    return this.http.get<SocioCajaChica[]>(`${this.base}/caja-chica/socios`);
+  }
+
+  recibirAporteCajaChica(socioId: number, periodos: string[], clave: string): Observable<unknown> {
+    return this.http.post(`${this.base}/caja-chica/aportes`, { socioId, periodos }, conClave(clave));
+  }
+
+  restablecerContrasena(usuarioId: number): Observable<{ contrasenaTemporal: string }> {
+    return this.http.post<{ contrasenaTemporal: string }>(`${this.base}/admin/usuarios/${usuarioId}/restablecer-contrasena`, null);
+  }
+
+  cambiarCorreo(usuarioId: number, correo: string): Observable<void> {
+    return this.http.put<void>(`${this.base}/admin/usuarios/${usuarioId}/correo`, { correo });
+  }
+
   misDocumentosCredito(creditoId: number): Observable<DocumentoCredito[]> {
     return this.http.get<DocumentoCredito[]>(`${this.base}/creditos/${creditoId}/documentos`);
   }
@@ -1026,5 +1206,71 @@ export class ApiService {
 
   avanzarSimulacion(destino: { dias?: number; fecha?: string }): Observable<EstadoSimulacion> {
     return this.http.post<EstadoSimulacion>(`${this.base}/simulacion/avanzar`, destino);
+  }
+
+  iniciarSimulacion(): Observable<EstadoSimulacion> {
+    return this.http.post<EstadoSimulacion>(`${this.base}/simulacion/iniciar`, null);
+  }
+
+  finalizarSimulacion(): Observable<EstadoSimulacion> {
+    return this.http.post<EstadoSimulacion>(`${this.base}/simulacion/finalizar`, null);
+  }
+
+  crearPersonaPrueba(nombres: string, saldo: number, socio: boolean): Observable<PersonaPrueba> {
+    return this.http.post<PersonaPrueba>(`${this.base}/simulacion/personas`, { nombres, saldo, socio });
+  }
+
+  infoApp(): Observable<InfoApp> {
+    return this.http.get<InfoApp>(`${this.base}/public/info`);
+  }
+
+  anuncio(): Observable<Anuncio> {
+    return this.http.get<Anuncio>(`${this.base}/anuncio`);
+  }
+
+  publicarAnuncio(texto: string): Observable<Anuncio> {
+    return this.http.put<Anuncio>(`${this.base}/admin/anuncio`, { texto });
+  }
+
+  registrarVisita(ruta: string): Observable<void> {
+    return this.http.post<void>(`${this.base}/uso/visitas`, { ruta });
+  }
+
+  usoApp(desde: string | null, hasta: string | null): Observable<UsoApp> {
+    return this.http.get<UsoApp>(`${this.base}/admin/uso`, { params: fechas(desde, hasta) });
+  }
+
+  buscarPersonasTramite(texto: string): Observable<PersonaTramite[]> {
+    return this.http.get<PersonaTramite[]>(`${this.base}/admin/creditos/tramite/personas`, { params: new HttpParams().set('buscar', texto) });
+  }
+
+  perfilTramite(usuarioId: number): Observable<Perfil> {
+    return this.http.get<Perfil>(`${this.base}/admin/creditos/tramite/personas/${usuarioId}/perfil`);
+  }
+
+  datosCreditoTramite(usuarioId: number, direccion: string, datos: DatosCredito): Observable<Perfil> {
+    return this.http.put<Perfil>(`${this.base}/admin/creditos/tramite/personas/${usuarioId}/datos-credito`, { direccion, datos });
+  }
+
+  productosTramite(usuarioId: number): Observable<ProductosCredito> {
+    return this.http.get<ProductosCredito>(`${this.base}/admin/creditos/tramite/personas/${usuarioId}/productos`);
+  }
+
+  simularTramite(usuarioId: number, modalidad: string, importe: number, plazoMeses: number): Observable<Simulacion> {
+    return this.http.post<Simulacion>(`${this.base}/admin/creditos/tramite/personas/${usuarioId}/simulacion`, { modalidad, importe, plazoMeses });
+  }
+
+  letrasTramite(usuarioId: number, modalidad: string, importe: number, plazoMeses: number, origenEncaje: string): Observable<{ id: number }> {
+    return this.http.post<{ id: number }>(`${this.base}/admin/creditos/tramite/personas/${usuarioId}/letras`, { modalidad, importe, plazoMeses, origenEncaje });
+  }
+
+  emergenteTramite(usuarioId: number, importe: number, clave: string): Observable<{ id: number }> {
+    return this.http.post<{ id: number }>(`${this.base}/admin/creditos/tramite/personas/${usuarioId}/emergente`, { importe }, conClave(clave));
+  }
+
+  documentosTramite(creditoId: number, archivos: File[]): Observable<DocumentoCredito[]> {
+    const datos = new FormData();
+    archivos.forEach((a) => datos.append('archivos', a, a.name));
+    return this.http.post<DocumentoCredito[]>(`${this.base}/admin/creditos/tramite/${creditoId}/documentos`, datos);
   }
 }

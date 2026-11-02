@@ -5,6 +5,7 @@ import { FormsModule } from '@angular/forms';
 import { ApiService, LibroMayor } from '../../core/services/api';
 import { alCambiar } from '../../core/services/tiempo-real';
 import { Paginador } from '../../shared/components/paginador';
+import { nombreConcepto } from '../../shared/utils/etiquetas';
 import { mensajeDeError } from '../../shared/utils/errores';
 
 const LINEAS = [
@@ -18,6 +19,7 @@ const LINEAS = [
   ['5.9', 'Gastos de provisión'],
 ];
 
+/** Movimientos de un solo rubro en un mes: qué subió, qué bajó, de quién y el saldo que fue quedando. */
 @Component({
   selector: 'app-libro-mayor',
   imports: [CurrencyPipe, DatePipe, FormsModule, Paginador],
@@ -42,15 +44,15 @@ const LINEAS = [
       } @else {
         <div class="tabla">
           <table>
-            <thead><tr><th>Fecha</th><th>Operación</th><th>Concepto</th><th class="num">Debe</th><th class="num">Haber</th><th class="num">Saldo</th></tr></thead>
+            <thead><tr><th>Fecha</th><th>Movimiento</th><th>De quién</th><th class="num">Sube</th><th class="num">Baja</th><th class="num">Saldo</th></tr></thead>
             <tbody>
               @for (f of d.movimientos.contenido; track $index) {
                 <tr>
                   <td>{{ f.fecha | date: 'short' : 'America/Guayaquil' }}</td>
-                  <td>{{ f.operacionId ?? '—' }}</td>
-                  <td>{{ f.concepto }}</td>
-                  <td class="num">{{ f.debe ? (f.debe | currency: 'USD') : '' }}</td>
-                  <td class="num">{{ f.haber ? (f.haber | currency: 'USD') : '' }}</td>
+                  <td>{{ concepto(f.concepto) }}</td>
+                  <td>{{ f.quien }}</td>
+                  <td class="num positivo">{{ f.sube ? '+' + (f.sube | currency: 'USD') : '' }}</td>
+                  <td class="num negativo">{{ f.baja ? '−' + (f.baja | currency: 'USD') : '' }}</td>
                   <td class="num">{{ f.saldo | currency: 'USD' }}</td>
                 </tr>
               }
@@ -65,6 +67,7 @@ const LINEAS = [
   `,
 })
 export class LibroMayorPagina implements OnInit {
+  protected readonly concepto = nombreConcepto;
   private readonly api = inject(ApiService);
 
   protected readonly lineas = LINEAS;

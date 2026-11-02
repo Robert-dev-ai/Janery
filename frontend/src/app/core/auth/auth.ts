@@ -12,6 +12,9 @@ export interface Yo {
   tienePerfil: boolean;
   estadoCuenta: string | null;
   esSocio: boolean;
+  nombre: string | null;
+  tieneFoto: boolean;
+  debeCambiarContrasena: boolean;
 }
 
 interface TokenResponse {
@@ -36,6 +39,9 @@ export class AuthService {
 
   /** Ruta donde debe continuar la persona según su avance en el alta. */
   rutaInicial(): string {
+    if (this.yo()?.debeCambiarContrasena) {
+      return '/configuracion/contrasena';
+    }
     return this.yo()?.permisos.length ? '/admin/panel' : this.rutaPortal();
   }
 
@@ -106,7 +112,29 @@ export class AuthService {
 
   /** Con la cookie, el servidor sabe qué sesión conservar al cerrar las demás. */
   cambiarContrasena(actual: string, nueva: string): Observable<void> {
-    return this.http.post<void>(`${this.api}/contrasena`, { actual, nueva }, { withCredentials: true });
+    // Se recarga el usuario: cambiar una contraseña temporal levanta la obligación de cambiarla.
+    return this.http.post<void>(`${this.api}/contrasena`, { actual, nueva }, { withCredentials: true }).pipe(
+      switchMap(() => this.cargarYo().pipe(map(() => undefined))),
+    );
+  }
+
+  /** Sin correo saliente: la petición le llega a la presidencia, que entrega una contraseña temporal. */
+  pedirRestablecimiento(identificador: string): Observable<void> {
+    return this.http.post<void>(`${this.api}/recuperar`, { identificador });
+  }
+
+  foto(): Observable<Blob> {
+    return this.http.get(`${this.api}/foto`, { responseType: 'blob' });
+  }
+
+  guardarFoto(archivo: File): Observable<void> {
+    const datos = new FormData();
+    datos.append('archivo', archivo, archivo.name);
+    return this.http.put<void>(`${this.api}/foto`, datos).pipe(switchMap(() => this.cargarYo().pipe(map(() => undefined))));
+  }
+
+  quitarFoto(): Observable<void> {
+    return this.http.delete<void>(`${this.api}/foto`).pipe(switchMap(() => this.cargarYo().pipe(map(() => undefined))));
   }
 
   cerrarOtrasSesiones(): Observable<void> {

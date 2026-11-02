@@ -60,3 +60,11 @@ janery:
   admin-inicial:
     correo: ${JANERY_ADMIN_CORREO:}
     contrasena: ${JANERY_ADMIN_PASSWORD:}
+  # Se toma del pom.xml al compilar: se muestra en el pie de página.
+  version: "@project.version@"
+  contacto:
+    telefono: "+593 996619908"
+    direccion: "San Agustín de Cajas, González Suárez"
+  simulador:
+    # Dirección del simulador publicado (otra instancia con el perfil simulacion). Vacío: no se ofrece.
+    url: ${JANERY_SIMULADOR_URL:}

@@ -1,12 +1,13 @@
-# Arranca el backend con el reloj simulado sobre la base janery_simulacion (docs/testing.md).
+# Arranca el simulador: el backend con el reloj simulado sobre la base janery_simulacion, en el puerto 8081 (docs/testing.md).
+# Puede correr junto al backend normal. Frontend del simulador: cd frontend; npm run simulador (http://localhost:4201).
 # Uso: .\simulacion.ps1             continua la simulacion anterior
 #      .\simulacion.ps1 -Reiniciar  borra los datos simulados y vuelve a la fecha real
 #      .\simulacion.ps1 -SegundoPlano  arranca sin ventana: cerrar una consola no lo detiene (salida en simulacion.log)
-#      .\simulacion.ps1 -Detener    detiene el backend que escucha en el puerto
+#      .\simulacion.ps1 -Detener    detiene el simulador
 param([switch]$Reiniciar, [switch]$SegundoPlano, [switch]$Detener)
 
 if ($Detener) {
-    $escucha = Get-NetTCPConnection -State Listen -LocalPort 8080 -ErrorAction SilentlyContinue | Select-Object -First 1
+    $escucha = Get-NetTCPConnection -State Listen -LocalPort 8081 -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($escucha) {
         # Sube hasta el proceso de Maven para no dejarlo huerfano.
         $id = $escucha.OwningProcess
@@ -41,17 +42,23 @@ Get-Content (Join-Path $PSScriptRoot '.env') -ErrorAction Stop | Where-Object { 
     $entorno[$partes[0].Trim()] = $partes[1].Trim()
 }
 $esquema = if ($entorno['JANERY_DB_SCHEMA']) { $entorno['JANERY_DB_SCHEMA'] } else { 'janery' }
-$puerto = if ($env:JANERY_SERVER_PORT) { $env:JANERY_SERVER_PORT } elseif ($entorno['JANERY_SERVER_PORT']) { $entorno['JANERY_SERVER_PORT'] } else { '8080' }
+$puerto = if ($env:JANERY_SIMULADOR_PUERTO) { $env:JANERY_SIMULADOR_PUERTO } else { '8081' }
 
 if (Get-NetTCPConnection -State Listen -LocalPort $puerto -ErrorAction SilentlyContinue) {
-    throw "El puerto $puerto esta ocupado. Detenga primero el backend normal."
+    throw "El puerto $puerto esta ocupado: el simulador ya esta corriendo (.\simulacion.ps1 -Detener)."
 }
 
 $psql = (Get-Command psql -ErrorAction SilentlyContinue).Source
 if (-not $psql) {
     $psql = Get-ChildItem 'C:\Program Files\PostgreSQL\*\bin\psql.exe' | Sort-Object FullName | Select-Object -Last 1 -ExpandProperty FullName
 }
-if (-not $psql) { throw 'No se encontro psql.' }
+if (-not $psql) {
+    # Sin psql no se puede crear la base: se supone creada. Reiniciar se hace desde la barra del simulador.
+    Write-Warning 'No se encontro psql: se usa la base janery_simulacion existente.'
+    Set-Location (Join-Path $PSScriptRoot 'backend')
+    & .\mvnw.cmd spring-boot:run '-Dspring-boot.run.profiles=simulacion'
+    return
+}
 
 $env:PGPASSWORD = $entorno['JANERY_DB_PASSWORD']
 $env:PGOPTIONS = '-c client_min_messages=warning'

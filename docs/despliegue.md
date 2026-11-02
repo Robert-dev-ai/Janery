@@ -47,3 +47,13 @@ Antes de operar con datos reales: contraseña fuerte de PostgreSQL con un usuari
 ## 6. Operación
 
 Arranque, parada, logs, health checks, respaldos, restauración, actualización y fallos: ver [operacion.md](operacion.md).
+
+## 7. Simulador publicado
+
+El administrador prueba en una instancia aparte, que no toca la base real:
+
+- Backend: el mismo `.jar` con `SPRING_PROFILES_ACTIVE=simulacion`, las mismas variables `JANERY_DB_*` de la base real (solo para leer al personal y los parámetros al reiniciar) y `JANERY_SIMULADOR_ORIGENES` con el dominio del simulador. Usa la base `janery_simulacion`, en el mismo servidor PostgreSQL; créela una vez antes de arrancarlo. Escucha en `JANERY_SIMULADOR_PUERTO` (8081 por defecto).
+- Frontend: `npm run build:simulador` → `frontend/dist/simulador/browser`. Llama a `/api/v1` en su propio dominio.
+- Dominio propio, por ejemplo `simulador.` delante del dominio real: la cookie de sesión va en `/api/v1/auth` y no funciona bajo una subcarpeta.
+- En la instancia real, `JANERY_SIMULADOR_URL` con la dirección del simulador: así aparece en Administración → Simulador.
+- El perfil `simulacion` se niega a arrancar si la URL de la base no contiene «simulacion».

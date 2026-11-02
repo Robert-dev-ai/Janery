@@ -43,16 +43,26 @@ No inventar resultados esperados cuando la fórmula siga pendiente; marcar el te
 - No exposición de secretos.
 - Validación de entradas y errores seguros.
 
-## 6. Simular el paso del tiempo
+## 6. Simulador
 
-Para ver a mano intereses, vencimientos o el retiro de ganancias del 1 de enero sin esperar:
+Una segunda instancia de Janery, con su propia base (`janery_simulacion`), para probar créditos, ahorros o aportes y ver pasar el tiempo sin tocar los datos reales. Corre junto a la instancia normal:
 
-1. Detener el backend normal, porque usa el mismo puerto.
-2. Ejecutar `.\simulacion.ps1` desde la raíz. Crea la base `janery_simulacion` si falta y arranca con el perfil `simulacion`.
-3. Iniciar sesión con un usuario con permiso `ADMIN_PARAMETROS` y avanzar la fecha con la barra amarilla, o con `POST /api/v1/simulacion/avanzar` y `{"dias": 15}` o `{"fecha": "2027-01-01"}`.
+1. Backend: `.\simulacion.ps1` desde la raíz (puerto 8081, perfil `simulacion`). Crea la base si falta (requiere `psql`; sin él, usa la existente).
+2. Frontend: `cd frontend; npm run simulador` (http://localhost:4201). La instancia normal lo ofrece a quien tenga `USAR_SIMULADOR` en Administración → Simulador, con `JANERY_SIMULADOR_URL`.
+3. Entrar con un usuario del personal. La barra amarilla permite:
+   - **Iniciar simulación**: copia toda la base real tal como está en ese momento (personas, cuentas, créditos, ahorros, socios, cajas, contabilidad y auditoría) sobre la base del simulador. Las sesiones abiertas en el simulador se conservan. La base real se lee con una conexión de solo lectura (`readOnlyMode=always`): PostgreSQL rechaza cualquier escritura por ella. Ambas bases deben estar en la misma versión de migraciones.
+   - **Avanzar la fecha** (+1, +15, +30 días o hasta una fecha), o `POST /api/v1/simulacion/avanzar` con `{"dias": 15}` o `{"fecha": "2027-01-01"}`.
+   - **Crear una persona de prueba**: cuenta activa con 1000 USD; con «socio» al final del nombre, también socia. Muestra su correo y su contraseña (`Prueba-1234`).
+   - **Volver a copiar los datos**: descarta lo probado y copia de nuevo la base real de ese momento.
+   - **Finalizar simulación**: descarta todo lo probado y vuelve a la fecha real. Quedan solo el personal (usuarios con cargo), los permisos y los parámetros, para poder entrar e iniciar otra.
+
+Pueden usarlo `ADMIN_PARAMETROS` y `USAR_SIMULADOR` (presidencia y administración).
+
+Publicado, el simulador es otra instancia del mismo `.jar` con `SPRING_PROFILES_ACTIVE=simulacion`, en su propio subdominio, con el frontend construido con `npm run build:simulador`. Ver [despliegue.md](despliegue.md).
 
 Reglas:
-- La fecha solo avanza. Para repetir una prueba, `.\simulacion.ps1 -Reiniciar` borra los datos simulados y vuelve a la fecha real.
+- La fecha solo avanza. Para repetir una prueba, «Volver a copiar los datos» o «Finalizar simulación».
+- El proxy del simulador publicado no debe cortar `/api/v1/simulacion/iniciar` antes de 5 minutos: copiar tarda segundos junto a la base, pero hasta un minuto desde una computadora remota.
 - Interés de ahorros, atraso y mora se calculan con la fecha simulada al consultarlos: se ven al avanzar, sin procesos programados.
 - `.\simulacion.ps1 -SegundoPlano` arranca sin ventana, con la salida en `simulacion.log`, y `.\simulacion.ps1 -Detener` lo detiene. Úsese si el backend se cierra solo: arrancado en una ventana, muere si esa consola se cierra o recibe Ctrl+C, y lo único que queda en el log es `^C`.
 - La fecha simulada se conserva al reiniciar el backend.

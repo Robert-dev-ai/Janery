@@ -1,7 +1,10 @@
 import { Component, inject, signal } from '@angular/core';
 import { AbstractControl, NonNullableFormBuilder, ReactiveFormsModule, ValidationErrors, Validators } from '@angular/forms';
 
+import { Router } from '@angular/router';
+
 import { AuthService } from '../../core/auth/auth';
+import { VerClave } from '../../shared/components/ver-clave';
 import { mensajeDeError } from '../../shared/utils/errores';
 
 function coinciden(grupo: AbstractControl): ValidationErrors | null {
@@ -10,18 +13,21 @@ function coinciden(grupo: AbstractControl): ValidationErrors | null {
 
 @Component({
   selector: 'app-contrasena',
-  imports: [ReactiveFormsModule],
+  imports: [ReactiveFormsModule, VerClave],
   template: `
     <form class="tarjeta" [formGroup]="form" (ngSubmit)="enviar()">
       <h2>Cambiar contraseña</h2>
+      @if (obligatoria()) {
+        <p class="alerta" role="alert">Entró con una contraseña temporal. Elija una nueva para continuar.</p>
+      }
       <label>Contraseña actual
-        <input type="password" formControlName="actual" autocomplete="current-password" />
+        <input type="password" formControlName="actual" autocomplete="current-password" appVerClave />
       </label>
       <label>Contraseña nueva (mínimo 8 caracteres)
-        <input type="password" formControlName="nueva" autocomplete="new-password" />
+        <input type="password" formControlName="nueva" autocomplete="new-password" appVerClave />
       </label>
       <label>Repita la contraseña nueva
-        <input type="password" formControlName="confirmacion" autocomplete="new-password" />
+        <input type="password" formControlName="confirmacion" autocomplete="new-password" appVerClave />
       </label>
       @if (form.hasError('noCoinciden') && form.controls.confirmacion.dirty) {
         <p class="error" role="alert">Las contraseñas no coinciden.</p>
@@ -34,6 +40,8 @@ function coinciden(grupo: AbstractControl): ValidationErrors | null {
 })
 export class Contrasena {
   private readonly auth = inject(AuthService);
+  private readonly router = inject(Router);
+  protected readonly obligatoria = () => !!this.auth.yo()?.debeCambiarContrasena;
 
   protected readonly form = inject(NonNullableFormBuilder).group({
     actual: ['', [Validators.required, Validators.maxLength(72)]],
@@ -49,11 +57,15 @@ export class Contrasena {
     this.enviando.set(true);
     this.error.set(null);
     this.cambiada.set(false);
+    const eraTemporal = this.obligatoria();
     this.auth.cambiarContrasena(actual, nueva).subscribe({
       next: () => {
         this.form.reset();
         this.cambiada.set(true);
         this.enviando.set(false);
+        if (eraTemporal) {
+          this.router.navigateByUrl(this.auth.rutaInicial());
+        }
       },
       error: (e) => {
         this.error.set(mensajeDeError(e));

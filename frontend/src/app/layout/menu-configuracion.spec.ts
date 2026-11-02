@@ -58,7 +58,7 @@ describe('MenuConfiguracion', () => {
     TestBed.inject(AuthService).token.set('abc');
     const elemento = abrir(fixture);
 
-    elemento.querySelector<HTMLButtonElement>('[role=menu] button')!.click();
+    [...elemento.querySelectorAll<HTMLButtonElement>('[role=menu] button')].find((b) => b.textContent?.includes('Cerrar sesión'))!.click();
 
     TestBed.inject(HttpTestingController).expectOne(`${environment.apiBaseUrl}/auth/logout`).flush(null);
     expect(TestBed.inject(AuthService).token()).toBeNull();

@@ -10,6 +10,7 @@ import java.time.Instant;
 import java.util.Base64;
 import java.util.HexFormat;
 import java.util.Locale;
+import java.util.Optional;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -34,9 +35,12 @@ public class AuthService {
     }
 
     private static final String MODULO = "USUARIO";
+    private static final String PENDIENTE = "PENDIENTE";
 
     private final Repositorios.UsuarioRepository usuarios;
     private final Repositorios.TokenRefrescoRepository tokens;
+    private final Repositorios.RestablecimientoRepository restablecimientos;
+    private final ec.janery.socio.SocioService socios;
     private final PasswordEncoder encoder;
     private final JwtEncoder jwtEncoder;
     private final AuditoriaService auditoria;
@@ -48,11 +52,14 @@ public class AuthService {
     private final SecureRandom aleatorio = new SecureRandom();
 
     AuthService(Repositorios.UsuarioRepository usuarios, Repositorios.TokenRefrescoRepository tokens,
+            Repositorios.RestablecimientoRepository restablecimientos, ec.janery.socio.SocioService socios,
             PasswordEncoder encoder, JwtEncoder jwtEncoder, AuditoriaService auditoria, PersonaService personas, Clock reloj,
             @Value("${janery.jwt.access-minutos}") long accessMinutos,
             @Value("${janery.jwt.refresh-dias}") long refreshDias) {
         this.usuarios = usuarios;
         this.tokens = tokens;
+        this.restablecimientos = restablecimientos;
+        this.socios = socios;
         this.encoder = encoder;
         this.jwtEncoder = jwtEncoder;
         this.auditoria = auditoria;
@@ -93,13 +100,93 @@ public class AuthService {
                 : usuarios.findByIdentificacion(identificador.trim())).orElse(null);
         // Con usuario inexistente también se compara un hash, para no revelar por tiempo qué correos existen.
         boolean valida = encoder.matches(contrasena, usuario == null ? hashFicticio : usuario.getHashContrasena());
+        if (usuario != null && usuario.bloqueado()) {
+            auditoria.registrar(usuario.getId(), "LOGIN_FALLIDO", MODULO, "usuario", usuario.getId(), null, null, "BLOQUEADO");
+            throw bloqueado();
+        }
         if (usuario == null || !valida || !usuario.activo()) {
-            auditoria.registrar(usuario == null ? null : usuario.getId(), "LOGIN_FALLIDO", MODULO, "usuario",
-                    usuario == null ? null : usuario.getId(), null, null, null);
+            Long id = usuario == null ? null : usuario.getId();
+            auditoria.registrar(id, "LOGIN_FALLIDO", MODULO, "usuario", id, null, null, null);
+            if (usuario != null && usuario.activo()) {
+                boolean queda = usuario.registrarFallo();
+                usuarios.save(usuario);
+                if (queda) {
+                    auditoria.registrar(id, "ACCESO_BLOQUEADO", MODULO, "usuario", id, "ACTIVO", "BLOQUEADO", null);
+                    throw bloqueado();
+                }
+                int restantes = Usuario.INTENTOS_MAXIMOS - usuario.getIntentosFallidos();
+                throw new NegocioException(HttpStatus.UNAUTHORIZED, "CREDENCIALES", "Credenciales incorrectas. "
+                        + (restantes == 1 ? "Le queda 1 intento" : "Le quedan " + restantes + " intentos")
+                        + " antes de que se bloquee su acceso");
+            }
             throw new NegocioException(HttpStatus.UNAUTHORIZED, "CREDENCIALES", "Credenciales incorrectas");
+        }
+        if (usuario.getIntentosFallidos() > 0) {
+            usuario.reiniciarIntentos();
+            usuarios.save(usuario);
         }
         auditoria.registrar(usuario.getId(), "LOGIN", MODULO, "usuario", usuario.getId(), null, null, null);
         return emitir(usuario);
+    }
+
+    private static NegocioException bloqueado() {
+        return new NegocioException(HttpStatus.UNAUTHORIZED, "ACCESO_BLOQUEADO",
+                "Su acceso está bloqueado por " + Usuario.INTENTOS_MAXIMOS + " contraseñas incorrectas. "
+                        + "Use «¿Olvidó su contraseña?» o pida a la presidencia que la restablezca");
+    }
+
+    /** Sin correo saliente: la solicitud le llega a la presidencia. No revela si el usuario existe. */
+    @Transactional
+    public void solicitarRestablecimiento(String identificador) {
+        Optional<Usuario> usuario = identificador.contains("@") ? usuarios.findByCorreo(normalizar(identificador))
+                : usuarios.findByIdentificacion(identificador.trim());
+        usuario.filter(u -> !restablecimientos.existsByUsuarioIdAndEstado(u.getId(), PENDIENTE)).ifPresent(u -> {
+            restablecimientos.save(new SolicitudRestablecimiento(null, u.getId(), PENDIENTE, null, null, Instant.now(reloj)));
+            auditoria.registrar(u.getId(), "RESTABLECIMIENTO_SOLICITADO", MODULO, "usuario", u.getId(), null, null, null);
+        });
+    }
+
+    /** La contraseña temporal solo se muestra una vez, a quien la genera; se guarda cifrada como cualquier otra. */
+    @Transactional
+    public String restablecer(Long actorId, Long usuarioId) {
+        Usuario usuario = usuarios.findById(usuarioId).orElseThrow(() -> NegocioException.noEncontrado("Usuario no encontrado"));
+        String temporal = contrasenaTemporal();
+        String antes = usuario.getEstado();
+        usuario.restablecer(encoder.encode(temporal));
+        tokens.revocarOtros(usuarioId, "", Instant.now(reloj));
+        restablecimientos.findByUsuarioIdAndEstado(usuarioId, PENDIENTE).forEach(s -> {
+            s.setEstado("ATENDIDA");
+            s.setAtendidaPor(actorId);
+            s.setAtendidaEn(Instant.now(reloj));
+        });
+        auditoria.registrar(actorId, "CONTRASENA_RESTABLECIDA", MODULO, "usuario", usuarioId, antes, "ACTIVO", null);
+        return temporal;
+    }
+
+    private String contrasenaTemporal() {
+        // Sin letras que se confunden al dictarlas (0/O, 1/l/I).
+        String letras = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789";
+        StringBuilder clave = new StringBuilder();
+        for (int i = 0; i < 10; i++) {
+            clave.append(letras.charAt(aleatorio.nextInt(letras.length())));
+        }
+        return clave.toString();
+    }
+
+    /** Corrige un correo mal escrito al registrarse. */
+    @Transactional
+    public void cambiarCorreo(Long actorId, Long usuarioId, String correo) {
+        String normalizado = normalizar(correo);
+        Usuario usuario = usuarios.findById(usuarioId).orElseThrow(() -> NegocioException.noEncontrado("Usuario no encontrado"));
+        if (normalizado.equals(usuario.getCorreo())) {
+            return;
+        }
+        if (usuarios.existsByCorreo(normalizado)) {
+            throw NegocioException.conflicto("CORREO_REGISTRADO", "Ya existe una cuenta con ese correo");
+        }
+        String antes = usuario.getCorreo();
+        usuario.cambiarCorreo(normalizado);
+        auditoria.registrar(actorId, "CORREO_CAMBIADO", MODULO, "usuario", usuarioId, antes, normalizado, null);
     }
 
     @Transactional
@@ -156,6 +243,15 @@ public class AuthService {
         tokens.revocarOtros(usuarioId, refreshToken == null ? "" : hash(refreshToken), Instant.now(reloj));
     }
 
+    /** Los permisos de sus cargos, y SOCIO para consultar las finanzas: los socios ven, pero no registran. */
+    private java.util.List<String> alcances(Long usuarioId) {
+        java.util.List<String> alcances = new java.util.ArrayList<>(usuarios.permisosVigentes(usuarioId));
+        if (socios.usuarioEsSocio(usuarioId)) {
+            alcances.add("SOCIO");
+        }
+        return alcances;
+    }
+
     private Sesion emitir(Usuario usuario) {
         Instant ahora = Instant.now(reloj);
         Instant expira = ahora.plus(duracionAccess);
@@ -163,7 +259,7 @@ public class AuthService {
                 .subject(usuario.getId().toString())
                 .issuedAt(ahora)
                 .expiresAt(expira)
-                .claim("scope", String.join(" ", usuarios.permisosVigentes(usuario.getId())))
+                .claim("scope", String.join(" ", alcances(usuario.getId())))
                 .build();
         String access = jwtEncoder
                 .encode(JwtEncoderParameters.from(JwsHeader.with(MacAlgorithm.HS256).build(), claims))

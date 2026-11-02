@@ -54,6 +54,20 @@ class CalculadoraCreditoTest {
     }
 
     @Test
+    void cadaLetraAhorraAlMenosCincuentaCentavos() {
+        // 30 + 1 + 0 = 31 exactos: sin el mínimo, la letra no ahorraría nada; con él sube a 32.
+        List<Letra> letras = CalculadoraCredito.letras(bd("90.00"), 3, bd("1.111112"), bd("0"), INICIO);
+        assertThat(letras).allSatisfy(l -> assertThat(l.ahorroLetras()).isGreaterThanOrEqualTo(bd("0.50")));
+        assertThat(letras.get(0).total()).isEqualByComparingTo("32");
+        for (String importe : new String[] { "1000.00", "100.00", "333.33", "777.77" }) {
+            for (int meses : new int[] { 3, 6, 7, 11, 36 }) {
+                assertThat(CalculadoraCredito.letras(bd(importe), meses, bd("1.5"), bd("0.1"), INICIO))
+                        .allSatisfy(l -> assertThat(l.ahorroLetras()).isGreaterThanOrEqualTo(bd("0.50")));
+            }
+        }
+    }
+
+    @Test
     void siLaSumaYaEsEnteraEnLaBaseElAhorroNoQuedaNegativo() {
         // 33,33 + 0,67 = 34 exactos; con la última (33,34) el total sube a 35.
         List<Letra> letras = CalculadoraCredito.letras(bd("100.00"), 3, bd("0.67"), bd("0"), INICIO);

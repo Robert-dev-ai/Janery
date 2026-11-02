@@ -310,6 +310,123 @@ public class ParticipacionService {
         return operacion;
     }
 
+    /** Paga varios meses de una vez, todos o ninguno. Cada mes usa su propia clave, derivada de la del pago. */
+    @Transactional
+    public List<Long> pagarPeriodos(Long usuarioId, String tipo, List<String> periodos, String clave) {
+        List<String> meses = validarPeriodos(periodos);
+        return meses.stream().map(p -> OBLIGATORIO.equals(tipo)
+                ? aportar(usuarioId, OBLIGATORIO, null, p, clave + ":" + p)
+                : aportarCajaChica(usuarioId, p, clave + ":" + p)).toList();
+    }
+
+    private List<String> validarPeriodos(List<String> periodos) {
+        List<String> meses = periodos == null ? List.of() : periodos.stream().map(this::periodo).distinct().sorted().toList();
+        if (meses.isEmpty() || meses.size() > 12) {
+            throw new NegocioException(HttpStatus.BAD_REQUEST, "PERIODOS_INVALIDOS", "Elija entre 1 y 12 meses");
+        }
+        return meses;
+    }
+
+    public record MesAporte(String periodo, boolean obligatorioPagado, boolean cajaChicaPagado) {
+    }
+
+    /** Los doce meses del año con lo ya pagado: así se eligen los que faltan. */
+    @Transactional(readOnly = true)
+    public List<MesAporte> calendario(Long socioId) {
+        Set<String> obligatorios = aportes.periodosObligatorios(socioId);
+        Set<String> caja = aportesCajaChica.periodos(socioId);
+        int anio = YearMonth.now(reloj).getYear();
+        return java.util.stream.IntStream.rangeClosed(1, 12).mapToObj(m -> YearMonth.of(anio, m).toString())
+                .map(p -> new MesAporte(p, obligatorios.contains(p), caja.contains(p))).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<MesAporte> miCalendario(Long usuarioId) {
+        return calendario(socios.deUsuario(usuarioId).getId());
+    }
+
+    public record SocioCajaChica(Long socioId, String nombre, List<MesAporte> meses) {
+    }
+
+    @Transactional(readOnly = true)
+    public List<SocioCajaChica> sociosCajaChica() {
+        return socios.activos().stream()
+                .map(s -> new SocioCajaChica(s.getId(), personas.nombreCompleto(s.getPersonaId()), calendario(s.getId()))).toList();
+    }
+
+    /**
+     * Quien administra caja chica recibe en persona el aporte de un socio: el dinero entra directo a caja chica, sin pasar
+     * por la cuenta del socio ni por la caja principal.
+     */
+    @Transactional
+    public List<Long> recibirAporteCajaChica(Long actorId, Long socioId, List<String> periodos, String clave) {
+        SocioService.Socio socio = socios.porId(socioId);
+        if (!"ACTIVO".equals(socio.getEstado())) {
+            throw NegocioException.conflicto("SOCIO_INACTIVO", "Ese socio ya no está activo");
+        }
+        String nombre = personas.nombreCompleto(socio.getPersonaId());
+        BigDecimal importe = dinero(parametros.valorVigente("APORTE_CAJA_CHICA"));
+        List<Long> operaciones = new java.util.ArrayList<>();
+        for (String periodo : validarPeriodos(periodos)) {
+            String claveMes = clave + ":" + periodo;
+            Optional<Long> previa = cuentas.operacionPrevia(claveMes, "APORTE_CAJA_CHICA", importe, actorId);
+            if (previa.isPresent()) {
+                operaciones.add(previa.get());
+                continue;
+            }
+            if (aportesCajaChica.existsBySocioIdAndPeriodo(socioId, periodo)) {
+                throw NegocioException.conflicto("APORTE_YA_REALIZADO", nombre + " ya pagó caja chica de " + periodo);
+            }
+            Long operacion = cuentas.crearOperacionExterna("APORTE_CAJA_CHICA", importe, "EFECTIVO", null, claveMes, actorId);
+            cajas.registrar(CajaService.CHICA, operacion, ENTRADA, importe, "APORTE_SOCIO", periodo + " · " + nombre);
+            aportesCajaChica.save(new AporteCajaChica(null, socioId, importe, periodo, operacion, Instant.now(reloj)));
+            auditoria.registrar(actorId, "APORTE_CAJA_CHICA_RECIBIDO", MODULO, "socio", socioId, null, importe.toPlainString(), periodo);
+            operaciones.add(operacion);
+        }
+        return operaciones;
+    }
+
+    public record Condiciones(BigDecimal aporteInicial, BigDecimal aporteObligatorio, BigDecimal aporteCajaChica,
+            BigDecimal cupoEmergente) {
+    }
+
+    @Transactional(readOnly = true)
+    public Condiciones condiciones() {
+        return new Condiciones(dinero(parametros.valorVigente("APORTE_INICIAL_MINIMO")),
+                dinero(parametros.valorVigente("APORTE_OBLIGATORIO")), dinero(parametros.valorVigente("APORTE_CAJA_CHICA")),
+                dinero(parametros.valorVigente("EMERGENTE_SOCIO_CUPO")));
+    }
+
+    /**
+     * Un cliente se hace socio pagando el aporte inicial desde su cuenta principal. Ese capital no se retira: solo se
+     * vende a otro socio.
+     */
+    @Transactional
+    public Long hacerseSocio(Long usuarioId, String clave) {
+        Long personaId = personas.dePorUsuario(usuarioId)
+                .orElseThrow(() -> NegocioException.conflicto("PERFIL_INCOMPLETO", "Complete sus datos personales")).getId();
+        CuentaPrincipal cuenta = cuentas.cuentaActivaBloqueada(personaId);
+        Optional<Long> previa = cuentas.operacionPrevia(clave, "APORTE_INICIAL", null, usuarioId);
+        if (previa.isPresent()) {
+            return previa.get();
+        }
+        if (socios.esSocio(personaId)) {
+            throw NegocioException.conflicto("SOCIO_EXISTENTE", "Usted ya es socio");
+        }
+        BigDecimal importe = dinero(parametros.valorVigente("APORTE_INICIAL_MINIMO"));
+        Long operacion = cuentas.crearOperacionInterna("APORTE_INICIAL", importe, clave, usuarioId);
+        cuentas.mover(cuenta, operacion, SALIDA, importe, "APORTE_INICIAL");
+        socios.registrar(usuarioId, usuarioId);
+        SocioService.Socio socio = socios.deUsuario(usuarioId);
+        Instant ahora = Instant.now(reloj);
+        AporteSocio aporte = aportes.save(new AporteSocio(null, socio.getId(), INICIAL, importe, YearMonth.now(reloj).toString(),
+                operacion, ahora));
+        variaciones.save(new VariacionParticipacion(null, socio.getId(), "APORTE_" + INICIAL, importe, hoy(), aporte.getId(),
+                null, null, ahora));
+        auditoria.registrar(usuarioId, "APORTE_INICIAL", MODULO, "socio", socio.getId(), null, importe.toPlainString(), null);
+        return operacion;
+    }
+
     @Transactional
     public Long registrarGastoCajaChica(Long actorId, BigDecimal importe, String detalle, String clave) {
         Optional<Long> previa = cuentas.operacionPrevia(clave, "GASTO_CAJA_CHICA", importe, actorId);
@@ -838,8 +955,9 @@ public class ParticipacionService {
         }
         try {
             YearMonth mes = YearMonth.parse(texto);
-            if (mes.isAfter(actual)) {
-                throw new NegocioException(HttpStatus.BAD_REQUEST, "PERIODO_FUTURO", "No se puede aportar a un mes futuro");
+            // Decisión del propietario: se puede adelantar el pago de los meses que faltan del año.
+            if (mes.getYear() > actual.getYear()) {
+                throw new NegocioException(HttpStatus.BAD_REQUEST, "PERIODO_FUTURO", "Solo se pueden adelantar los meses de este año");
             }
             return mes.toString();
         } catch (DateTimeParseException e) {

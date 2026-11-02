@@ -1,7 +1,7 @@
 import { CurrencyPipe, DatePipe } from '@angular/common';
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { HandCoins, PiggyBank, TrendingUp, Wallet } from 'lucide-angular';
+import { Banknote, BanknoteArrowDown, HandCoins, LucideAngularModule, PiggyBank, TrendingUp, Wallet } from 'lucide-angular';
 
 import { AuthService } from '../../core/auth/auth';
 import { Ahorro, ApiService, Credito, Cuenta, MovimientoCuenta, ResumenSocio } from '../../core/services/api';
@@ -16,9 +16,18 @@ const USD = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' 
 
 @Component({
   selector: 'app-resumen',
-  imports: [CurrencyPipe, DatePipe, Estado, GraficoBarras, Indicador, RouterLink],
+  imports: [CurrencyPipe, DatePipe, Estado, GraficoBarras, Indicador, LucideAngularModule, RouterLink],
   template: `
-    <h1>Resumen</h1>
+    <div class="encabezado-pagina">
+      <h1>Resumen</h1>
+      @if (cuenta(); as c) {
+        <p class="saldo-titulo">Cuenta principal {{ c.numero }}<strong>{{ c.saldoDisponible | currency: 'USD' }}</strong></p>
+      }
+    </div>
+    <div class="acciones-principales">
+      <a class="boton" routerLink="/app/depositos"><lucide-icon [img]="iconos.BanknoteArrowDown" [size]="20" aria-hidden="true" /> Depositar</a>
+      <a class="boton-claro" routerLink="/app/retiros"><lucide-icon [img]="iconos.Banknote" [size]="20" aria-hidden="true" /> Retirar</a>
+    </div>
     @if (error()) { <p class="error" role="alert">{{ error() }}</p> }
 
     @if (cuenta(); as c) {
@@ -106,7 +115,7 @@ export class Resumen implements OnInit {
 
   protected readonly familia = nombreFamilia;
   protected readonly concepto = nombreConcepto;
-  protected readonly iconos = { HandCoins, PiggyBank, TrendingUp, Wallet };
+  protected readonly iconos = { Banknote, BanknoteArrowDown, HandCoins, PiggyBank, TrendingUp, Wallet };
   protected readonly cuenta = signal<Cuenta | null>(null);
   protected readonly creditos = signal<Credito[]>([]);
   protected readonly ahorros = signal<Ahorro[]>([]);

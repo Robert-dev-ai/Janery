@@ -6,7 +6,7 @@ import { AuthService, Yo } from './auth';
 import { autenticadoGuard, cuentaActivaGuard, permisoGuard, personalGuard, socioGuard } from './guards';
 
 describe('guards', () => {
-  const yoBase: Yo = { id: 1, correo: 'a@b.c', cargos: [], permisos: [], tienePerfil: true, estadoCuenta: 'ACTIVA', esSocio: false };
+  const yoBase: Yo = { id: 1, correo: 'a@b.c', cargos: [], permisos: [], tienePerfil: true, estadoCuenta: 'ACTIVA', esSocio: false, nombre: 'Ana', tieneFoto: false, debeCambiarContrasena: false };
 
   function ejecutar(guard: typeof autenticadoGuard) {
     return TestBed.runInInjectionContext(() =>

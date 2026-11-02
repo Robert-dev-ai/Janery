@@ -11,12 +11,14 @@
 
     <groupId>ec.janery</groupId>
     <artifactId>janery-backend</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <version>0.2.0</version>
     <name>janery</name>
     <description>Backend de Janery: caja de ahorro y credito</description>
 
     <properties>
         <java.version>21</java.version>
+        <!-- Desde el JDK 23 javac no ejecuta Lombok si no se pide: así compila igual con cualquier JDK. -->
+        <maven.compiler.proc>full</maven.compiler.proc>
     </properties>
 
     <dependencies>

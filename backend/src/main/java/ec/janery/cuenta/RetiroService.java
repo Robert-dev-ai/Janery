@@ -67,6 +67,12 @@ public class RetiroService {
         private Long resueltaPor;
         private Instant creadoEn;
         private Instant resueltaEn;
+        /** Lo que cobra el banco por transferir a otra entidad; se aparta y se entrega junto con el importe. */
+        private BigDecimal costo;
+
+        BigDecimal total() {
+            return importe.add(costo);
+        }
     }
 
     interface SolicitudRepository extends JpaRepository<SolicitudRetiro, Long> {
@@ -90,7 +96,7 @@ public class RetiroService {
     }
 
     public record Vista(Long id, String numeroCuenta, String titular, BigDecimal importe, String medio, DatosBanco banco,
-            String estado, String motivo, String referencia, Instant fecha, Instant resueltaEn) {
+            String estado, String motivo, String referencia, Instant fecha, Instant resueltaEn, BigDecimal costo, String codigo) {
     }
 
     private static final String MODULO = "CUENTA";
@@ -103,6 +109,7 @@ public class RetiroService {
     private final CuentaService.CuentaRepository cuentasRepo;
     private final PersonaService personas;
     private final CajaService caja;
+    private final ec.janery.parametros.ParametroService parametros;
     private final AuditoriaService auditoria;
     private final Clock reloj;
 
@@ -119,12 +126,16 @@ public class RetiroService {
             }
             return vista(s);
         }
-        Long operacion = cuentas.crearOperacionInterna("RETIRO_RESERVADO", importe, null, usuarioId);
-        cuentas.mover(cuenta, operacion, SALIDA, importe, "RETIRO_SOLICITADO");
         boolean aBanco = "TRANSFERENCIA".equals(medio);
+        BigDecimal costo = aBanco && !sinCosto(banco.banco())
+                ? parametros.valorVigente("COSTO_TRANSFERENCIA_OTROS").setScale(2, java.math.RoundingMode.HALF_UP)
+                : BigDecimal.ZERO.setScale(2);
+        Long operacion = cuentas.crearOperacionInterna("RETIRO_RESERVADO", importe.add(costo), null, usuarioId);
+        cuentas.mover(cuenta, operacion, SALIDA, importe.add(costo), "RETIRO_SOLICITADO");
         SolicitudRetiro s = solicitudes.save(new SolicitudRetiro(null, cuenta.getId(), personaId, importe, medio,
                 aBanco ? banco.banco() : null, aBanco ? banco.tipoCuenta() : null, aBanco ? banco.numeroCuenta() : null,
-                aBanco ? banco.titularCuenta() : null, PENDIENTE, null, null, clave, operacion, null, Instant.now(reloj), null));
+                aBanco ? banco.titularCuenta() : null, PENDIENTE, null, null, clave, operacion, null, Instant.now(reloj), null,
+                costo));
         auditoria.registrar(usuarioId, "RETIRO_SOLICITADO", MODULO, "solicitud_retiro", s.getId(), null, importe.toPlainString(), medio);
         return vista(s);
     }
@@ -154,11 +165,12 @@ public class RetiroService {
         cuentas.cuentaActivaBloqueada(personaDeSolicitud(id));
         SolicitudRetiro s = bloquear(id);
         exigirPendiente(s);
-        if (caja.saldoBloqueado(CajaService.PRINCIPAL).compareTo(s.getImporte()) < 0) {
+        if (caja.saldoBloqueado(CajaService.PRINCIPAL).compareTo(s.total()) < 0) {
             throw NegocioException.conflicto("CAJA_INSUFICIENTE", "La caja principal no tiene dinero suficiente para esta entrega");
         }
-        Long operacion = cuentas.crearOperacionExterna("RETIRO", s.getImporte(), s.getMedio(), referencia, null, actorId);
-        caja.registrarEnPrincipal(operacion, SALIDA, s.getImporte(), "RETIRO_CUENTA");
+        // El banco descuenta su costo de la cuenta de Janery: sale de la caja junto con el importe.
+        Long operacion = cuentas.crearOperacionExterna("RETIRO", s.total(), s.getMedio(), referencia, null, actorId);
+        caja.registrarEnPrincipal(operacion, SALIDA, s.total(), "RETIRO_CUENTA");
         s.setEstado("ENTREGADA");
         s.setReferencia(referencia);
         resolver(s, actorId);
@@ -178,11 +190,17 @@ public class RetiroService {
 
     private void liberar(CuentaPrincipal cuenta, SolicitudRetiro s, String estado, String motivo, Long actorId) {
         exigirPendiente(s);
-        Long operacion = cuentas.crearOperacionInterna("RETIRO_LIBERADO", s.getImporte(), null, actorId);
-        cuentas.mover(cuenta, operacion, ENTRADA, s.getImporte(), "RETIRO_DEVUELTO");
+        Long operacion = cuentas.crearOperacionInterna("RETIRO_LIBERADO", s.total(), null, actorId);
+        cuentas.mover(cuenta, operacion, ENTRADA, s.total(), "RETIRO_DEVUELTO");
         s.setEstado(estado);
         s.setMotivo(motivo);
         resolver(s, actorId);
+    }
+
+    /** Decisión del propietario: Janery tiene cuenta en estos bancos; a ellos la transferencia no cuesta. */
+    static boolean sinCosto(String banco) {
+        String nombre = banco == null ? "" : banco.toLowerCase(java.util.Locale.ROOT);
+        return nombre.contains("pichincha") || nombre.contains("guayaquil");
     }
 
     private void resolver(SolicitudRetiro s, Long actorId) {
@@ -215,7 +233,8 @@ public class RetiroService {
                 : new DatosBanco(s.getBanco(), s.getTipoCuenta(), s.getNumeroCuenta(), s.getTitularCuenta());
         String numero = cuentasRepo.findById(s.getCuentaId()).map(CuentaPrincipal::getNumero).orElse(null);
         return new Vista(s.getId(), numero, personas.nombreCompleto(s.getPersonaId()), s.getImporte(), s.getMedio(), banco,
-                s.getEstado(), s.getMotivo(), s.getReferencia(), s.getCreadoEn(), s.getResueltaEn());
+                s.getEstado(), s.getMotivo(), s.getReferencia(), s.getCreadoEn(), s.getResueltaEn(), s.getCosto(),
+                ec.janery.common.Codigos.retiro(s.getId()));
     }
 
     /** Con saldo cero en la cuenta aún puede haber dinero apartado: se resuelve antes de cerrar. */

@@ -15,14 +15,15 @@ import lombok.RequiredArgsConstructor;
 
 @RestController
 @RequestMapping("/api/v1/tesoreria")
-@PreAuthorize("hasAuthority('SCOPE_CONSULTAR_CAJA')")
+@PreAuthorize("hasAnyAuthority('SCOPE_CONSULTAR_CAJA', 'SCOPE_SOCIO')")
 @RequiredArgsConstructor
 public class TesoreriaController {
 
-    public record MovimientoResponse(Long id, String sentido, BigDecimal importe, String concepto, Instant fecha) {
+    public record MovimientoResponse(Long id, String sentido, BigDecimal importe, String concepto, Instant fecha, String quien) {
     }
 
-    public record TesoreriaResponse(BigDecimal saldo, String moneda, Pagina<MovimientoResponse> movimientos) {
+    public record TesoreriaResponse(BigDecimal saldo, String moneda, Pagina<MovimientoResponse> movimientos,
+            java.util.List<CajaService.MesVariacion> meses) {
     }
 
     public record EstadoResponse(EstadoCajaService.EstadoCaja caja, ParticipacionService.EnEsperaVista enEspera) {
@@ -40,9 +41,10 @@ public class TesoreriaController {
     @GetMapping
     public TesoreriaResponse consultar(@RequestParam(defaultValue = "0") int pagina,
             @RequestParam(defaultValue = "20") int tamano) {
+        var movimientos = service.movimientosPrincipal(Math.max(pagina, 0), Pagina.limitar(tamano));
+        var quienes = service.quienes(movimientos.getContent());
         return new TesoreriaResponse(service.saldoPrincipal(), "USD",
-                Pagina.de(service.movimientosPrincipal(Math.max(pagina, 0), Pagina.limitar(tamano)),
-                        m -> new MovimientoResponse(m.getId(), m.getSentido(), m.getImporte(), m.getConcepto(),
-                                m.getCreadoEn())));
+                Pagina.de(movimientos, m -> new MovimientoResponse(m.getId(), m.getSentido(), m.getImporte(), m.getConcepto(),
+                        m.getCreadoEn(), quienes.get(m.getId()))), service.variacionMensualPrincipal());
     }
 }

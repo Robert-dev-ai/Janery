@@ -86,6 +86,7 @@ public class CuentaService {
     private final CajaService caja;
     private final AuditoriaService auditoria;
     private final Clock reloj;
+    private final ComprobanteService comprobantes;
     private final List<RestriccionCierre> restricciones;
     private final JdbcClient jdbc;
     private final org.springframework.context.ApplicationEventPublisher eventos;
@@ -112,6 +113,7 @@ public class CuentaService {
     public CuentaVista confirmarApertura(Long actorId, Long cuentaId) {
         CuentaPrincipal cuenta = bloquear(cuentaId);
         exigirEstado(cuenta, CuentaPrincipal.PENDIENTE_PAGO, "La cuenta no tiene una apertura pendiente");
+        comprobantes.exigirSiTransferencia(ComprobanteService.APERTURA, cuentaId, cuenta.getMetodoPago());
 
         BigDecimal total = dinero(parametros.valorVigente("APERTURA_TOTAL"));
         BigDecimal ingreso = dinero(parametros.valorVigente("APERTURA_INGRESO"));

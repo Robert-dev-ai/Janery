@@ -81,7 +81,7 @@ class TiempoRealIntegrationTest {
     }
 
     private static String identificacion() {
-        return UUID.randomUUID().toString().substring(0, 18);
+        return String.valueOf(java.util.concurrent.ThreadLocalRandom.current().nextLong(1_000_000_000L, 10_000_000_000L));
     }
 
     private String registrar() throws Exception {

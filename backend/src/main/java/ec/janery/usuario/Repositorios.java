@@ -54,6 +54,15 @@ final class Repositorios {
                 @Param("ahora") Instant ahora);
     }
 
+    interface RestablecimientoRepository extends JpaRepository<SolicitudRestablecimiento, Long> {
+        boolean existsByUsuarioIdAndEstado(Long usuarioId, String estado);
+
+        List<SolicitudRestablecimiento> findByUsuarioIdAndEstado(Long usuarioId, String estado);
+
+        @Query("select s.usuarioId from SolicitudRestablecimiento s where s.estado = 'PENDIENTE'")
+        java.util.Set<Long> usuariosPendientes();
+    }
+
     interface UsuarioCargoRepository extends JpaRepository<UsuarioCargo, Long> {
         Optional<UsuarioCargo> findByUsuarioIdAndCargoIdAndHastaIsNull(Long usuarioId, Long cargoId);
     }

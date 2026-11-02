@@ -50,14 +50,16 @@ public class ContabilidadService {
     public record MesResultado(String periodo, BigDecimal ganancias, BigDecimal gastos, BigDecimal resultado) {
     }
 
+    /** sube y baja: lo que la línea aumentó o disminuyó, en palabras simples. quien: de quién es el movimiento. */
     public record FilaLibro(Instant fecha, Long operacionId, String linea, String nombre, String concepto, BigDecimal debe,
-            BigDecimal haber, BigDecimal saldo) {
+            BigDecimal haber, BigDecimal saldo, BigDecimal sube, BigDecimal baja, String quien, BigDecimal cajaDespues) {
     }
 
     public record Mayor(String linea, String nombre, BigDecimal saldoInicial, BigDecimal saldoFinal, Pagina<FilaLibro> movimientos) {
     }
 
-    public record Diario(BigDecimal totalDebe, BigDecimal totalHaber, Pagina<FilaLibro> movimientos) {
+    public record Diario(BigDecimal totalDebe, BigDecimal totalHaber, Pagina<FilaLibro> movimientos, BigDecimal entradasCaja,
+            BigDecimal salidasCaja, BigDecimal saldoCaja) {
     }
 
     public record LineaManual(String codigo, String nombre, boolean admiteDisminuir) {
@@ -70,6 +72,9 @@ public class ContabilidadService {
     private static final ZoneId ZONA = ZoneId.of("America/Guayaquil");
     private static final BigDecimal CERO = BigDecimal.ZERO.setScale(2);
     private static final BigDecimal CIEN = BigDecimal.valueOf(100);
+    /** Nombre corto de la persona de la operación de cada fila: «Ana Paz». Null si no es de una persona. */
+    private static final String QUIEN = "(SELECT " + ec.janery.auditoria.HistorialSql.nombreCorto("qp")
+            + " FROM personas qp WHERE qp.id = persona_de_operacion(operacion_id))";
     private static final String SALDO_LINEAS = "SELECT linea, SUM(importe) AS total FROM libro_contable WHERE fecha >= :desde AND fecha < :hasta GROUP BY linea";
 
     private static final Map<String, String> GANANCIAS = lineas("4.1", "Intereses ganados en créditos", "4.2", "Interés de mora cobradas",
@@ -149,20 +154,34 @@ public class ContabilidadService {
         Timestamp hasta = inicio(periodo.plusMonths(1));
         long total = jdbc.sql("SELECT COUNT(*) FROM libro_contable WHERE fecha >= :desde AND fecha < :hasta")
                 .param("desde", desde).param("hasta", hasta).query(Long.class).single();
+        // caja_despues: en cada movimiento de la caja (línea 1.1), lo que queda en ella después, contando toda la historia.
         List<FilaLibro> filas = jdbc.sql("""
-                SELECT fecha, operacion_id, linea, concepto, importe FROM libro_contable
-                WHERE fecha >= :desde AND fecha < :hasta ORDER BY fecha DESC, operacion_id DESC NULLS LAST, linea
+                SELECT t.*, %s AS quien FROM (
+                    SELECT fecha, operacion_id, linea, concepto, importe,
+                           CASE WHEN linea = '1.1' THEN SUM(CASE WHEN linea = '1.1' THEN importe ELSE 0 END)
+                                OVER (ORDER BY fecha, operacion_id NULLS FIRST, linea, concepto, importe ROWS UNBOUNDED PRECEDING) END AS caja_despues
+                    FROM libro_contable WHERE fecha < :hasta
+                ) t WHERE fecha >= :desde ORDER BY fecha DESC, operacion_id DESC NULLS LAST, linea DESC, concepto DESC, importe DESC
                 LIMIT :limite OFFSET :salto
-                """).param("desde", desde).param("hasta", hasta).param("limite", tamano).param("salto", pagina * tamano)
+                """.formatted(QUIEN)).param("desde", desde).param("hasta", hasta).param("limite", tamano).param("salto", pagina * tamano)
                 .query((rs, n) -> fila(rs.getTimestamp("fecha").toInstant(), rs.getObject("operacion_id", Long.class), rs.getString("linea"),
-                        rs.getString("concepto"), rs.getBigDecimal("importe"), null)).list();
+                        rs.getString("concepto"), rs.getBigDecimal("importe"), null, rs.getString("quien"), rs.getBigDecimal("caja_despues")))
+                .list();
         List<BigDecimal> totales = jdbc.sql("""
                 SELECT COALESCE(SUM(CASE WHEN (left(linea, 1) IN ('1', '5')) = (importe > 0) THEN ABS(importe) ELSE 0 END), 0) AS debe,
                        COALESCE(SUM(CASE WHEN (left(linea, 1) IN ('1', '5')) = (importe > 0) THEN 0 ELSE ABS(importe) END), 0) AS haber
                 FROM libro_contable WHERE fecha >= :desde AND fecha < :hasta
                 """).param("desde", desde).param("hasta", hasta)
                 .query((rs, n) -> List.of(rs.getBigDecimal("debe"), rs.getBigDecimal("haber"))).single();
-        return new Diario(totales.get(0), totales.get(1), new Pagina<>(filas, pagina, tamano, total));
+        List<BigDecimal> caja = jdbc.sql("""
+                SELECT COALESCE(SUM(importe) FILTER (WHERE importe > 0), 0) AS entra, COALESCE(-SUM(importe) FILTER (WHERE importe < 0), 0) AS sale
+                FROM libro_contable WHERE linea = '1.1' AND fecha >= :desde AND fecha < :hasta
+                """).param("desde", desde).param("hasta", hasta)
+                .query((rs, n) -> List.of(rs.getBigDecimal("entra"), rs.getBigDecimal("sale"))).single();
+        BigDecimal saldoCaja = jdbc.sql("SELECT COALESCE(SUM(importe), 0) FROM libro_contable WHERE linea = '1.1'")
+                .query(BigDecimal.class).single();
+        return new Diario(totales.get(0), totales.get(1), new Pagina<>(filas, pagina, tamano, total), caja.get(0), caja.get(1),
+                saldoCaja);
     }
 
     @Transactional(readOnly = true)
@@ -178,14 +197,14 @@ public class ContabilidadService {
         long total = jdbc.sql("SELECT COUNT(*) FROM libro_contable WHERE linea = :linea AND fecha >= :desde AND fecha < :hasta")
                 .param("linea", linea).param("desde", desde).param("hasta", hasta).query(Long.class).single();
         List<FilaLibro> filas = jdbc.sql("""
-                SELECT * FROM (
+                SELECT t.*, %s AS quien FROM (
                     SELECT fecha, operacion_id, linea, concepto, importe,
                            SUM(importe) OVER (ORDER BY fecha, operacion_id NULLS FIRST, concepto) AS saldo
                     FROM libro_contable WHERE linea = :linea AND fecha < :hasta
                 ) t WHERE fecha >= :desde ORDER BY fecha DESC, operacion_id DESC NULLS LAST LIMIT :limite OFFSET :salto
-                """).param("linea", linea).param("desde", desde).param("hasta", hasta).param("limite", tamano).param("salto", pagina * tamano)
+                """.formatted(QUIEN)).param("linea", linea).param("desde", desde).param("hasta", hasta).param("limite", tamano).param("salto", pagina * tamano)
                 .query((rs, n) -> fila(rs.getTimestamp("fecha").toInstant(), rs.getObject("operacion_id", Long.class), rs.getString("linea"),
-                        rs.getString("concepto"), rs.getBigDecimal("importe"), rs.getBigDecimal("saldo"))).list();
+                        rs.getString("concepto"), rs.getBigDecimal("importe"), rs.getBigDecimal("saldo"), rs.getString("quien"), null)).list();
         return new Mayor(linea, nombre, inicial, inicial.add(enPeriodo), new Pagina<>(filas, pagina, tamano, total));
     }
 
@@ -339,10 +358,13 @@ public class ContabilidadService {
         return base.signum() == 0 ? null : parte.multiply(CIEN).divide(base, 2, RoundingMode.HALF_UP);
     }
 
-    private FilaLibro fila(Instant fecha, Long operacion, String linea, String concepto, BigDecimal importe, BigDecimal saldo) {
+    private FilaLibro fila(Instant fecha, Long operacion, String linea, String concepto, BigDecimal importe, BigDecimal saldo,
+            String persona, BigDecimal cajaDespues) {
         boolean alDebe = (linea.startsWith("1") || linea.startsWith("5")) == (importe.signum() > 0);
         BigDecimal valor = importe.abs();
-        return new FilaLibro(fecha, operacion, linea, nombreLinea(linea), concepto, alDebe ? valor : CERO, alDebe ? CERO : valor, saldo);
+        return new FilaLibro(fecha, operacion, linea, nombreLinea(linea), concepto, alDebe ? valor : CERO, alDebe ? CERO : valor, saldo,
+                importe.signum() > 0 ? valor : CERO, importe.signum() < 0 ? valor : CERO, ec.janery.common.Quien.de(persona, concepto, linea),
+                cajaDespues);
     }
 
     private Map<String, BigDecimal> sumas(Timestamp desde, Timestamp hasta) {

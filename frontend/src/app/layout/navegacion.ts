@@ -1,7 +1,7 @@
 import {
-  ArrowLeftRight, Banknote, BanknoteArrowDown, BookOpen, Briefcase, CalendarDays, ChartPie, ClipboardList, Coins, Contact, FilePenLine, FileText, HandCoins, History,
+  ArrowLeftRight, Banknote, BanknoteArrowDown, BookOpen, Briefcase, CalendarDays, ChartColumn, ChartPie, FlaskConical, ClipboardList, Coins, Contact, FilePenLine, FileText, HandCoins, History,
   Landmark, LayoutDashboard, Library, ListChecks, Lock, LucideIconData, PiggyBank, Receipt, Scale, ShieldCheck, SlidersHorizontal,
-  TrendingUp, UserCog, Users, Vault, Wallet,
+  TrendingUp, UserCog, UserPlus, Users, Vault, Wallet,
 } from 'lucide-angular';
 
 import { Yo } from '../core/auth/auth';
@@ -28,6 +28,7 @@ const INFORMES = '/admin/reportes';
 const informe = (titulo: string, codigo: string, icono: LucideIconData): EnlaceMenu =>
   ({ titulo, ruta: INFORMES, icono, informe: codigo, visible: conPermiso('CONSULTAR_INFORMES') });
 const cuentaActiva = (yo: Yo) => yo.estadoCuenta === 'ACTIVA';
+const esSocio = (yo: Yo) => cuentaActiva(yo) && yo.esSocio;
 
 /** Solo módulos que ya existen: lo que aún no tiene pantalla no aparece. */
 const ADMIN: GrupoMenu[] = [
@@ -86,6 +87,8 @@ const ADMIN: GrupoMenu[] = [
   {
     titulo: 'Administración',
     enlaces: [
+      { titulo: 'Uso de la aplicación', ruta: '/admin/uso', icono: ChartColumn, visible: conPermiso('VER_USO_APP') },
+      { titulo: 'Simulador', ruta: '/admin/simulador', icono: FlaskConical, visible: conPermiso('USAR_SIMULADOR') },
       { titulo: 'Parámetros', ruta: '/admin/parametros', icono: SlidersHorizontal, visible: conPermiso('ADMIN_PARAMETROS') },
       { titulo: 'Mis áreas y cargos', ruta: '/areas', icono: Briefcase, exacto: true, visible: (yo) => yo.cargos.length > 0 },
     ],
@@ -104,11 +107,10 @@ const PORTAL: GrupoMenu[] = [
     titulo: 'Mis productos',
     enlaces: [
       { titulo: 'Mi cuenta', ruta: '/app/cuenta', icono: Wallet, visible: cuentaActiva },
-      { titulo: 'Depositar dinero', ruta: '/app/depositos', icono: BanknoteArrowDown, sub: true, visible: cuentaActiva },
-      { titulo: 'Retirar dinero', ruta: '/app/retiros', icono: Banknote, sub: true, visible: cuentaActiva },
       { titulo: 'Ahorros', ruta: '/app/ahorros', icono: PiggyBank, visible: cuentaActiva },
       { titulo: 'Créditos y cuotas', ruta: '/app/creditos', icono: HandCoins, visible: cuentaActiva },
-      { titulo: 'Fondo y aportes', ruta: '/app/inversiones', icono: TrendingUp, visible: (yo) => cuentaActiva(yo) && yo.esSocio },
+      { titulo: 'Fondo y aportes', ruta: '/app/inversiones', icono: TrendingUp, visible: esSocio },
+      { titulo: 'Convertirse en socio', ruta: '/app/hacerme-socio', icono: UserPlus, visible: (yo) => cuentaActiva(yo) && !yo.esSocio },
     ],
   },
   {
@@ -117,7 +119,15 @@ const PORTAL: GrupoMenu[] = [
   },
   {
     titulo: 'Área de socios',
-    enlaces: [{ titulo: 'Estado general', ruta: '/app/socios/general', icono: Users, visible: (yo) => cuentaActiva(yo) && yo.esSocio }],
+    enlaces: [
+      { titulo: 'Estado general', ruta: '/app/socios/general', icono: Users, visible: esSocio },
+      { titulo: 'Balance general', ruta: '/app/socios/balance', icono: Scale, visible: esSocio },
+      { titulo: 'Libro diario', ruta: '/app/socios/diario', icono: BookOpen, visible: esSocio },
+      { titulo: 'Tesorería', ruta: '/app/socios/tesoreria', icono: Landmark, visible: esSocio },
+      { titulo: 'Estado de caja', ruta: '/app/socios/estado-caja', icono: ChartPie, visible: esSocio },
+      { titulo: 'Caja chica', ruta: '/app/socios/caja-chica', icono: Receipt, visible: esSocio },
+      { titulo: 'Resultados', ruta: '/app/socios/resultados', icono: TrendingUp, visible: esSocio },
+    ],
   },
   {
     titulo: 'Mis cargos',
@@ -136,3 +146,30 @@ function filtrar(grupos: GrupoMenu[], yo: Yo | null): GrupoMenu[] {
 
 export const menuAdmin = (yo: Yo | null): GrupoMenu[] => filtrar(ADMIN, yo);
 export const menuPortal = (yo: Yo | null): GrupoMenu[] => filtrar(PORTAL, yo);
+
+const OTRAS: Record<string, string> = {
+  '/': 'Página de inicio',
+  '/informacion': 'Información pública',
+  '/iniciar-sesion': 'Iniciar sesión',
+  '/registro': 'Registro',
+  '/activar-cuenta': 'Activar cuenta',
+  '/configuracion/perfil': 'Perfil',
+  '/configuracion/contrasena': 'Cambiar contraseña',
+  '/configuracion/sesiones': 'Sesiones',
+  '/app/depositos': 'Depositar dinero',
+  '/app/retiros': 'Retirar dinero',
+  '/areas': 'Mis áreas y cargos',
+};
+
+/** Nombre legible de una ruta anotada en el uso de la aplicación (ver UsoService). */
+export function tituloDeRuta(ruta: string): string {
+  for (const grupo of [...ADMIN, ...PORTAL]) {
+    for (const e of grupo.enlaces) {
+      const destino = e.informe ? `${e.ruta}/${e.informe.toLowerCase()}` : e.ruta;
+      if (destino === ruta) {
+        return e.informe ? `${e.titulo} (informe)` : `${e.titulo}${grupo.titulo === 'Área de socios' ? ' (socios)' : ''}`;
+      }
+    }
+  }
+  return OTRAS[ruta] ?? ruta;
+}

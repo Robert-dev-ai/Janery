@@ -57,6 +57,10 @@ public class PersonaService {
     public Persona actualizarDatosCredito(Long usuarioId, PersonaController.DatosCreditoRequest r) {
         Persona persona = repository.findByUsuarioId(usuarioId)
                 .orElseThrow(() -> NegocioException.noEncontrado("Perfil no completado"));
+        if (r.fechaNacimiento().isAfter(java.time.LocalDate.now(reloj).minusYears(18))) {
+            throw new NegocioException(org.springframework.http.HttpStatus.BAD_REQUEST, "MENOR_DE_EDAD",
+                    "Debe ser mayor de edad: revise su fecha de nacimiento");
+        }
         persona.actualizarDatosCredito(r);
         auditoria.registrar(usuarioId, "DATOS_CREDITO_ACTUALIZADOS", "PERSONA", "persona", persona.getId(), null, null, null);
         return persona;

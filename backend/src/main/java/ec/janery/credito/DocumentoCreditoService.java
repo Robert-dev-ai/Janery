@@ -66,6 +66,9 @@ public class DocumentoCreditoService {
         List<DocumentoVista> delCredito(@Param("creditoId") Long creditoId);
 
         long countByCreditoId(Long creditoId);
+
+        @Query("select d.creditoId, count(d) from DocumentoCredito d where d.creditoId in :ids group by d.creditoId")
+        List<Object[]> contarPorCredito(@Param("ids") java.util.Collection<Long> ids);
     }
 
     private static final long MAX_BYTES = 10L * 1024 * 1024;
@@ -81,7 +84,18 @@ public class DocumentoCreditoService {
     /** Todo o nada: si un archivo no es válido, no se guarda ninguno. */
     @Transactional
     public List<DocumentoVista> subir(Long usuarioId, Long creditoId, List<MultipartFile> archivos) {
-        Credito c = propio(usuarioId, creditoId);
+        return guardar(usuarioId, propio(usuarioId, creditoId), archivos);
+    }
+
+    /** Tesorería sube la solicitud firmada que la persona entregó en papel. */
+    @Transactional
+    public List<DocumentoVista> subirPorPersonal(Long actorId, Long creditoId, List<MultipartFile> archivos) {
+        return guardar(actorId, creditos.findById(creditoId).orElseThrow(() -> NegocioException.noEncontrado("Crédito no encontrado")),
+                archivos);
+    }
+
+    private List<DocumentoVista> guardar(Long usuarioId, Credito c, List<MultipartFile> archivos) {
+        Long creditoId = c.getId();
         if (!"SOLICITADO".equals(c.getEstado()) && !"ACTIVO".equals(c.getEstado())) {
             throw NegocioException.conflicto("ESTADO_INVALIDO", "Este crédito ya no admite documentos");
         }

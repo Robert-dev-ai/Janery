@@ -1,11 +1,13 @@
 import { CurrencyPipe, DatePipe, DecimalPipe } from '@angular/common';
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
+import { Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { forkJoin, Observable } from 'rxjs';
 
 import { Aporte, ApiService, PeriodoParticipacion, ResumenSocio } from '../../core/services/api';
 import { alCambiar } from '../../core/services/tiempo-real';
-import { mensajeDeError } from '../../shared/utils/errores';
+import { llevarADepositarSiFaltaSaldo, mensajeDeError } from '../../shared/utils/errores';
+import { PagoMeses } from './pago-meses';
 
 const TIPOS: Record<string, string> = {
   APORTE_INICIAL: 'Aporte inicial',
@@ -23,7 +25,7 @@ const TIPOS: Record<string, string> = {
 
 @Component({
   selector: 'app-inversiones',
-  imports: [CurrencyPipe, DatePipe, DecimalPipe, FormsModule],
+  imports: [CurrencyPipe, DatePipe, DecimalPipe, FormsModule, PagoMeses],
   template: `
     <h1>Mi fondo personal</h1>
     @if (error()) { <p class="error" role="alert">{{ error() }}</p> }
@@ -79,11 +81,8 @@ const TIPOS: Record<string, string> = {
         <section class="tarjeta">
           <h2>Aportes mensuales</h2>
           <p class="importe">{{ r.totalObligatorio | currency: 'USD' }}</p>
-          @if (r.obligatorioDelMesPagado) {
-            <p class="suave">{{ r.periodoActual }} pagado.</p>
-          } @else {
-            <button type="button" (click)="obligatorio()">Pagar {{ r.periodoActual }}: {{ r.aporteObligatorio | currency: 'USD' }}</button>
-          }
+          <p class="suave">{{ r.aporteObligatorio | currency: 'USD' }} cada mes. Puede pagar varios meses, o todo el año, de una vez.</p>
+          <app-pago-meses tipo="OBLIGATORIO" [importe]="r.aporteObligatorio" (pagadoAhora)="pagado($event)" />
         </section>
         <section class="tarjeta">
           <h2>Aportes personales</h2>
@@ -98,12 +97,8 @@ const TIPOS: Record<string, string> = {
         <section class="tarjeta">
           <h2>Caja chica</h2>
           <p class="importe">{{ r.totalCajaChica | currency: 'USD' }}</p>
-          <p class="suave">Fondo aparte: no aumenta su participación.</p>
-          @if (r.cajaChicaDelMesPagado) {
-            <p class="suave">{{ r.periodoActual }} pagado.</p>
-          } @else {
-            <button type="button" (click)="cajaChica()">Pagar {{ r.periodoActual }}: {{ r.aporteCajaChica | currency: 'USD' }}</button>
-          }
+          <p class="suave">Fondo aparte: no aumenta su participación. {{ r.aporteCajaChica | currency: 'USD' }} cada mes.</p>
+          <app-pago-meses tipo="CAJA_CHICA" [importe]="r.aporteCajaChica" (pagadoAhora)="pagado($event)" />
         </section>
       </div>
     } @else if (!error()) {
@@ -159,6 +154,7 @@ const TIPOS: Record<string, string> = {
 })
 export class Inversiones implements OnInit {
   private readonly api = inject(ApiService);
+  private readonly router = inject(Router);
 
   protected readonly resumen = signal<ResumenSocio | null>(null);
   protected readonly periodos = signal<PeriodoParticipacion[]>([]);
@@ -196,18 +192,16 @@ export class Inversiones implements OnInit {
     });
   }
 
-  protected obligatorio(): void {
-    this.ejecutar(this.api.aportar('OBLIGATORIO', null, this.clave), 'Aporte mensual registrado.');
+  protected pagado(aviso: string): void {
+    this.error.set(null);
+    this.aviso.set(aviso);
+    this.cargar();
   }
 
   protected personal(): void {
     this.ejecutar(this.api.aportar('PERSONAL', this.importe, this.clave), 'Aporte personal registrado.', () => {
       this.importe = null;
     });
-  }
-
-  protected cajaChica(): void {
-    this.ejecutar(this.api.aportarCajaChica(this.clave), 'Aporte a caja chica registrado.');
   }
 
   private ejecutar(accion: Observable<unknown>, aviso: string, alTerminar?: () => void): void {
@@ -220,7 +214,11 @@ export class Inversiones implements OnInit {
         alTerminar?.();
         this.cargar();
       },
-      error: (e) => this.error.set(mensajeDeError(e)),
+      error: (e) => {
+        if (!llevarADepositarSiFaltaSaldo(e, this.router, 'este aporte')) {
+          this.error.set(mensajeDeError(e));
+        }
+      },
     });
   }
 

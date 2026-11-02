@@ -74,11 +74,12 @@ class SociosIntegrationTest {
     }
 
     @Test
-    void periodosDeAporteAtrasadosSiFuturosNo() throws Exception {
+    void periodosDeAporteAtrasadosYDelAnioSiDelSiguienteNo() throws Exception {
         Persona p = socio("100.00");
         YearMonth actual = YearMonth.now(ZoneId.of("America/Guayaquil"));
         aportar(p, "{\"tipo\":\"OBLIGATORIO\",\"periodo\":\"" + actual.minusMonths(1) + "\"}").andExpect(status().isOk());
-        aportar(p, "{\"tipo\":\"OBLIGATORIO\",\"periodo\":\"" + actual.plusMonths(1) + "\"}")
+        aportar(p, "{\"tipo\":\"OBLIGATORIO\",\"periodo\":\"" + YearMonth.of(actual.getYear(), 12) + "\"}").andExpect(status().isOk());
+        aportar(p, "{\"tipo\":\"OBLIGATORIO\",\"periodo\":\"" + YearMonth.of(actual.getYear() + 1, 1) + "\"}")
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.codigo").value("PERIODO_FUTURO"));
         aportar(p, "{\"tipo\":\"OBLIGATORIO\",\"periodo\":\"mal\"}")
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.codigo").value("PERIODO_INVALIDO"));
@@ -633,7 +634,7 @@ class SociosIntegrationTest {
         mvc.perform(post("/api/v1/personas/perfil").header(HttpHeaders.AUTHORIZATION, bearer(token))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json.writeValueAsString(Map.of("nombres", "Ana", "apellidos", "Prueba",
-                                "identificacion", UUID.randomUUID().toString().substring(0, 18),
+                                "identificacion", String.valueOf(java.util.concurrent.ThreadLocalRandom.current().nextLong(1_000_000_000L, 10_000_000_000L)),
                                 "telefono", "0990000000", "direccion", "Quito"))))
                 .andExpect(status().isCreated());
         String r = mvc.perform(post("/api/v1/cuentas-principales/apertura").header(HttpHeaders.AUTHORIZATION, bearer(token))

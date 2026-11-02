@@ -54,13 +54,15 @@ public class ReporteService {
     private static String caja(String codigo) {
         return """
                 SELECT to_char(m.creado_en AT TIME ZONE 'America/Guayaquil', 'YYYY-MM-DD HH24:MI') AS "Fecha",
+                       COALESCE((SELECT %2$s FROM personas p WHERE p.id = persona_de_operacion(m.operacion_id)),
+                                CASE WHEN m.concepto LIKE '%%RESERVA%%' OR m.concepto LIKE 'APORTE%%' THEN 'Socios' ELSE 'Janery' END) AS "De quién",
                        m.concepto AS "Concepto", m.detalle AS "Detalle", m.sentido AS "Sentido", m.importe AS "Importe",
                        SUM(CASE WHEN m.sentido = 'ENTRADA' THEN m.importe ELSE -m.importe END) OVER (ORDER BY m.id) AS "Saldo"
                 FROM movimientos_caja m JOIN cajas c ON c.id = m.caja_id
-                WHERE c.codigo = '%s'
+                WHERE c.codigo = '%1$s'
                   AND CAST(m.creado_en AT TIME ZONE 'America/Guayaquil' AS date) BETWEEN :desde AND :hasta
                 ORDER BY m.id
-                """.formatted(codigo);
+                """.formatted(codigo, ec.janery.auditoria.HistorialSql.nombreCorto("p"));
     }
 
     private static final List<Reporte> REPORTES = List.of(
@@ -78,7 +80,9 @@ public class ReporteService {
                     ORDER BY c.numero
                     """),
             new Reporte(new Definicion("CREDITOS", "Créditos", "Todos los créditos y su saldo", false), """
-                    SELECT p.nombres || ' ' || p.apellidos AS "Titular", c.familia AS "Familia", c.modalidad AS "Modalidad",
+                    SELECT CASE c.familia WHEN 'LETRAS' THEN 'CL-' WHEN 'EMERGENTE_CLIENTE' THEN 'CE-' WHEN 'EMERGENTE_SOCIO' THEN 'CS-'
+                                WHEN 'EMERGENTE_ESTACIONAL' THEN 'CP-' ELSE 'CR-' END || lpad(c.id::text, 5, '0') AS "Código",
+                           p.nombres || ' ' || p.apellidos AS "Titular", c.familia AS "Familia", c.modalidad AS "Modalidad",
                            c.perfil AS "Perfil", c.estado AS "Estado", c.importe AS "Importe", c.plazo_meses AS "Plazo (meses)",
                            c.tasa_interes AS "Tasa interés", c.tasa_desgravamen AS "Tasa desgravamen", c.unidad_tasa AS "Unidad",
                            c.capital_pendiente AS "Capital pendiente", c.fecha_inicio AS "Inicio"
@@ -108,7 +112,8 @@ public class ReporteService {
                     GROUP BY 1, 2 ORDER BY 1, 2
                     """),
             new Reporte(new Definicion("AHORROS", "Ahorros", "Ahorros normales y a plazo fijo", false), """
-                    SELECT p.nombres || ' ' || p.apellidos AS "Titular", a.tipo AS "Tipo", a.nombre AS "Nombre", a.estado AS "Estado",
+                    SELECT CASE WHEN a.tipo = 'PLAZO_FIJO' THEN 'PF-' ELSE 'AH-' END || lpad(a.id::text, 5, '0') AS "Código",
+                           p.nombres || ' ' || p.apellidos AS "Titular", a.tipo AS "Tipo", a.nombre AS "Nombre", a.estado AS "Estado",
                            a.saldo AS "Saldo", a.tasa_anual AS "Tasa anual", a.plazo_meses AS "Plazo (meses)", a.vence_en AS "Vence"
                     FROM cuentas_ahorro a JOIN personas p ON p.id = a.persona_id
                     ORDER BY a.id
@@ -171,16 +176,13 @@ public class ReporteService {
                            distribuido AS "A fondos personales"
                     FROM cierres_anuales ORDER BY anio
                     """),
-            new Reporte(new Definicion("ACTIVIDAD", "Actividad", "Acciones registradas, con el usuario y sus cargos actuales", true), """
-                    SELECT to_char(e.creado_en AT TIME ZONE 'America/Guayaquil', 'YYYY-MM-DD HH24:MI') AS "Fecha",
-                           u.correo AS "Usuario",
-                           (SELECT string_agg(c.codigo, ', ') FROM usuario_cargos uc JOIN cargos c ON c.id = uc.cargo_id
-                            WHERE uc.usuario_id = u.id AND uc.hasta IS NULL) AS "Cargos",
-                           e.modulo AS "Módulo", e.accion AS "Acción", e.entidad AS "Entidad", e.entidad_id AS "Id",
-                           e.antes AS "Antes", e.despues AS "Después", e.motivo AS "Motivo"
-                    FROM auditoria_eventos e LEFT JOIN usuarios u ON u.id = e.actor_id
+            // Sin entradas ni salidas de sesión: son de la auditoría, no operaciones.
+            new Reporte(new Definicion("ACTIVIDAD", "Historial de operaciones",
+                    "Quién hizo cada operación, con sus cargos, a quién afectó y el código del registro", true),
+                    "SELECT " + ec.janery.auditoria.HistorialSql.COLUMNAS + ec.janery.auditoria.HistorialSql.desde() + """
                     WHERE CAST(e.creado_en AT TIME ZONE 'America/Guayaquil' AS date) BETWEEN :desde AND :hasta
-                    ORDER BY e.id
+                      AND e.accion NOT IN ('LOGIN', 'LOGOUT', 'INFORME_EXPORTADO')
+                    ORDER BY e.id DESC
                     """));
 
     private static final Map<String, Reporte> POR_CODIGO =

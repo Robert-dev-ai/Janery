@@ -15,16 +15,16 @@ import { mensajeDeError } from '../../shared/utils/errores';
     @if (datos(); as d) {
       <div class="tabla">
         <table>
-          <thead><tr><th>Fecha</th><th>Usuario</th><th>Acción</th><th>Entidad</th><th>Antes</th><th>Después</th><th>Motivo</th></tr></thead>
+          <thead><tr><th>Fecha</th><th>Quién</th><th>Qué hizo</th><th>A quién</th><th>Código</th><th>Detalle</th><th>Motivo</th></tr></thead>
           <tbody>
             @for (e of d.contenido; track e.id) {
               <tr>
                 <td>{{ e.fecha | date: 'short' : 'America/Guayaquil' }}</td>
-                <td>{{ e.actorId ?? '—' }}</td>
-                <td>{{ e.accion }}</td>
-                <td>{{ e.entidad }} {{ e.entidadId }}</td>
-                <td>{{ e.antes }}</td>
-                <td>{{ e.despues }}</td>
+                <td>{{ e.quien ?? 'Sistema' }}@if (e.cargos) { <br /><small class="suave">{{ e.cargos }}</small> }</td>
+                <td>{{ e.descripcion }}</td>
+                <td>{{ e.afectado || '—' }}</td>
+                <td class="codigo">{{ e.codigo ?? '' }}</td>
+                <td>{{ detalle(e) }}</td>
                 <td>{{ e.motivo }}</td>
               </tr>
             }
@@ -47,6 +47,11 @@ export class AdminAuditoria implements OnInit {
 
   ngOnInit(): void {
     this.cargar(0);
+  }
+
+  /** Lo que cambió, de antes a después. */
+  protected detalle(e: EventoAuditoria): string {
+    return [e.antes, e.despues].filter((x) => x).join(' → ');
   }
 
   protected cargar(pagina: number): void {

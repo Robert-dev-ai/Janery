@@ -108,7 +108,7 @@ public class AhorroService {
 
     public record AhorroVista(Long id, String tipo, String nombre, String estado, BigDecimal saldo, BigDecimal tasaAnual,
             Integer plazoMeses, LocalDate venceEn, BigDecimal interesAlVencimiento, boolean retirable,
-            BigDecimal interesAcumulado, BigDecimal interesDisponible, LocalDate proximaLiberacion) {
+            BigDecimal interesAcumulado, BigDecimal interesDisponible, LocalDate proximaLiberacion, String codigo) {
     }
 
     public record PlazoVista(int meses, BigDecimal tasaAnual) {
@@ -287,6 +287,37 @@ public class AhorroService {
         return operacion;
     }
 
+    @Transactional
+    public AhorroVista renombrar(Long usuarioId, Long ahorroId, String nombre) {
+        CuentaAhorro a = propia(personaDe(usuarioId), ahorroId);
+        exigirActiva(a);
+        String antes = a.getNombre();
+        a.setNombre(nombre);
+        auditoria.registrar(usuarioId, "AHORRO_RENOMBRADO", MODULO, "ahorro", a.getId(), antes, nombre, null);
+        return vista(a);
+    }
+
+    /**
+     * Eliminar un ahorro normal es cerrarlo: antes hay que pasar su saldo y su interés liberado a la cuenta principal.
+     * El interés que aún corre se libera el día 1; si se cierra antes, ese interés no se paga.
+     */
+    @Transactional
+    public void eliminar(Long usuarioId, Long ahorroId) {
+        CuentaAhorro a = propia(personaDe(usuarioId), ahorroId);
+        exigirActiva(a);
+        if (!NORMAL.equals(a.getTipo())) {
+            throw NegocioException.conflicto("PLAZO_FIJO_VIGENTE", "Un plazo fijo se cierra solo al retirarlo cuando termina");
+        }
+        devengar(a);
+        if (a.getSaldo().signum() > 0 || a.getInteresDisponible().compareTo(new BigDecimal("0.01")) >= 0) {
+            throw NegocioException.conflicto("AHORRO_CON_SALDO",
+                    "Pase primero todo el dinero y el interés liberado de este ahorro a su cuenta principal");
+        }
+        a.setEstado("CERRADA");
+        a.setCerradaEn(Instant.now(reloj));
+        auditoria.registrar(usuarioId, "AHORRO_ELIMINADO", MODULO, "ahorro", a.getId(), ACTIVA, "CERRADA", null);
+    }
+
     /** Valida al solicitar el crédito que el encaje pueda salir de ese ahorro. */
     @Transactional(readOnly = true)
     public void exigirAhorroNormal(Long personaId, Long ahorroId) {
@@ -380,7 +411,7 @@ public class AhorroService {
         return new AhorroVista(a.getId(), a.getTipo(), a.getNombre(), a.getEstado(), a.getSaldo(), tasa, a.getPlazoMeses(),
                 a.getVenceEn(), plazo && ACTIVA.equals(a.getEstado()) ? interesPlazoFijo(a) : null, retirable,
                 interes.acumulado().setScale(2, RoundingMode.DOWN), interes.disponible().setScale(2, RoundingMode.DOWN),
-                plazo ? null : LocalDate.now(reloj).withDayOfMonth(1).plusMonths(1));
+                plazo ? null : LocalDate.now(reloj).withDayOfMonth(1).plusMonths(1), ec.janery.common.Codigos.ahorro(a.getTipo(), a.getId()));
     }
 
     private static BigDecimal interesPlazoFijo(CuentaAhorro a) {

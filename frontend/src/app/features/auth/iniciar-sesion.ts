@@ -3,11 +3,12 @@ import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angula
 import { Router, RouterLink } from '@angular/router';
 
 import { AuthService } from '../../core/auth/auth';
+import { VerClave } from '../../shared/components/ver-clave';
 import { mensajeDeError } from '../../shared/utils/errores';
 
 @Component({
   selector: 'app-iniciar-sesion',
-  imports: [ReactiveFormsModule, RouterLink],
+  imports: [ReactiveFormsModule, RouterLink, VerClave],
   template: `
     <div class="caja-acceso">
       <h1>Iniciar sesión</h1>
@@ -16,10 +17,11 @@ import { mensajeDeError } from '../../shared/utils/errores';
           <input formControlName="correo" autocomplete="username" />
         </label>
         <label>Contraseña
-          <input type="password" formControlName="contrasena" autocomplete="current-password" />
+          <input type="password" formControlName="contrasena" autocomplete="current-password" appVerClave />
         </label>
         @if (error()) { <p class="error" role="alert">{{ error() }}</p> }
         <button type="submit" [disabled]="form.invalid || enviando()">Entrar</button>
+        <p class="mt-3 mb-0 text-sm"><a routerLink="/recuperar-contrasena">¿Olvidó su contraseña?</a></p>
       </form>
       <p>¿Aún no tiene acceso? <a routerLink="/registro">Registrarse</a></p>
     </div>
@@ -40,7 +42,7 @@ export class IniciarSesion {
     const { correo, contrasena } = this.form.getRawValue();
     this.enviando.set(true);
     this.error.set(null);
-    this.auth.iniciarSesion(correo, contrasena).subscribe({
+    this.auth.iniciarSesion(correo.trim(), contrasena).subscribe({
       next: () => this.router.navigateByUrl(this.auth.rutaInicial()),
       error: (e) => {
         this.error.set(mensajeDeError(e));

@@ -9,6 +9,7 @@ import { Estado } from '../../shared/components/estado';
 import { Paginador } from '../../shared/components/paginador';
 import { DialogoService } from '../../shared/components/dialogo';
 import { mensajeDeError } from '../../shared/utils/errores';
+import { Comprobantes } from './comprobantes';
 
 interface Formulario {
   cuenta: Cuenta;
@@ -22,7 +23,7 @@ interface Formulario {
 
 @Component({
   selector: 'app-admin-cuentas',
-  imports: [CurrencyPipe, Estado, FormsModule, Paginador],
+  imports: [Comprobantes, CurrencyPipe, Estado, FormsModule, Paginador],
   template: `
     <h1>Cuentas</h1>
     <div class="herramientas">
@@ -74,7 +75,9 @@ interface Formulario {
                   <td>{{ c.numero }}</td>
                   <td>{{ c.titular }}</td>
                   <td><app-estado [valor]="c.estado" /></td>
-                  <td>{{ c.metodoPago }} {{ c.referenciaPago }}</td>
+                  <td>{{ c.metodoPago }} {{ c.referenciaPago }}
+                    @if (c.estado === 'PENDIENTE_PAGO') { <app-comprobantes tipo="APERTURA" [referenciaId]="c.id" /> }
+                  </td>
                   <td class="num">{{ c.saldoDisponible | currency: 'USD' }}</td>
                   <td class="acciones">
                     @switch (c.estado) {

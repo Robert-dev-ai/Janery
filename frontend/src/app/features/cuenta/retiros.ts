@@ -27,7 +27,19 @@ import { mensajeDeError } from '../../shared/utils/errores';
         </select>
       </label>
       @if (medio === 'TRANSFERENCIA') {
-        <label>Banco <input name="banco" maxlength="100" [(ngModel)]="banco" /></label>
+        <label>Banco
+          <select name="opcionBanco" [(ngModel)]="opcionBanco">
+            <option value="Banco Pichincha">Banco Pichincha</option>
+            <option value="Banco Guayaquil">Banco Guayaquil</option>
+            <option value="OTRO">Otro banco o cooperativa</option>
+          </select>
+        </label>
+        @if (opcionBanco === 'OTRO') {
+          <label>Nombre del banco o cooperativa <input name="banco" maxlength="100" [(ngModel)]="banco" /></label>
+          <p class="alerta-atraso">La transferencia a otro banco o cooperativa cuesta {{ costoOtros | currency: 'USD' }}, lo que cobra el banco. Se descuenta de su cuenta junto con el retiro.</p>
+        } @else {
+          <p class="suave">A {{ opcionBanco }} la transferencia no tiene costo.</p>
+        }
         <label>Tipo de cuenta
           <select name="tipoCuenta" [(ngModel)]="tipoCuenta">
             <option value="AHORROS">Ahorros</option>
@@ -37,6 +49,9 @@ import { mensajeDeError } from '../../shared/utils/errores';
         <label>Número de cuenta <input name="numeroCuenta" maxlength="40" [(ngModel)]="numeroCuenta" /></label>
         <label>Titular de la cuenta <input name="titularCuenta" maxlength="150" [(ngModel)]="titularCuenta" /></label>
       }
+      @if (importe && costo() > 0) {
+        <p>Se apartarán de su cuenta <strong>{{ importe + costo() | currency: 'USD' }}</strong>: {{ importe | currency: 'USD' }} del retiro y {{ costo() | currency: 'USD' }} de la transferencia.</p>
+      }
       <button type="submit" [disabled]="!valido()">Solicitar retiro</button>
     </form>
 
@@ -45,12 +60,14 @@ import { mensajeDeError } from '../../shared/utils/errores';
       @if (lista.length) {
         <div class="tabla">
           <table>
-            <thead><tr><th>Fecha</th><th class="num">Importe</th><th>Medio</th><th>Estado</th><th>Detalle</th><th>Acción</th></tr></thead>
+            <thead><tr><th>Código</th><th>Fecha</th><th class="num">Importe</th><th class="num">Costo</th><th>Medio</th><th>Estado</th><th>Detalle</th><th>Acción</th></tr></thead>
             <tbody>
               @for (s of lista; track s.id) {
                 <tr>
+                  <td class="codigo">{{ s.codigo }}</td>
                   <td>{{ s.fecha | date: 'short' : 'America/Guayaquil' }}</td>
                   <td class="num">{{ s.importe | currency: 'USD' }}</td>
+                  <td class="num">{{ s.costo ? (s.costo | currency: 'USD') : '—' }}</td>
                   <td>{{ s.medio === 'EFECTIVO' ? 'Efectivo' : 'Banco: ' + s.banco?.banco }}</td>
                   <td><app-estado [valor]="s.estado" /></td>
                   <td>{{ s.motivo ?? s.referencia ?? '—' }}</td>
@@ -80,6 +97,9 @@ export class Retiros implements OnInit {
   protected importe: number | null = null;
   protected medio = 'EFECTIVO';
   protected banco = '';
+  protected opcionBanco = 'Banco Pichincha';
+  /** Costo vigente al escribir esto; el servidor aplica el del parámetro COSTO_TRANSFERENCIA_OTROS. */
+  protected readonly costoOtros = 0.41;
   protected tipoCuenta = 'AHORROS';
   protected numeroCuenta = '';
   protected titularCuenta = '';
@@ -96,18 +116,26 @@ export class Retiros implements OnInit {
     this.api.miCuenta().subscribe({ next: (c) => this.saldo.set(c.saldoDisponible), error: (e) => this.error.set(mensajeDeError(e)) });
   }
 
+  protected costo(): number {
+    return this.medio === 'TRANSFERENCIA' && this.opcionBanco === 'OTRO' ? this.costoOtros : 0;
+  }
+
+  private nombreBanco(): string {
+    return this.opcionBanco === 'OTRO' ? this.banco.trim() : this.opcionBanco;
+  }
+
   protected valido(): boolean {
     if (!this.importe || this.importe <= 0) {
       return false;
     }
-    return this.medio === 'EFECTIVO' || !!(this.banco.trim() && this.numeroCuenta.trim() && this.titularCuenta.trim());
+    return this.medio === 'EFECTIVO' || !!(this.nombreBanco() && this.numeroCuenta.trim() && this.titularCuenta.trim());
   }
 
   protected solicitar(): void {
     this.error.set(null);
     this.aviso.set(null);
     const banco = this.medio === 'TRANSFERENCIA'
-      ? { banco: this.banco.trim(), tipoCuenta: this.tipoCuenta, numeroCuenta: this.numeroCuenta.trim(), titularCuenta: this.titularCuenta.trim() }
+      ? { banco: this.nombreBanco(), tipoCuenta: this.tipoCuenta, numeroCuenta: this.numeroCuenta.trim(), titularCuenta: this.titularCuenta.trim() }
       : {};
     this.api.solicitarRetiro({ importe: this.importe!, medio: this.medio, ...banco }, this.clave).subscribe({
       next: () => {

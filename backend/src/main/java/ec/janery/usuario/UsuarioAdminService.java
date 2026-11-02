@@ -22,7 +22,7 @@ import ec.janery.common.Pagina;
 public class UsuarioAdminService implements ApplicationRunner {
 
     public record UsuarioResumen(Long id, String correo, String estado, Instant creadoEn, List<String> cargos,
-            boolean socio) {
+            boolean socio, String nombre, String identificacion, boolean pideRestablecer) {
     }
 
     private static final String MODULO = "USUARIO";
@@ -36,9 +36,12 @@ public class UsuarioAdminService implements ApplicationRunner {
     private final String correoInicial;
     private final String contrasenaInicial;
     private final ec.janery.socio.SocioService socios;
+    private final ec.janery.persona.PersonaService personas;
+    private final Repositorios.RestablecimientoRepository restablecimientos;
 
     UsuarioAdminService(Repositorios.UsuarioRepository usuarios, Repositorios.UsuarioCargoRepository usuarioCargos,
             PasswordEncoder encoder, AuditoriaService auditoria, Clock reloj, ec.janery.socio.SocioService socios,
+            ec.janery.persona.PersonaService personas, Repositorios.RestablecimientoRepository restablecimientos,
             @Value("${janery.admin-inicial.correo}") String correoInicial,
             @Value("${janery.admin-inicial.contrasena}") String contrasenaInicial) {
         this.usuarios = usuarios;
@@ -47,6 +50,8 @@ public class UsuarioAdminService implements ApplicationRunner {
         this.auditoria = auditoria;
         this.reloj = reloj;
         this.socios = socios;
+        this.personas = personas;
+        this.restablecimientos = restablecimientos;
         this.correoInicial = correoInicial;
         this.contrasenaInicial = contrasenaInicial;
     }
@@ -67,9 +72,14 @@ public class UsuarioAdminService implements ApplicationRunner {
 
     @Transactional(readOnly = true)
     public Pagina<UsuarioResumen> listar(int pagina, int tamano) {
-        return Pagina.de(usuarios.findAll(PageRequest.of(pagina, tamano, Sort.by("id"))),
-                u -> new UsuarioResumen(u.getId(), u.getCorreo(), u.getEstado(), u.getCreadoEn(),
-                        usuarios.cargosVigentes(u.getId()), socios.usuarioEsSocio(u.getId())));
+        java.util.Set<Long> piden = restablecimientos.usuariosPendientes();
+        return Pagina.de(usuarios.findAll(PageRequest.of(pagina, tamano, Sort.by("id"))), u -> {
+            var persona = personas.dePorUsuario(u.getId());
+            return new UsuarioResumen(u.getId(), u.getCorreo(), u.getEstado(), u.getCreadoEn(),
+                    usuarios.cargosVigentes(u.getId()), socios.usuarioEsSocio(u.getId()),
+                    persona.map(p -> p.getNombres() + " " + p.getApellidos()).orElse(null),
+                    persona.map(ec.janery.persona.Persona::getIdentificacion).orElse(null), piden.contains(u.getId()));
+        });
     }
 
     @Transactional

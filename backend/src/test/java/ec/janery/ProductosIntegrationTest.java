@@ -149,13 +149,27 @@ class ProductosIntegrationTest {
     }
 
     @Test
+    void unClienteSoloPideElCreditoALetrasNormal() throws Exception {
+        Persona p = persona();
+        mvc.perform(get("/api/v1/creditos/productos").header(HttpHeaders.AUTHORIZATION, bearer(p.token())))
+                .andExpect(jsonPath("$.perfil").value("CLIENTE"))
+                .andExpect(jsonPath("$.letras.length()").value(1))
+                .andExpect(jsonPath("$.letras[0].modalidad").value("NORMAL"));
+        for (String ruta : new String[] { "/api/v1/creditos/letras/simulacion", "/api/v1/creditos/letras/solicitudes" }) {
+            mvc.perform(post(ruta).header(HttpHeaders.AUTHORIZATION, bearer(p.token())).contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"modalidad\":\"INVERSION\",\"importe\":300.00,\"plazoMeses\":3,\"origenEncaje\":\"CREDITO\"}"))
+                    .andExpect(status().isConflict()).andExpect(jsonPath("$.codigo").value("MODALIDAD_SOLO_SOCIOS"));
+        }
+    }
+
+    @Test
     void pagoParcialDeLetraCobraPrimeroElCapital() throws Exception {
         Persona p = persona();
         long credito = solicitarLetras(p, "NORMAL", "300.00", 3);
         aprobar(credito);
-        // Letra fija: capital 100, interés 4,50, desgravamen 0,30 y ahorro 0,20 = 105.
+        // Letra fija: capital 100, interés 4,50, desgravamen 0,30 y ahorro 1,20 = 106 (cada letra ahorra al menos 0,50).
         JsonNode c = credito(p, credito);
-        assertThat(c.get("cuotas")).allSatisfy(l -> assertThat(l.get("total").decimalValue()).isEqualByComparingTo("105"));
+        assertThat(c.get("cuotas")).allSatisfy(l -> assertThat(l.get("total").decimalValue()).isEqualByComparingTo("106"));
 
         pagar(p, credito, "{\"importe\":60.00}").andExpect(status().isOk());
         c = credito(p, credito);
@@ -163,9 +177,9 @@ class ProductosIntegrationTest {
         assertThat(c.get("ahorroLetras").decimalValue()).isEqualByComparingTo("0");
         assertThat(c.get("cuotasPagadas")).isEmpty();
         assertThat(c.get("cuotas").get(0).get("pagado").decimalValue()).isEqualByComparingTo("60");
-        assertThat(c.get("totalPendiente").decimalValue()).isEqualByComparingTo("255");
+        assertThat(c.get("totalPendiente").decimalValue()).isEqualByComparingTo("258");
 
-        pagar(p, credito, "{\"importe\":255.01}").andExpect(status().isConflict()).andExpect(jsonPath("$.codigo").value("PAGO_EXCEDIDO"));
+        pagar(p, credito, "{\"importe\":258.01}").andExpect(status().isConflict()).andExpect(jsonPath("$.codigo").value("PAGO_EXCEDIDO"));
 
         // 40 de capital; lo demás a interés, desgravamen y por último ahorro letras.
         pagar(p, credito, "{\"importe\":44.90}").andExpect(status().isOk());
@@ -176,7 +190,7 @@ class ProductosIntegrationTest {
 
         pagar(p, credito, "{}").andExpect(status().isOk());
         c = credito(p, credito);
-        assertThat(c.get("ahorroLetras").decimalValue()).isEqualByComparingTo("0.20");
+        assertThat(c.get("ahorroLetras").decimalValue()).isEqualByComparingTo("1.20");
         assertThat(c.get("cuotasPagadas")).hasSize(1);
     }
 
@@ -190,15 +204,15 @@ class ProductosIntegrationTest {
 
         JsonNode c = credito(p, credito);
         assertThat(c.get("cuotasPagadas")).hasSize(1);
-        assertThat(c.get("cuotas").get(1).get("pagado").decimalValue()).isEqualByComparingTo("45");
-        assertThat(c.get("capitalPendiente").decimalValue()).isEqualByComparingTo("155");
+        assertThat(c.get("cuotas").get(1).get("pagado").decimalValue()).isEqualByComparingTo("44");
+        assertThat(c.get("capitalPendiente").decimalValue()).isEqualByComparingTo("156");
 
         JsonNode movimientos = json.readTree(mvc.perform(get("/api/v1/cuentas-principales/me/movimientos").header(HttpHeaders.AUTHORIZATION, bearer(p.token())))
                 .andReturn().getResponse().getContentAsString()).get("contenido");
         assertThat(movimientos.get(0).get("detalle").asText()).contains("Crédito #" + credito, "letras 1, 2 de 3");
 
         // Pagar todo lo que queda termina el crédito.
-        pagar(p, credito, "{\"importe\":165.00}").andExpect(status().isOk());
+        pagar(p, credito, "{\"importe\":168.00}").andExpect(status().isOk());
         assertThat(credito(p, credito).get("estado").asText()).isEqualTo("FINALIZADO");
     }
 
@@ -793,7 +807,7 @@ class ProductosIntegrationTest {
         mvc.perform(post("/api/v1/personas/perfil").header(HttpHeaders.AUTHORIZATION, bearer(token))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json.writeValueAsString(Map.of("nombres", "Ana", "apellidos", "Prueba",
-                                "identificacion", UUID.randomUUID().toString().substring(0, 18),
+                                "identificacion", String.valueOf(java.util.concurrent.ThreadLocalRandom.current().nextLong(1_000_000_000L, 10_000_000_000L)),
                                 "telefono", "0990000000", "direccion", "Quito"))))
                 .andExpect(status().isCreated());
         String r = mvc.perform(post("/api/v1/cuentas-principales/apertura").header(HttpHeaders.AUTHORIZATION, bearer(token))

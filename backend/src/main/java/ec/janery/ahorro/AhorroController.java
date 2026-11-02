@@ -95,6 +95,18 @@ public class AhorroController {
         return new OperacionResponse(service.retirarInteres(id(jwt), ahorroId, clave));
     }
 
+    @org.springframework.web.bind.annotation.PutMapping("/{ahorroId}/nombre")
+    public AhorroService.AhorroVista renombrar(@AuthenticationPrincipal Jwt jwt, @PathVariable Long ahorroId,
+            @Valid @RequestBody NormalRequest r) {
+        return service.renombrar(id(jwt), ahorroId, r.nombre().trim());
+    }
+
+    @org.springframework.web.bind.annotation.DeleteMapping("/{ahorroId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void eliminar(@AuthenticationPrincipal Jwt jwt, @PathVariable Long ahorroId) {
+        service.eliminar(id(jwt), ahorroId);
+    }
+
     private static Long id(Jwt jwt) {
         return Long.valueOf(jwt.getSubject());
     }

@@ -1,10 +1,12 @@
 {
   "name": "janery-frontend",
-  "version": "0.0.0",
+  "version": "0.2.0",
   "scripts": {
     "ng": "ng",
     "start": "ng serve",
     "build": "ng build",
+    "simulador": "ng serve --configuration simulador-local",
+    "build:simulador": "ng build --configuration simulador",
     "watch": "ng build --watch --configuration development",
     "test": "ng test"
   },

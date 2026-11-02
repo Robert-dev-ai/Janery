@@ -23,6 +23,8 @@ public class Usuario {
     private String hashContrasena;
     private String estado;
     private Instant creadoEn;
+    private int intentosFallidos;
+    private boolean debeCambiarContrasena;
 
     public Usuario(String correo, String hashContrasena, Instant creadoEn) {
         this.correo = correo;
@@ -31,8 +33,41 @@ public class Usuario {
         this.creadoEn = creadoEn;
     }
 
+    public static final int INTENTOS_MAXIMOS = 3;
+
     public void cambiarContrasena(String hashContrasena) {
         this.hashContrasena = hashContrasena;
+        this.debeCambiarContrasena = false;
+    }
+
+    /** Contraseña que entrega el presidente: desbloquea el acceso y obliga a cambiarla al entrar. */
+    public void restablecer(String hashTemporal) {
+        this.hashContrasena = hashTemporal;
+        this.debeCambiarContrasena = true;
+        this.intentosFallidos = 0;
+        this.estado = "ACTIVO";
+    }
+
+    /** Devuelve true si con este fallo el acceso queda bloqueado. */
+    public boolean registrarFallo() {
+        intentosFallidos++;
+        if (intentosFallidos >= INTENTOS_MAXIMOS) {
+            estado = "BLOQUEADO";
+            return true;
+        }
+        return false;
+    }
+
+    public void reiniciarIntentos() {
+        intentosFallidos = 0;
+    }
+
+    public void cambiarCorreo(String correo) {
+        this.correo = correo;
+    }
+
+    public boolean bloqueado() {
+        return "BLOQUEADO".equals(estado);
     }
 
     public boolean activo() {

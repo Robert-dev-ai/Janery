@@ -7,6 +7,9 @@ import { filter, map } from 'rxjs';
 import { environment } from '../../environments/environment';
 import { AuthService } from '../core/auth/auth';
 import { TiempoRealService } from '../core/services/tiempo-real';
+import { PieContacto } from '../shared/components/pie-contacto';
+import { WhatsappFlotante } from '../shared/components/whatsapp-flotante';
+import { AnuncioCabecera } from './anuncio-cabecera';
 import { AvisosPendientes } from './avisos-pendientes';
 import { BarraSimulacion } from './barra-simulacion';
 import { MenuConfiguracion } from './menu-configuracion';
@@ -15,7 +18,7 @@ import { GrupoMenu, menuAdmin, menuPortal } from './navegacion';
 /** Marco del portal del socio y del panel administrativo; la experiencia la indica la ruta. */
 @Component({
   selector: 'app-layout-panel',
-  imports: [AvisosPendientes, BarraSimulacion, LucideAngularModule, MenuConfiguracion, RouterLink, RouterLinkActive, RouterOutlet],
+  imports: [AnuncioCabecera, AvisosPendientes, BarraSimulacion, PieContacto, WhatsappFlotante, LucideAngularModule, MenuConfiguracion, RouterLink, RouterLinkActive, RouterOutlet],
   template: `
     <div class="marco">
       @if (menuAbierto()) {
@@ -27,6 +30,13 @@ import { GrupoMenu, menuAdmin, menuPortal } from './navegacion';
           <span><strong>Janery</strong><small>{{ titulo() }}</small></span>
         </a>
         <nav [attr.aria-label]="titulo()">
+          @if (destinoCambio(); as d) {
+            <div class="cambio-movil">
+              <a class="lateral-enlace" [routerLink]="d.ruta" (click)="menuAbierto.set(false)">
+                <lucide-icon [img]="iconos.ArrowLeftRight" [size]="18" aria-hidden="true" /> Ir al {{ d.titulo.toLowerCase() }}
+              </a>
+            </div>
+          }
           @for (grupo of grupos(); track grupo.titulo) {
             <details class="lateral-seccion" [open]="!esAdmin || $first || contieneActual(grupo)">
               <summary class="lateral-grupo">{{ grupo.titulo }}</summary>
@@ -38,13 +48,6 @@ import { GrupoMenu, menuAdmin, menuPortal } from './navegacion';
               }
             </details>
           }
-          @if (destinoCambio(); as d) {
-            <div class="cambio-movil">
-              <a class="lateral-enlace" [routerLink]="d.ruta" (click)="menuAbierto.set(false)">
-                <lucide-icon [img]="iconos.ArrowLeftRight" [size]="18" aria-hidden="true" /> {{ d.titulo }}
-              </a>
-            </div>
-          }
         </nav>
       </aside>
 
@@ -55,7 +58,7 @@ import { GrupoMenu, menuAdmin, menuPortal } from './navegacion';
             (click)="menuAbierto.set(true)">
             <lucide-icon [img]="iconos.Menu" [size]="22" aria-hidden="true" />
           </button>
-          <p class="cabecera-titulo">{{ titulo() }}</p>
+          <app-anuncio-cabecera />
           <div class="cabecera-acciones">
             @if (vivo.conectado()) {
               <span class="en-vivo" title="Los datos se actualizan solos"><i></i>En vivo</span>
@@ -63,8 +66,8 @@ import { GrupoMenu, menuAdmin, menuPortal } from './navegacion';
               <span class="sin-conexion">Reconectando…</span>
             }
             @if (destinoCambio(); as d) {
-              <a class="cambio-experiencia" [routerLink]="d.ruta">
-                <lucide-icon [img]="iconos.ArrowLeftRight" [size]="16" aria-hidden="true" /> {{ d.titulo }}
+              <a class="cambio-experiencia" [routerLink]="d.ruta" [attr.aria-label]="'Ir al ' + d.titulo.toLowerCase()" [title]="'Ir al ' + d.titulo.toLowerCase()">
+                <lucide-icon [img]="iconos.ArrowLeftRight" [size]="16" aria-hidden="true" /> <span class="hidden sm:inline">{{ d.titulo }}</span>
               </a>
             }
             <app-avisos-pendientes [gestion]="esAdmin" />
@@ -72,6 +75,8 @@ import { GrupoMenu, menuAdmin, menuPortal } from './navegacion';
           </div>
         </header>
         <main class="contenido"><router-outlet /></main>
+        <app-pie-contacto class="pie-panel" />
+        <app-whatsapp-flotante />
       </div>
     </div>
   `,

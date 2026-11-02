@@ -46,6 +46,29 @@
     --color-serie-otros: #8a938f;
   }
 
+  /* Modo oscuro: los mismos nombres de color con otros valores; cada pantalla lo hereda sin cambios. */
+  html.oscuro {
+    --color-texto: #e2ebe6;
+    --color-suave: #a2b3ab;
+    --color-borde: #3a4a43;
+    --color-fondo: #18211d;
+    --color-superficie: #222d28;
+    --color-primario: #1f9a4f;
+    --color-primario-hondo: #178042;
+    --color-primario-tenue: #1d3a2a;
+    --color-intenso: #0a261c;
+    --color-intenso-claro: #164a37;
+    --color-exito: #4fd88a;
+    --color-exito-tenue: #183a27;
+    --color-informacion: #93b4ff;
+    --color-informacion-tenue: #1e2a47;
+    --color-advertencia: #f3b65a;
+    --color-advertencia-tenue: #3b2b14;
+    --color-peligro: #f58a8a;
+    --color-peligro-tenue: #401f1f;
+    --color-neutro-tenue: #2c3833;
+  }
+
   /* El logo, centrado y sin repetir, sobre el verde de la marca. */
   body { @apply min-h-screen bg-intenso bg-fixed bg-center bg-no-repeat text-texto leading-normal antialiased; background-image: url("/logo-icono.png"); background-size: min(85vmin, 44rem); }
   h1 { @apply mb-5 text-2xl font-bold tracking-tight text-texto sm:text-3xl; }
@@ -116,10 +139,14 @@
   button.velo { @apply fixed inset-0 z-30 rounded-none border-0 bg-black/40 p-0 hover:bg-black/40 active:scale-100 lg:hidden; }
   .principal { @apply flex min-w-0 flex-1 flex-col; }
   .cabecera { @apply sticky top-0 z-20 flex items-center gap-2 border-b border-borde bg-superficie px-4 py-2.5 sm:gap-3 sm:px-6; }
-  .cabecera-titulo { @apply m-0 truncate text-sm font-semibold; }
   .cabecera-acciones { @apply ml-auto flex items-center gap-1 sm:gap-3; }
-  .cambio-experiencia { @apply hidden items-center gap-1.5 rounded-lg border border-borde px-3 py-1.5 text-sm font-medium text-texto hover:bg-fondo hover:text-texto hover:no-underline sm:inline-flex; }
-  .cambio-movil { @apply mt-4 border-t border-white/10 pt-4 sm:hidden; }
+  /* Cambio entre portal y panel: siempre a la vista; en celular solo con su icono, y también arriba del menú. */
+  .cambio-experiencia { @apply inline-flex items-center gap-1.5 rounded-lg border border-primario/50 bg-primario-tenue px-2 py-1.5 text-sm font-medium text-primario-hondo hover:bg-primario hover:text-white hover:no-underline sm:px-3; }
+  .oscuro .cambio-experiencia { @apply text-texto; }
+  .cambio-movil { @apply mb-2 border-b border-current/15 pb-3 lg:hidden; }
+  .cambio-movil .lateral-enlace { @apply border border-current/25; }
+  .avatar { @apply block size-8 rounded-full object-cover; }
+  .avatar-grande { @apply size-24 rounded-full border-2 border-borde object-cover; }
   button.icono-boton { @apply relative flex rounded-lg border-transparent bg-transparent p-2 text-suave hover:border-transparent hover:bg-fondo hover:text-texto; }
   .contador { @apply absolute -top-0.5 -right-0.5 flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-peligro px-1 text-[0.6875rem] font-semibold text-white; }
   .en-vivo { @apply hidden items-center gap-1.5 text-xs font-medium text-suave md:inline-flex; }
@@ -228,7 +255,7 @@
   .columnas-guia { @apply pointer-events-none absolute inset-x-0 h-px bg-neutro-tenue; }
   .columnas-grupo { @apply relative flex min-w-0 flex-1 flex-col justify-end rounded-t-md hover:bg-fondo focus-visible:bg-fondo; }
   .columnas-barras { @apply relative flex h-full items-end justify-center gap-0.5 px-0.5; }
-  .columnas-barra { @apply block w-full max-w-5 rounded-t; }
+  .columnas-barra { @apply block w-full max-w-5 rounded-t-sm; }
   .columnas-etiqueta { @apply absolute inset-x-0 top-full pt-1.5 text-center text-xs text-suave; }
   .columnas-detalle { @apply pointer-events-none invisible absolute bottom-3/4 left-1/2 z-10 w-52 rounded-lg border border-borde bg-superficie p-3 text-xs shadow-lg; }
   .columnas-detalle.al-final { @apply right-1/2 left-auto; }
@@ -296,6 +323,81 @@
   .resultado-mes strong { @apply text-2xl tabular-nums; }
   .ficha-detalle { @apply mt-4; }
 
+  /* Aviso de la presidencia: corre de derecha a izquierda por la cabecera */
+  .anuncio-contenedor { @apply flex min-w-0 flex-1 items-center gap-1; }
+  .anuncio { @apply flex h-9 min-w-0 flex-1 items-center overflow-hidden rounded-full bg-linear-to-r from-intenso to-primario-hondo text-sm font-medium text-white shadow-sm ring-1 ring-primario/30; }
+  .anuncio-etiqueta { @apply z-10 flex h-full shrink-0 items-center gap-1.5 rounded-full bg-[#8cc63f] px-3 text-xs font-bold tracking-wide text-intenso uppercase shadow-md; }
+  .anuncio-etiqueta span { @apply hidden sm:inline; }
+  /* Los bordes se desvanecen: el texto entra y sale sin cortes bruscos. */
+  .anuncio-pista { @apply relative h-full min-w-0 flex-1 overflow-hidden; mask-image: linear-gradient(to right, transparent, black 1.5rem, black calc(100% - 1.5rem), transparent); }
+  .anuncio-texto { @apply absolute top-1/2 whitespace-nowrap; animation: anuncio-correr var(--duracion, 20s) linear infinite; }
+  .anuncio:hover .anuncio-texto { animation-play-state: paused; }
+
+  /* Pie del panel y botón de WhatsApp */
+  .pie-panel { @apply mx-auto mb-4 block w-full max-w-[min(80rem,calc(100%-1.5rem))] rounded-xl bg-intenso/80 px-4 py-3 text-center text-xs text-lateral-texto; }
+  .pie-panel a { @apply text-white; }
+  .publico-pie { @apply block; }
+  .whatsapp { @apply fixed right-4 bottom-4 z-30 flex size-14 items-center justify-center rounded-full bg-[#25d366] text-white shadow-lg transition-transform duration-150 hover:scale-105 hover:text-white; }
+
+  /* Encabezado de pantalla con su acción principal a la derecha */
+  .encabezado-pagina { @apply mb-5 flex flex-wrap items-center justify-between gap-3; }
+  .encabezado-pagina h1 { @apply mb-0; }
+  .encabezado-pagina .saldo-titulo { @apply m-0 text-right text-sm text-suave; }
+  .encabezado-pagina .saldo-titulo strong { @apply block text-2xl font-bold tracking-tight text-texto tabular-nums; }
+  /* Dos acciones grandes, una al lado de la otra */
+  .acciones-principales { @apply mb-6 grid grid-cols-2 gap-3; }
+  .acciones-principales a { @apply flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-base font-semibold; }
+
+  /* Campos */
+  .campo-clave { @apply relative mt-1 block; }
+  .campo-clave input { @apply mt-0 pr-11; }
+  button.ver-clave { @apply absolute top-1/2 right-1.5 flex -translate-y-1/2 rounded-md border-transparent bg-transparent p-1.5 text-suave hover:border-transparent hover:bg-fondo hover:text-texto active:scale-100 active:-translate-y-1/2; }
+  .campo-telefono { @apply mt-1 flex gap-2; }
+  .campo-telefono input { @apply mt-0; }
+  .campo-telefono .campo-telefono-prefijo { @apply w-20 shrink-0 text-center; }
+  .grupo-campos { @apply mb-4 rounded-xl border border-borde p-4; }
+  .grupo-campos legend { @apply px-2 text-sm font-semibold text-primario-hondo; }
+  .oscuro .grupo-campos legend { @apply text-primario; }
+  .grupo-campos > :last-child { @apply mb-0; }
+  .errores-formulario { @apply m-0 list-none rounded-lg border-l-4 border-peligro bg-peligro-tenue px-3 py-2 text-sm text-peligro; }
+  .pie-formulario { @apply flex flex-wrap items-start gap-3; }
+  .pie-formulario .errores-formulario { @apply flex-1 basis-60; }
+  .enlace-boton { @apply cursor-pointer border-0 bg-transparent p-0 text-sm font-medium text-primario underline-offset-2 hover:bg-transparent hover:text-primario-hondo hover:underline active:scale-100; }
+
+  /* Lista de meses para pagar por adelantado */
+  .meses { @apply mb-3 grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6; }
+  .meses label { @apply m-0 flex items-center gap-2 rounded-lg border border-borde bg-superficie px-2.5 py-2 text-sm font-normal; }
+  .meses label.pagado { @apply border-exito/40 bg-exito-tenue text-exito; }
+
+  /* Votos de aprobación de un crédito */
+  .votos { @apply m-0 flex list-none flex-wrap gap-1.5 p-0; }
+  .votos li { @apply rounded-full border border-borde px-2.5 py-0.5 text-xs; }
+  .votos li.aprueba { @apply border-exito/40 bg-exito-tenue text-exito; }
+  .votos li.rechaza { @apply border-peligro/40 bg-peligro-tenue text-peligro; }
+  .codigo { @apply font-mono text-xs font-semibold tracking-wide text-suave; }
+
+  /* Parámetros: índice de temas, grupos plegables y valores que se cambian con un toque */
+  .indice-parametros { @apply mb-5 flex flex-wrap gap-2; }
+  .indice-parametros a { @apply rounded-full border border-borde bg-superficie px-3 py-1 text-sm font-medium text-texto hover:border-primario hover:no-underline; }
+  .indice-parametros a span { @apply ml-1 rounded-full bg-primario-tenue px-1.5 text-xs text-primario-hondo; }
+  .grupo-parametros > summary { @apply flex cursor-pointer list-none flex-wrap items-baseline gap-3; }
+  .grupo-parametros > summary::-webkit-details-marker { display: none; }
+  .grupo-parametros > summary::after { content: '▾'; @apply ml-auto text-suave transition-transform duration-150; }
+  .grupo-parametros:not([open]) > summary::after { @apply -rotate-90; }
+  .subgrupo-parametros { @apply mt-4 mb-2 border-b border-borde pb-1 text-sm font-semibold tracking-wide text-primario-hondo uppercase; }
+  .oscuro .subgrupo-parametros { @apply text-primario; }
+  button.valor-editable { @apply border-borde bg-superficie px-2 py-1 font-semibold text-texto tabular-nums hover:border-primario hover:bg-primario-tenue hover:text-texto; }
+
+  /* En el celular, el libro diario muestra solo movimiento, de quién, sube y baja. */
+  .solo-escritorio { @apply hidden md:table-cell; }
+
+  /* Cargos */
+  .cargo { @apply mb-4 grid gap-4 rounded-xl border border-borde bg-superficie p-5 shadow-sm md:grid-cols-[16rem_1fr]; }
+  .cargo h2 { @apply mb-1; }
+  .cargo ul { @apply m-0 grid list-none gap-2 p-0 sm:grid-cols-2; }
+  .cargo li a { @apply flex items-start gap-2 rounded-lg border border-borde p-3 text-sm text-texto hover:border-primario hover:no-underline; }
+  .cargo li small { @apply block text-xs text-suave; }
+
   /* Diálogo de confirmación */
   .dialogo { @apply m-auto w-[calc(100%-2rem)] max-w-md rounded-xl border border-borde bg-superficie p-6 text-texto shadow-xl backdrop:bg-black/40; }
   .dialogo-mensaje { @apply mb-4 font-medium; }
@@ -310,4 +412,16 @@
 
 @media (prefers-reduced-motion: reduce) {
   *, ::before, ::after { animation: none !important; transition: none !important; }
+}
+
+/* De derecha a izquierda: entra por el borde derecho y sale del todo por el izquierdo. */
+@keyframes anuncio-correr {
+  from { left: 100%; transform: translate(0, -50%); }
+  to { left: 0; transform: translate(-100%, -50%); }
+}
+
+/* Sin movimiento, el aviso queda quieto y visible. */
+@media (prefers-reduced-motion: reduce) {
+  .anuncio-texto { position: static; transform: none; }
+  .anuncio-pista { display: flex; align-items: center; padding-inline: 0.75rem; mask-image: none; }
 }

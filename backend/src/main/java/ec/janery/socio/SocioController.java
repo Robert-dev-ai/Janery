@@ -79,13 +79,14 @@ public class SocioController {
     }
 
     public record MovimientoResponse(Long id, String sentido, BigDecimal importe, String concepto, String detalle,
-            Instant fecha) {
+            Instant fecha, String quien) {
     }
 
     public record CajaChicaResponse(BigDecimal saldo, String moneda, Pagina<MovimientoResponse> movimientos) {
     }
 
     private final ParticipacionService service;
+    private final ec.janery.caja.CajaService cajas;
 
     @GetMapping("/socios/me")
     public ResumenSocio resumen(@AuthenticationPrincipal Jwt jwt) {
@@ -101,6 +102,52 @@ public class SocioController {
     public OperacionResponse aportar(@AuthenticationPrincipal Jwt jwt, @RequestHeader("Idempotency-Key") String clave,
             @Valid @RequestBody AporteRequest r) {
         return new OperacionResponse(service.aportar(id(jwt), r.tipo(), r.importe(), r.periodo(), clave));
+    }
+
+    public record PeriodosRequest(@NotNull @Pattern(regexp = "OBLIGATORIO|CAJA_CHICA") String tipo,
+            @NotNull @Size(min = 1, max = 12) List<String> periodos) {
+    }
+
+    public record RecepcionRequest(@NotNull Long socioId, @NotNull @Size(min = 1, max = 12) List<String> periodos) {
+    }
+
+    public record OperacionesResponse(List<Long> operaciones) {
+    }
+
+    /** Pago de varios meses a la vez, del aporte mensual o de caja chica. */
+    @PostMapping("/socios/me/aportes/periodos")
+    public OperacionesResponse pagarPeriodos(@AuthenticationPrincipal Jwt jwt, @RequestHeader("Idempotency-Key") @Size(max = 80) String clave,
+            @Valid @RequestBody PeriodosRequest r) {
+        return new OperacionesResponse(service.pagarPeriodos(id(jwt), r.tipo(), r.periodos(), clave));
+    }
+
+    @GetMapping("/socios/me/calendario")
+    public List<ParticipacionService.MesAporte> calendario(@AuthenticationPrincipal Jwt jwt) {
+        return service.miCalendario(id(jwt));
+    }
+
+    @GetMapping("/socios/condiciones")
+    public ParticipacionService.Condiciones condiciones() {
+        return service.condiciones();
+    }
+
+    @PostMapping("/socios/hacerme-socio")
+    public OperacionResponse hacermeSocio(@AuthenticationPrincipal Jwt jwt, @RequestHeader("Idempotency-Key") String clave) {
+        return new OperacionResponse(service.hacerseSocio(id(jwt), clave));
+    }
+
+    @GetMapping("/caja-chica/socios")
+    @PreAuthorize("hasAuthority('SCOPE_GESTIONAR_CAJA_CHICA')")
+    public List<ParticipacionService.SocioCajaChica> sociosCajaChica() {
+        return service.sociosCajaChica();
+    }
+
+    /** Quien administra caja chica registra el aporte que un socio le pagó en persona. */
+    @PostMapping("/caja-chica/aportes")
+    @PreAuthorize("hasAuthority('SCOPE_GESTIONAR_CAJA_CHICA')")
+    public OperacionesResponse recibirAporte(@AuthenticationPrincipal Jwt jwt, @RequestHeader("Idempotency-Key") @Size(max = 80) String clave,
+            @Valid @RequestBody RecepcionRequest r) {
+        return new OperacionesResponse(service.recibirAporteCajaChica(id(jwt), r.socioId(), r.periodos(), clave));
     }
 
     @PostMapping("/socios/me/aportes-caja-chica")
@@ -156,13 +203,14 @@ public class SocioController {
     }
 
     @GetMapping("/caja-chica")
-    @PreAuthorize("hasAuthority('SCOPE_GESTIONAR_CAJA_CHICA')")
+    @PreAuthorize("hasAnyAuthority('SCOPE_GESTIONAR_CAJA_CHICA', 'SCOPE_SOCIO')")
     public CajaChicaResponse cajaChica(@RequestParam(defaultValue = "0") int pagina,
             @RequestParam(defaultValue = "20") int tamano) {
+        var movimientos = service.movimientosCajaChica(Math.max(pagina, 0), Pagina.limitar(tamano));
+        var quienes = cajas.quienes(movimientos.getContent());
         return new CajaChicaResponse(service.saldoCajaChica(), "USD",
-                Pagina.de(service.movimientosCajaChica(Math.max(pagina, 0), Pagina.limitar(tamano)),
-                        m -> new MovimientoResponse(m.getId(), m.getSentido(), m.getImporte(), m.getConcepto(),
-                                m.getDetalle(), m.getCreadoEn())));
+                Pagina.de(movimientos, m -> new MovimientoResponse(m.getId(), m.getSentido(), m.getImporte(), m.getConcepto(),
+                        m.getDetalle(), m.getCreadoEn(), quienes.get(m.getId()))));
     }
 
     @PostMapping("/caja-chica/gastos")
@@ -187,14 +235,14 @@ public class SocioController {
     }
 
     @GetMapping("/admin/resultados")
-    @PreAuthorize("hasAuthority('SCOPE_GESTIONAR_RESULTADOS')")
+    @PreAuthorize("hasAnyAuthority('SCOPE_GESTIONAR_RESULTADOS', 'SCOPE_SOCIO')")
     public Pagina<ResultadoVista> resultados(@RequestParam(defaultValue = "0") int pagina,
             @RequestParam(defaultValue = "20") int tamano) {
         return Pagina.de(service.listarResultados(Math.max(pagina, 0), Pagina.limitar(tamano)), v -> v);
     }
 
     @GetMapping("/admin/resultados/en-espera")
-    @PreAuthorize("hasAuthority('SCOPE_GESTIONAR_RESULTADOS')")
+    @PreAuthorize("hasAnyAuthority('SCOPE_GESTIONAR_RESULTADOS', 'SCOPE_SOCIO')")
     public ParticipacionService.EnEsperaVista resultadosEnEspera() {
         return service.enEspera();
     }
@@ -207,7 +255,7 @@ public class SocioController {
     }
 
     @GetMapping("/admin/cierres")
-    @PreAuthorize("hasAuthority('SCOPE_GESTIONAR_RESULTADOS')")
+    @PreAuthorize("hasAnyAuthority('SCOPE_GESTIONAR_RESULTADOS', 'SCOPE_SOCIO')")
     public List<CierreVista> cierres() {
         return service.listarCierres();
     }

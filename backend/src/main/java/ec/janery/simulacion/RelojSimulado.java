@@ -50,6 +50,11 @@ class RelojSimulado extends Clock {
         }
     }
 
+    /** Solo al reiniciar el simulador: la base vuelve a empezar, y con ella la fecha. */
+    void volverAFechaReal() {
+        desplazamiento.reiniciar();
+    }
+
     long diasAdelantados() {
         return ChronoUnit.DAYS.between(LocalDate.now(real), LocalDate.now(this));
     }
@@ -61,14 +66,23 @@ class RelojSimulado extends Clock {
 
         Desplazamiento(JdbcTemplate jdbc) {
             this.jdbc = jdbc;
-            // Fuera de las migraciones a propósito: esta tabla no debe existir en producción.
+            crearTabla();
+            segundos = jdbc.queryForList("select desplazamiento_segundos from simulacion_reloj", Long.class)
+                    .stream().findFirst().orElse(0L);
+        }
+
+        /** Fuera de las migraciones a propósito: esta tabla no debe existir en producción. */
+        private void crearTabla() {
             jdbc.execute("""
                     create table if not exists simulacion_reloj (
                         id int primary key check (id = 1),
                         desplazamiento_segundos bigint not null
                     )""");
-            segundos = jdbc.queryForList("select desplazamiento_segundos from simulacion_reloj", Long.class)
-                    .stream().findFirst().orElse(0L);
+        }
+
+        void reiniciar() {
+            crearTabla();
+            guardar(0);
         }
 
         void guardar(long nuevos) {

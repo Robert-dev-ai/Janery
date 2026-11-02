@@ -3,7 +3,8 @@ import { menuAdmin, menuPortal } from './navegacion';
 
 describe('navegación', () => {
   const yo = (cambios: Partial<Yo>): Yo => ({
-    id: 1, correo: 'a@b.ec', cargos: [], permisos: [], tienePerfil: true, estadoCuenta: 'ACTIVA', esSocio: false, ...cambios,
+    id: 1, correo: 'a@b.ec', cargos: [], permisos: [], tienePerfil: true, estadoCuenta: 'ACTIVA', esSocio: false, nombre: 'Ana', tieneFoto: false,
+    debeCambiarContrasena: false, ...cambios,
   });
   const titulos = (grupos: ReturnType<typeof menuAdmin>) => grupos.flatMap((g) => g.enlaces.map((e) => e.titulo));
 

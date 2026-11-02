@@ -24,6 +24,10 @@ export const routes: Routes = [
         path: 'iniciar-sesion',
         loadComponent: () => import('./features/auth/iniciar-sesion').then((m) => m.IniciarSesion),
       },
+      {
+        path: 'recuperar-contrasena',
+        loadComponent: () => import('./features/auth/recuperar-contrasena').then((m) => m.RecuperarContrasena),
+      },
     ],
   },
   {
@@ -68,6 +72,20 @@ export const routes: Routes = [
             path: 'socios/general',
             canActivate: [socioGuard],
             loadComponent: () => import('./features/socios/area-general').then((m) => m.AreaGeneral),
+          },
+          { path: 'hacerme-socio', loadComponent: () => import('./features/socios/hacerme-socio').then((m) => m.HacermeSocio) },
+          // Finanzas para los socios: las mismas pantallas, solo para ver.
+          {
+            path: 'socios',
+            canActivate: [socioGuard],
+            children: [
+              { path: 'balance', loadComponent: () => import('./features/contabilidad/balance').then((m) => m.Balance) },
+              { path: 'diario', loadComponent: () => import('./features/contabilidad/libro-diario').then((m) => m.LibroDiarioPagina) },
+              { path: 'tesoreria', loadComponent: () => import('./features/admin/tesoreria').then((m) => m.AreaTesoreria) },
+              { path: 'estado-caja', loadComponent: () => import('./features/admin/estado-caja').then((m) => m.EstadoCaja) },
+              { path: 'caja-chica', loadComponent: () => import('./features/admin/caja-chica').then((m) => m.AreaCajaChica) },
+              { path: 'resultados', loadComponent: () => import('./features/admin/resultados').then((m) => m.AdminResultados) },
+            ],
           },
         ],
       },
@@ -133,6 +151,16 @@ export const routes: Routes = [
         path: 'admin/creditos',
         canActivate: [permisoGuard('APROBAR_CREDITOS')],
         loadComponent: () => import('./features/admin/creditos').then((m) => m.AdminCreditos),
+      },
+      {
+        path: 'admin/uso',
+        canActivate: [permisoGuard('VER_USO_APP')],
+        loadComponent: () => import('./features/admin/uso').then((m) => m.UsoAplicacion),
+      },
+      {
+        path: 'admin/simulador',
+        canActivate: [permisoGuard('USAR_SIMULADOR')],
+        loadComponent: () => import('./features/admin/simulador').then((m) => m.Simulador),
       },
       {
         path: 'admin/parametros',

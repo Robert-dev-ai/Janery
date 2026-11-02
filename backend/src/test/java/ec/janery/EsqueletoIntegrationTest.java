@@ -393,7 +393,7 @@ class EsqueletoIntegrationTest {
         mvc.perform(post("/api/v1/personas/perfil").header(HttpHeaders.AUTHORIZATION, bearer(token))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json.writeValueAsString(java.util.Map.of("nombres", "Ana", "apellidos", "Prueba",
-                                "identificacion", UUID.randomUUID().toString().substring(0, 18),
+                                "identificacion", String.valueOf(java.util.concurrent.ThreadLocalRandom.current().nextLong(1_000_000_000L, 10_000_000_000L)),
                                 "telefono", "0990000000", "direccion", "Quito"))))
                 .andExpect(status().isCreated());
         return token;

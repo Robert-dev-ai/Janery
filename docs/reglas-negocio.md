@@ -313,4 +313,59 @@ El propietario autorizó el 30/10/2026 usar valores provisionales de tasas, enca
 - **Tasas iniciales de plazo fijo:** 5,5 %, 6 %, 6,5 %, 7 % y 8 % anual. Son provisionales, a ajustar por el presidente. Los plazos fijos abiertos conservan su tasa.
 - **Encaje:** "cuenta principal" exige tener el dinero antes del desembolso; "descontado del crédito" lo paga con el desembolso; "ahorros" sale de un ahorro normal, aunque no sea día 1; "efectivo" entra a la caja al aprobar, y quien aprueba confirma haberlo recibido.
 - **Cupo de socio:** cada retiro espera aprobación y aparta cupo mientras tanto. La promoción abierta y los límites se validan al pedirlo y otra vez al aprobarlo.
-- **Documentos:** solo PDF comprobado por su contenido, hasta 10 por crédito y 10 MB cada uno, en la base de datos. Son opcionales y no condicionan la aprobación.
+- **Documentos:** solo PDF comprobado por su contenido, hasta 10 por crédito y 10 MB cada uno, en la base de datos. Desde la sección 16, la solicitud firmada es obligatoria para clientes.
+
+## 16. Acceso, comprobantes, aprobación conjunta y socios
+
+**Definido por el propietario (02/11/2026):**
+
+- **Acceso:** se entra con el correo o la cédula. Tres contraseñas incorrectas seguidas bloquean el acceso; la presidencia lo desbloquea dando una contraseña temporal. Quien olvida su contraseña la pide desde «¿Olvidó su contraseña?». La presidencia puede corregir un correo mal escrito.
+- **Datos:** la cédula tiene 10 números. El teléfono lleva el prefijo del país, +593 por defecto: con 0 inicial caben 10 números y sin él 9, y el 0 no se guarda. La fecha de nacimiento exige mayoría de edad.
+- **Comprobantes:** todo dinero que llega de fuera (apertura y depósitos) se respalda con su comprobante.
+- **Retiros a banco:** Banco Pichincha y Banco Guayaquil sin costo. Otro banco o cooperativa cuesta USD 0,41 (`COSTO_TRANSFERENCIA_OTROS`), lo que cobra el banco.
+- **Aprobación de créditos:** la deciden tres áreas: presidencia o vicepresidencia, tesorería y comité de crédito.
+- **Solicitud firmada:** los clientes suben en PDF la solicitud firmada del crédito a letras y del emergente.
+- **Ahorro letras:** cada letra ahorra al menos USD 0,50, aunque la suma dé un dólar exacto.
+- **Ahorros:** se les pone nombre (propuesto y editable) y se pueden eliminar tras pasar todo su dinero a la cuenta principal.
+- **Aportes:** el aporte mensual y la caja chica se pueden pagar por varios meses, hasta todo el año.
+- **Caja chica:** quien la administra registra los aportes que recibe en persona, eligiendo quién pagó.
+- **Hacerse socio:** con el aporte inicial (`APORTE_INICIAL_MINIMO`, USD 1000), que no se retira: solo se vende a otro socio.
+- **Finanzas para socios:** todos los socios ven balance, libros, tesorería, estado de caja, caja chica y resultados, sin registrar nada. En caja chica solo pagan lo suyo.
+- **Códigos:** cada registro tiene un código legible derivado de su número: `CL-` crédito a letras, `CE-` emergente de cliente, `CS-` cupo de socio, `CP-` promoción, `SC-` retiro de cupo, `AH-` ahorro normal, `PF-` plazo fijo, `DP-` depósito, `RT-` retiro, `SO-` socio. Las cuentas siguen con `JAN-`.
+
+**Criterios del desarrollo, pendientes de confirmación:**
+
+- **Recuperar contraseña sin correo:** Janery no envía correos. El pedido le llega a la presidencia, que genera una contraseña temporal de 10 caracteres y se la entrega en persona o por mensaje. Al entrar con ella se obliga a elegir otra.
+- **Cédula exacta:** se exigen exactamente 10 números (no «hasta 10»), como toda cédula ecuatoriana.
+- **Teléfono en Ecuador:** celular de 9 números sin el 0 (empieza con 9); fijo de 8. En otros países, de 6 a 12.
+- **Comprobante obligatorio solo en transferencias:** sin él no se puede confirmar. En efectivo es opcional, porque se entrega en mano. Se aceptan PDF, JPG, PNG y WEBP de hasta 10 MB, comprobados por su contenido.
+- **Costo de transferencia:** se aparta de la cuenta junto con el retiro y sale de la caja al entregarlo (el banco lo descuenta a Janery). Se cobra a cualquier banco cuyo nombre no contenga «Pichincha» ni «Guayaquil».
+- **Votos:** cada persona vota una vez y cuenta por una sola de sus áreas. Con los tres votos se decide: se aprueba solo si los tres aprueban; un rechazo con motivo basta para rechazarlo al completarse. El retiro de cupo de socio sigue la misma regla. Vicepresidencia, tesorería y comité de crédito recibieron el permiso `APROBAR_CREDITOS`.
+- **Ahorro letras mínimo:** la letra se redondea al dólar siguiente contando 0,50 de ahorro; así cada letra ahorra entre 0,50 y 1,49.
+- **Eliminar un ahorro:** el interés que aún no se liberó el día 1 se pierde, y se avisa antes de eliminar.
+- **Adelantar aportes:** se admiten los meses del año en curso, no los del siguiente.
+- **Aporte de caja chica en persona:** entra directo a caja chica, sin pasar por la cuenta del socio ni por la caja principal.
+- **Socios y finanzas:** la vista de resultados no muestra la lista de socios con sus fondos a quien no tiene `GESTIONAR_RESULTADOS`.
+
+## 17. Caja, avisos, uso, simulador y trámite de créditos
+
+**Definido por el propietario (02/11/2026):**
+
+- **Caja principal:** muestra cuánto subió o bajó cada mes, en dinero y en porcentaje. El mes en curso cambia con cada movimiento; queda «cerrado» al terminar el mes.
+- **Aviso de la cabecera:** la presidencia publica un texto que corre por la cabecera de todos los paneles.
+- **Uso de la aplicación:** el administrador ve qué pantallas se usan más, para decidir qué mejorar.
+- **Simulador:** el administrador prueba en un ambiente aparte que no toca la base real (ver testing.md, sección 6).
+- **Contacto:** +593 996619908, San Agustín de Cajas, González Suárez. Botón de WhatsApp y versión del programa en el pie.
+- **Tesorería tramita los créditos.**
+- **Modo claro** por defecto.
+- **Créditos para clientes:** solo el crédito a letras normal y el emergente. Inversión, estudio y personalizado son exclusivos de socios.
+- **Aviso:** corre de derecha a izquierda; la cabecera ya no muestra «Panel del…», para dejarle espacio en el celular.
+
+**Criterios del desarrollo, pendientes de confirmación:**
+
+- **Porcentaje de la caja:** variación del mes ÷ saldo al empezar el mes. Si el mes empezó sin saldo, no hay porcentaje.
+- **Aviso:** pueden publicarlo quienes tengan `PUBLICAR_ANUNCIOS` (presidencia). Un aviso nuevo reemplaza al anterior; se guardan todos. Se detiene al pasar el ratón; quien prefiera menos movimiento lo ve quieto.
+- **Uso:** se anota solo la ruta de cada pantalla abierta (sin datos de la pantalla) y quién la abrió, para contar personas distintas. Se agrupa en clientes, socios y personal con cargo. Lo ven quienes tengan `VER_USO_APP` (presidencia y administración).
+- **Simulador:** decisión del propietario (02/11/2026): «Iniciar simulación» copia toda la base real de ese momento, también clientes y sus datos; «Finalizar simulación» la descarta. La base del simulador está en el mismo servidor y con las mismas protecciones que la real. Copiar tarda unos segundos en un servidor junto a la base (un minuto desde una computadora remota): el proxy no debe cortar esa petición antes de 5 minutos.
+- **Trámite en ventanilla:** tesorería busca a la persona, confirma con ella sus datos para crédito, registra la solicitud (letras o emergente; a un socio, retiro de su cupo) y sube la solicitud firmada. Sigue necesitando los tres votos. El encaje en ventanilla puede ser en efectivo, de la cuenta o descontado del crédito.
+- **Versión:** sale del `pom.xml` (0.2.0) y se muestra en el pie.

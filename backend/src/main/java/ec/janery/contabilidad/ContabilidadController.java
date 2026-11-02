@@ -45,26 +45,26 @@ public class ContabilidadController {
     private final ContabilidadService service;
 
     @GetMapping("/estado")
-    @PreAuthorize("hasAuthority('SCOPE_CONSULTAR_CONTABILIDAD')")
+    @PreAuthorize("hasAnyAuthority('SCOPE_CONSULTAR_CONTABILIDAD', 'SCOPE_SOCIO')")
     public ContabilidadService.Estado estado(@RequestParam(required = false) String periodo) {
         return service.estado(periodo);
     }
 
     @GetMapping("/evolucion")
-    @PreAuthorize("hasAuthority('SCOPE_CONSULTAR_CONTABILIDAD')")
+    @PreAuthorize("hasAnyAuthority('SCOPE_CONSULTAR_CONTABILIDAD', 'SCOPE_SOCIO')")
     public List<ContabilidadService.MesResultado> evolucion() {
         return service.evolucion(6);
     }
 
     @GetMapping("/diario")
-    @PreAuthorize("hasAuthority('SCOPE_CONSULTAR_CONTABILIDAD')")
+    @PreAuthorize("hasAnyAuthority('SCOPE_CONSULTAR_CONTABILIDAD', 'SCOPE_SOCIO')")
     public ContabilidadService.Diario diario(@RequestParam(required = false) String periodo,
             @RequestParam(defaultValue = "0") int pagina, @RequestParam(defaultValue = "50") int tamano) {
         return service.diario(periodo, Math.max(pagina, 0), Pagina.limitar(tamano));
     }
 
     @GetMapping("/mayor")
-    @PreAuthorize("hasAuthority('SCOPE_CONSULTAR_CONTABILIDAD')")
+    @PreAuthorize("hasAnyAuthority('SCOPE_CONSULTAR_CONTABILIDAD', 'SCOPE_SOCIO')")
     public ContabilidadService.Mayor mayor(@RequestParam String linea, @RequestParam(required = false) String periodo,
             @RequestParam(defaultValue = "0") int pagina, @RequestParam(defaultValue = "50") int tamano) {
         return service.mayor(linea, periodo, Math.max(pagina, 0), Pagina.limitar(tamano));
