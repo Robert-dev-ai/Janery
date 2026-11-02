@@ -8,6 +8,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.Map;
 import java.util.UUID;
@@ -27,7 +28,6 @@ import org.springframework.test.web.servlet.ResultActions;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import ec.janery.ahorro.AhorroService;
 
 /** Créditos y ahorros de principio a fin contra PostgreSQL, en el esquema aislado janery_test. */
 @SpringBootTest
@@ -36,14 +36,17 @@ import ec.janery.ahorro.AhorroService;
 @Import(EsqueletoIntegrationTest.EsquemaLimpio.class)
 class ProductosIntegrationTest {
 
+    private static final String DATOS_CREDITO = """
+            {"lugarTrabajo":"Tienda","ocupacion":"Vendedora","antiguedadTrabajo":"2 años","ingresosMensuales":500.00,
+             "fechaNacimiento":"1990-01-01","estadoCivil":"SOLTERO","referenciaNombre":"Luis","referenciaTelefono":"099",
+             "banco":"Pichincha","tipoCuentaBanco":"AHORROS","numeroCuentaBanco":"123"}""";
+
     @Autowired
     private MockMvc mvc;
     @Autowired
     private ObjectMapper json;
     @Autowired
     private JdbcTemplate jdbc;
-    @Autowired
-    private AhorroService ahorros;
 
     private record Persona(String token, long cuenta, String correo) {
     }
@@ -162,7 +165,7 @@ class ProductosIntegrationTest {
         assertThat(c.get("cuotas").get(0).get("pagado").decimalValue()).isEqualByComparingTo("60");
         assertThat(c.get("totalPendiente").decimalValue()).isEqualByComparingTo("255");
 
-        pagar(p, credito, "{\"importe\":45.01}").andExpect(status().isConflict()).andExpect(jsonPath("$.codigo").value("PAGO_EXCEDIDO"));
+        pagar(p, credito, "{\"importe\":255.01}").andExpect(status().isConflict()).andExpect(jsonPath("$.codigo").value("PAGO_EXCEDIDO"));
 
         // 40 de capital; lo demás a interés, desgravamen y por último ahorro letras.
         pagar(p, credito, "{\"importe\":44.90}").andExpect(status().isOk());
@@ -178,14 +181,100 @@ class ProductosIntegrationTest {
     }
 
     @Test
+    void pagarDeMasPasaALaSiguienteLetraYRegistraAQuePertenece() throws Exception {
+        Persona p = persona();
+        depositar(p, "100.00");
+        long credito = solicitarLetras(p, "NORMAL", "300.00", 3);
+        aprobar(credito);
+        pagar(p, credito, "{\"importe\":150.00}").andExpect(status().isOk());
+
+        JsonNode c = credito(p, credito);
+        assertThat(c.get("cuotasPagadas")).hasSize(1);
+        assertThat(c.get("cuotas").get(1).get("pagado").decimalValue()).isEqualByComparingTo("45");
+        assertThat(c.get("capitalPendiente").decimalValue()).isEqualByComparingTo("155");
+
+        JsonNode movimientos = json.readTree(mvc.perform(get("/api/v1/cuentas-principales/me/movimientos").header(HttpHeaders.AUTHORIZATION, bearer(p.token())))
+                .andReturn().getResponse().getContentAsString()).get("contenido");
+        assertThat(movimientos.get(0).get("detalle").asText()).contains("Crédito #" + credito, "letras 1, 2 de 3");
+
+        // Pagar todo lo que queda termina el crédito.
+        pagar(p, credito, "{\"importe\":165.00}").andExpect(status().isOk());
+        assertThat(credito(p, credito).get("estado").asText()).isEqualTo("FINALIZADO");
+    }
+
+    @Test
+    void pagosSimultaneosNoPisanElCapitalNiElSaldo() throws Exception {
+        Persona p = persona();
+        depositar(p, "100.00");
+        long credito = solicitarLetras(p, "NORMAL", "300.00", 3);
+        aprobar(credito);
+        BigDecimal antes = saldo(p);
+        java.util.concurrent.ExecutorService hilos = java.util.concurrent.Executors.newFixedThreadPool(3);
+        try {
+            java.util.List<java.util.concurrent.Future<Integer>> pagos = new java.util.ArrayList<>();
+            for (int i = 0; i < 3; i++) {
+                pagos.add(hilos.submit(() -> pagar(p, credito, "{\"importe\":20.00}").andReturn().getResponse().getStatus()));
+            }
+            for (java.util.concurrent.Future<Integer> pago : pagos) {
+                assertThat(pago.get()).isEqualTo(200);
+            }
+        } finally {
+            hilos.shutdown();
+        }
+        assertThat(credito(p, credito).get("capitalPendiente").decimalValue()).isEqualByComparingTo("240");
+        assertThat(saldo(p)).isEqualByComparingTo(antes.subtract(new BigDecimal("60")));
+    }
+
+    @Test
+    void precancelarExigeLaMitadMasUnaYCobraSoloElCapital() throws Exception {
+        Persona p = persona();
+        depositar(p, "100.00");
+        long credito = solicitarLetras(p, "NORMAL", "500.00", 5);
+        aprobar(credito);
+        pagar(p, credito, "{}").andExpect(status().isOk());
+        pagar(p, credito, "{}").andExpect(status().isOk());
+        precancelar(p, credito).andExpect(status().isConflict()).andExpect(jsonPath("$.codigo").value("PRECANCELACION_NO_DISPONIBLE"));
+        assertThat(credito(p, credito).get("precancelable").asBoolean()).isFalse();
+
+        pagar(p, credito, "{}").andExpect(status().isOk());
+        JsonNode c = credito(p, credito);
+        assertThat(c.get("letrasParaPrecancelar").asInt()).isEqualTo(3);
+        assertThat(c.get("precancelable").asBoolean()).isTrue();
+        BigDecimal capital = c.get("capitalPendiente").decimalValue();
+        assertThat(capital).isEqualByComparingTo("200");
+        BigDecimal encaje = c.get("encaje").decimalValue();
+        BigDecimal ahorro = c.get("ahorroLetras").decimalValue();
+        BigDecimal antes = saldo(p);
+
+        precancelar(p, credito).andExpect(status().isOk());
+
+        c = credito(p, credito);
+        assertThat(c.get("estado").asText()).isEqualTo("FINALIZADO");
+        assertThat(c.get("capitalPendiente").decimalValue()).isEqualByComparingTo("0");
+        assertThat(c.get("totalPendiente").decimalValue()).isEqualByComparingTo("0");
+        assertThat(c.get("encajeDevuelto").asBoolean()).isTrue();
+        assertThat(saldo(p)).isEqualByComparingTo(antes.subtract(capital).add(encaje).add(ahorro));
+    }
+
+    @Test
+    void creditoALetrasExigeDatosDeCreditoALosClientes() throws Exception {
+        Persona p = personaSinDatosCredito();
+        enviar(p, "/api/v1/creditos/letras/solicitudes", Map.of("modalidad", "NORMAL", "importe", 300, "plazoMeses", 3, "origenEncaje", "CREDITO"))
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.codigo").value("DATOS_CREDITO_INCOMPLETOS"));
+        completarDatosCredito(p.token());
+        enviar(p, "/api/v1/creditos/letras/solicitudes", Map.of("modalidad", "NORMAL", "importe", 300, "plazoMeses", 3, "origenEncaje", "CREDITO"))
+                .andExpect(status().is2xxSuccessful());
+    }
+
+    @Test
     void aprobarExigePermisoYLimitesSeValidan() throws Exception {
         Persona p = persona();
         long credito = solicitarLetras(p, "NORMAL", "300.00", 3);
         mvc.perform(post("/api/v1/admin/creditos/" + credito + "/aprobar").header(HttpHeaders.AUTHORIZATION, bearer(p.token())))
                 .andExpect(status().isForbidden());
-        enviar(p, "/api/v1/creditos/letras/solicitudes", Map.of("modalidad", "NORMAL", "importe", 99, "plazoMeses", 3))
+        enviar(p, "/api/v1/creditos/letras/solicitudes", Map.of("modalidad", "NORMAL", "importe", 99, "plazoMeses", 3, "origenEncaje", "CREDITO"))
                 .andExpect(status().isConflict()).andExpect(jsonPath("$.codigo").value("IMPORTE_FUERA_DE_RANGO"));
-        enviar(p, "/api/v1/creditos/letras/solicitudes", Map.of("modalidad", "NORMAL", "importe", 300, "plazoMeses", 37))
+        enviar(p, "/api/v1/creditos/letras/solicitudes", Map.of("modalidad", "NORMAL", "importe", 300, "plazoMeses", 37, "origenEncaje", "CREDITO"))
                 .andExpect(status().isConflict()).andExpect(jsonPath("$.codigo").value("PLAZO_FUERA_DE_RANGO"));
     }
 
@@ -209,6 +298,10 @@ class ProductosIntegrationTest {
                 .andExpect(status().isConflict()).andExpect(jsonPath("$.codigo").value("LIMITE_EXCEDIDO"));
 
         enviarConClave(p, "/api/v1/creditos/emergentes/solicitudes", "{\"importe\":100.00}").andExpect(status().isOk());
+        // No sale dinero hasta que se apruebe.
+        assertThat(saldo(p)).isEqualByComparingTo("0");
+        assertThat(primerCredito(p).get("estado").asText()).isEqualTo("SOLICITADO");
+        aprobar(primerCredito(p).get("id").asLong());
         assertThat(saldo(p)).isEqualByComparingTo("100");
         JsonNode c = primerCredito(p);
         // 100 + 3,5 % + 0,25 %
@@ -310,23 +403,194 @@ class ProductosIntegrationTest {
     // --- Ahorros
 
     @Test
-    void ahorroNormalDepositaRetiraYAbonaInteresUnaVezAlMes() throws Exception {
+    void ahorroNormalCorreInteresDiarioAparteYSeLiberaElDiaUno() throws Exception {
         Persona p = persona();
-        depositar(p, "1200.00");
+        depositar(p, "3650.00");
         long ahorro = crearNormal(p, "Vacaciones");
-        enviarConClave(p, "/api/v1/ahorros/" + ahorro + "/depositos", "{\"importe\":1200.00}").andExpect(status().isOk());
+        enviarConClave(p, "/api/v1/ahorros/" + ahorro + "/depositos", "{\"importe\":3650.00}").andExpect(status().isOk());
         assertThat(saldo(p)).isEqualByComparingTo("0");
 
-        // 1200 * 2 % / 12
-        YearMonth periodo = YearMonth.of(2026, 9);
-        assertThat(ahorros.abonarInteres(ahorro, periodo)).isTrue();
-        assertThat(ahorros.abonarInteres(ahorro, periodo)).isFalse();
-        assertThat(saldoAhorro(p, ahorro)).isEqualByComparingTo("1202");
+        // Sin un día 1 de por medio, corre pero no se puede retirar. 3650 * 5 % / 365 = 0,50 al día.
+        LocalDate hoy = LocalDate.now(java.time.ZoneId.of("America/Guayaquil"));
+        LocalDate primero = hoy.withDayOfMonth(1);
+        jdbc.update("update cuentas_ahorro set ultimo_devengo = ? where id = ?", primero.minusDays(10), ahorro);
+        JsonNode a = ahorro(p, ahorro);
+        assertThat(a.get("saldo").decimalValue()).isEqualByComparingTo("3650");
+        // Diez días del mes anterior ya liberados, y los días de este mes acumulándose.
+        assertThat(a.get("interesDisponible").decimalValue()).isEqualByComparingTo("5");
+        assertThat(a.get("interesAcumulado").decimalValue())
+                .isEqualByComparingTo(new BigDecimal("0.50").multiply(BigDecimal.valueOf(hoy.getDayOfMonth() - 1)));
+        assertThat(a.get("proximaLiberacion").asText()).isEqualTo(primero.plusMonths(1).toString());
 
-        enviarConClave(p, "/api/v1/ahorros/" + ahorro + "/retiros", "{\"importe\":1202.01}")
+        // Solo sale lo liberado, a la cuenta principal; el saldo no cambia.
+        enviarConClave(p, "/api/v1/ahorros/" + ahorro + "/interes", "{}").andExpect(status().isOk());
+        assertThat(saldo(p)).isEqualByComparingTo("5");
+        a = ahorro(p, ahorro);
+        assertThat(a.get("saldo").decimalValue()).isEqualByComparingTo("3650");
+        assertThat(a.get("interesDisponible").decimalValue()).isEqualByComparingTo("0");
+        enviarConClave(p, "/api/v1/ahorros/" + ahorro + "/interes", "{}")
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.codigo").value("INTERES_NO_DISPONIBLE"));
+
+        enviarConClave(p, "/api/v1/ahorros/" + ahorro + "/retiros", "{\"importe\":3650.01}")
                 .andExpect(status().isConflict()).andExpect(jsonPath("$.codigo").value("SALDO_INSUFICIENTE"));
-        enviarConClave(p, "/api/v1/ahorros/" + ahorro + "/retiros", "{\"importe\":1202.00}").andExpect(status().isOk());
-        assertThat(saldo(p)).isEqualByComparingTo("1202");
+        enviarConClave(p, "/api/v1/ahorros/" + ahorro + "/retiros", "{\"importe\":3650.00}").andExpect(status().isOk());
+        assertThat(saldo(p)).isEqualByComparingTo("3655");
+    }
+
+    // --- Atraso y mora
+
+    @Test
+    void laMoraCorreSoloAClientesPorLetraAtrasadaYSeCobraAlFinal() throws Exception {
+        Persona cliente = persona();
+        long credito = solicitarLetras(cliente, "NORMAL", "300.00", 3);
+        aprobar(credito);
+        atrasarDiezDias(credito);
+
+        JsonNode c = credito(cliente, credito);
+        BigDecimal letra = c.get("cuotas").get(0).get("total").decimalValue();
+        assertThat(c.get("letrasAtrasadas").asInt()).isEqualTo(1);
+        assertThat(c.get("cuotas").get(0).get("diasAtraso").asLong()).isEqualTo(10);
+        BigDecimal mora = c.get("moraPendiente").decimalValue();
+        assertThat(mora).isEqualByComparingTo("0.10");
+        assertThat(c.get("totalPendiente").decimalValue()).isEqualByComparingTo(letra.multiply(BigDecimal.valueOf(3)).add(mora));
+
+        // Pagar solo la letra deja la mora: la letra sigue abierta, pero la mora ya no crece.
+        depositar(cliente, letra.add(mora).toPlainString());
+        pagar(cliente, credito, "{\"importe\":" + letra + "}").andExpect(status().isOk());
+        c = credito(cliente, credito);
+        assertThat(c.get("cuotasPagadas")).isEmpty();
+        assertThat(c.get("moraPendiente").decimalValue()).isEqualByComparingTo(mora);
+        assertThat(jdbc.queryForObject("select mora_hasta is not null from cuotas_credito where credito_id = ? and numero = 1", Boolean.class, credito)).isTrue();
+        pagar(cliente, credito, "{\"importe\":" + mora + "}").andExpect(status().isOk());
+        c = credito(cliente, credito);
+        assertThat(c.get("cuotasPagadas")).hasSize(1);
+        assertThat(c.get("moraPendiente").decimalValue()).isEqualByComparingTo("0");
+        assertThat(c.get("letrasAtrasadas").asInt()).isZero();
+
+        Persona socio = persona();
+        hacerSocio(socio);
+        long deSocio = solicitarLetras(socio, "NORMAL", "300.00", 3);
+        aprobar(deSocio);
+        atrasarDiezDias(deSocio);
+        c = credito(socio, deSocio);
+        assertThat(c.get("letrasAtrasadas").asInt()).isEqualTo(1);
+        assertThat(c.get("moraPendiente").decimalValue()).isEqualByComparingTo("0");
+    }
+
+    @Test
+    void unaLetraIncompletaCobraCapitalDesgravamenInteresYAhorro() throws Exception {
+        Persona p = persona();
+        long credito = solicitarLetras(p, "NORMAL", "300.00", 3);
+        aprobar(credito);
+        JsonNode q = credito(p, credito).get("cuotas").get(0);
+        BigDecimal capital = q.get("capital").decimalValue();
+        BigDecimal desgravamen = q.get("fondoDesgravamen").decimalValue();
+        depositar(p, "300.00");
+        // Cubre capital y desgravamen, y un centavo de interés.
+        pagar(p, credito, "{\"importe\":" + capital.add(desgravamen).add(new BigDecimal("0.01")) + "}").andExpect(status().isOk());
+        java.util.Map<String, Object> fila = jdbc.queryForMap("""
+                select capital_pagado, desgravamen_pagado, interes_pagado, ahorro_pagado
+                from cuotas_credito where credito_id = ? and numero = 1
+                """, credito);
+        assertThat((BigDecimal) fila.get("capital_pagado")).isEqualByComparingTo(capital);
+        assertThat((BigDecimal) fila.get("desgravamen_pagado")).isEqualByComparingTo(desgravamen);
+        assertThat((BigDecimal) fila.get("interes_pagado")).isEqualByComparingTo("0.01");
+        assertThat((BigDecimal) fila.get("ahorro_pagado")).isEqualByComparingTo("0");
+    }
+
+    // --- Encaje y documentos
+
+    @Test
+    void elEncajeSalDeDondeElSolicitanteEligio() throws Exception {
+        Persona p = persona();
+        // De la cuenta: debe tenerlo antes de recibir el crédito.
+        long deCuenta = solicitarLetrasCon(p, "\"origenEncaje\":\"CUENTA\"");
+        mvc.perform(post("/api/v1/admin/creditos/" + deCuenta + "/aprobar").header(HttpHeaders.AUTHORIZATION, bearer(presidente())))
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.codigo").value("SALDO_INSUFICIENTE"));
+        mvc.perform(post("/api/v1/admin/creditos/" + deCuenta + "/rechazar").header(HttpHeaders.AUTHORIZATION, bearer(presidente()))
+                .contentType(MediaType.APPLICATION_JSON).content("{\"motivo\":\"Sin saldo\"}")).andExpect(status().isNoContent());
+
+        // En efectivo: entra a la caja y el desembolso llega completo.
+        BigDecimal cajaAntes = saldoCaja();
+        long enEfectivo = solicitarLetrasCon(p, "\"origenEncaje\":\"EFECTIVO\"");
+        aprobar(enEfectivo);
+        BigDecimal encaje = credito(p, enEfectivo).get("encaje").decimalValue();
+        assertThat(encaje.signum()).isPositive();
+        assertThat(saldo(p)).isEqualByComparingTo("300");
+        assertThat(saldoCaja()).isEqualByComparingTo(cajaAntes.add(encaje));
+
+        // De un ahorro: baja el ahorro, no la cuenta.
+        Persona otra = persona();
+        depositar(otra, "100.00");
+        long ahorro = crearNormal(otra, "Reserva");
+        enviarConClave(otra, "/api/v1/ahorros/" + ahorro + "/depositos", "{\"importe\":100.00}").andExpect(status().isOk());
+        long deAhorro = solicitarLetrasCon(otra, "\"origenEncaje\":\"AHORROS\",\"ahorroEncajeId\":" + ahorro);
+        aprobar(deAhorro);
+        assertThat(saldo(otra)).isEqualByComparingTo("300");
+        assertThat(saldoAhorro(otra, ahorro)).isEqualByComparingTo(new BigDecimal("100").subtract(credito(otra, deAhorro).get("encaje").decimalValue()));
+
+        // Sin origen no hay solicitud.
+        Persona sinOrigen = persona();
+        enviar(sinOrigen, "/api/v1/creditos/letras/solicitudes", Map.of("modalidad", "NORMAL", "importe", 300, "plazoMeses", 3))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.codigo").value("ORIGEN_ENCAJE_REQUERIDO"));
+    }
+
+    @Test
+    void laSolicitudAdmiteVariosPdfYRechazaLoDemas() throws Exception {
+        Persona p = persona();
+        long credito = solicitarLetras(p, "NORMAL", "300.00", 3);
+        byte[] pdf = "%PDF-1.7 prueba".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        String ruta = "/api/v1/creditos/" + credito + "/documentos";
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart(ruta)
+                .file(new org.springframework.mock.web.MockMultipartFile("archivos", "falso.pdf", "application/pdf", "no es pdf".getBytes(java.nio.charset.StandardCharsets.UTF_8)))
+                .header(HttpHeaders.AUTHORIZATION, bearer(p.token())))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.codigo").value("DOCUMENTO_NO_PDF"));
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart(ruta)
+                .file(new org.springframework.mock.web.MockMultipartFile("archivos", "rol.pdf", "application/pdf", pdf))
+                .file(new org.springframework.mock.web.MockMultipartFile("archivos", "cedula.pdf", "application/pdf", pdf))
+                .header(HttpHeaders.AUTHORIZATION, bearer(p.token())))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(2));
+
+        // Otra persona no los ve; quien aprueba, sí.
+        mvc.perform(get(ruta).header(HttpHeaders.AUTHORIZATION, bearer(persona().token()))).andExpect(status().isNotFound());
+        JsonNode lista = json.readTree(mvc.perform(get("/api/v1/admin/creditos/" + credito + "/documentos").header(HttpHeaders.AUTHORIZATION, bearer(presidente())))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+        assertThat(lista.get(0).get("nombre").asText()).isEqualTo("rol.pdf");
+        byte[] bajado = mvc.perform(get("/api/v1/admin/creditos/" + credito + "/documentos/" + lista.get(0).get("id").asLong())
+                .header(HttpHeaders.AUTHORIZATION, bearer(presidente())))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsByteArray();
+        assertThat(bajado).isEqualTo(pdf);
+    }
+
+    /** Con la fecha de la aplicación: la de la base de datos está en UTC y de noche ya es el día siguiente. */
+    private void atrasarDiezDias(long credito) {
+        jdbc.update("update cuotas_credito set vencimiento = ? where credito_id = ? and numero = 1",
+                LocalDate.now(java.time.ZoneId.of("America/Guayaquil")).minusDays(10), credito);
+    }
+
+    private long solicitarLetrasCon(Persona p, String origen) throws Exception {
+        String r = mvc.perform(post("/api/v1/creditos/letras/solicitudes").header(HttpHeaders.AUTHORIZATION, bearer(p.token()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"modalidad\":\"NORMAL\",\"importe\":300.00,\"plazoMeses\":3," + origen + "}"))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        return json.readTree(r).get("id").asLong();
+    }
+
+    private BigDecimal saldoCaja() {
+        return jdbc.queryForObject("""
+                select coalesce(sum(case when m.sentido = 'ENTRADA' then m.importe else -m.importe end), 0)
+                from movimientos_caja m join cajas c on c.id = m.caja_id where c.codigo = 'PRINCIPAL'
+                """, BigDecimal.class);
+    }
+
+    private JsonNode ahorro(Persona p, long id) throws Exception {
+        for (JsonNode a : json.readTree(mvc.perform(get("/api/v1/ahorros/me").header(HttpHeaders.AUTHORIZATION, bearer(p.token())))
+                .andReturn().getResponse().getContentAsString())) {
+            if (a.get("id").asLong() == id) {
+                return a;
+            }
+        }
+        throw new AssertionError("Ahorro no encontrado: " + id);
     }
 
     @Test
@@ -347,8 +611,8 @@ class ProductosIntegrationTest {
 
         jdbc.update("update cuentas_ahorro set vence_en = current_date - 1 where id = ?", id);
         enviarConClave(p, "/api/v1/ahorros/" + id + "/retiros", "{}").andExpect(status().isOk());
-        // 1000 * 5 % * 12/12
-        assertThat(saldo(p)).isEqualByComparingTo("1050");
+        // 1000 * 7 % * 12/12, la tasa del plazo de 12 meses.
+        assertThat(saldo(p)).isEqualByComparingTo("1070");
         assertThat(jdbc.queryForObject("select estado from cuentas_ahorro where id = ?", String.class, id)).isEqualTo("CERRADA");
     }
 
@@ -383,15 +647,38 @@ class ProductosIntegrationTest {
     private ResultActions disponer(Persona p, String importe, String promocion) throws Exception {
         String cuerpo = promocion == null ? "{\"importe\":" + importe + "}"
                 : "{\"importe\":" + importe + ",\"promocion\":\"" + promocion + "\"}";
-        return enviarConClave(p, "/api/v1/creditos/emergentes/disposiciones", cuerpo);
+        ResultActions r = enviarConClave(p, "/api/v1/creditos/emergentes/disposiciones", cuerpo);
+        // Toda disposición se aprueba antes de salir; aquí se prueba lo que ocurre después.
+        if (r.andReturn().getResponse().getStatus() == 200) {
+            long id = json.readTree(r.andReturn().getResponse().getContentAsString()).get("id").asLong();
+            mvc.perform(post("/api/v1/admin/creditos/disposiciones/" + id + "/aprobar").header(HttpHeaders.AUTHORIZATION, bearer(presidente())))
+                    .andExpect(status().isNoContent());
+        }
+        return r;
     }
 
     private long solicitarLetras(Persona p, String modalidad, String importe, int plazo) throws Exception {
         String r = mvc.perform(post("/api/v1/creditos/letras/solicitudes").header(HttpHeaders.AUTHORIZATION, bearer(p.token()))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"modalidad\":\"" + modalidad + "\",\"importe\":" + importe + ",\"plazoMeses\":" + plazo + "}"))
+                        .content("{\"modalidad\":\"" + modalidad + "\",\"importe\":" + importe + ",\"plazoMeses\":" + plazo + ",\"origenEncaje\":\"CREDITO\"}"))
                 .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
         return json.readTree(r).get("id").asLong();
+    }
+
+    private ResultActions precancelar(Persona p, long credito) throws Exception {
+        return mvc.perform(post("/api/v1/creditos/" + credito + "/precancelacion").header(HttpHeaders.AUTHORIZATION, bearer(p.token()))
+                .header("Idempotency-Key", UUID.randomUUID().toString()));
+    }
+
+    private void completarDatosCredito(String token) throws Exception {
+        mvc.perform(put("/api/v1/personas/me/datos-credito").header(HttpHeaders.AUTHORIZATION, bearer(token)).contentType(MediaType.APPLICATION_JSON)
+                .content(DATOS_CREDITO)).andExpect(status().isOk());
+    }
+
+    private Persona persona() throws Exception {
+        Persona p = personaSinDatosCredito();
+        completarDatosCredito(p.token());
+        return p;
     }
 
     private void aprobar(long credito) throws Exception {
@@ -497,7 +784,7 @@ class ProductosIntegrationTest {
     }
 
     /** Persona con perfil y cuenta activa. */
-    private Persona persona() throws Exception {
+    private Persona personaSinDatosCredito() throws Exception {
         String correo = "p-" + UUID.randomUUID().toString().substring(0, 12) + "@janery.test";
         mvc.perform(post("/api/v1/auth/register").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"correo\":\"" + correo + "\",\"contrasena\":\"Clave-Segura-1\"}"))

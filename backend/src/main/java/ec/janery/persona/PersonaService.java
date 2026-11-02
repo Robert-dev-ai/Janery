@@ -37,9 +37,34 @@ public class PersonaService {
             throw NegocioException.conflicto("IDENTIFICACION_REGISTRADA", "Esa identificación ya está registrada");
         }
         Persona persona = repository.save(new Persona(null, usuarioId, r.nombres().trim(), r.apellidos().trim(),
-                r.identificacion().trim(), r.telefono().trim(), r.direccion().trim(), Instant.now(reloj)));
+                r.identificacion().trim(), r.telefono().trim(), r.direccion() == null || r.direccion().isBlank() ? null : r.direccion().trim(),
+                Instant.now(reloj), null, null, null, null, null, null, null, null, null, null, null));
         auditoria.registrar(usuarioId, "PERFIL_COMPLETADO", "PERSONA", "persona", persona.getId(), null, null, null);
         return persona;
+    }
+
+    /** Nombres e identificación quedan fijos: son los datos con los que se abrió la cuenta. */
+    @Transactional
+    public Persona actualizarContacto(Long usuarioId, PersonaController.ContactoRequest r) {
+        Persona persona = repository.findByUsuarioId(usuarioId)
+                .orElseThrow(() -> NegocioException.noEncontrado("Perfil no completado"));
+        persona.actualizarContacto(r.telefono().trim(), r.direccion().trim());
+        auditoria.registrar(usuarioId, "PERFIL_ACTUALIZADO", "PERSONA", "persona", persona.getId(), null, null, null);
+        return persona;
+    }
+
+    @Transactional
+    public Persona actualizarDatosCredito(Long usuarioId, PersonaController.DatosCreditoRequest r) {
+        Persona persona = repository.findByUsuarioId(usuarioId)
+                .orElseThrow(() -> NegocioException.noEncontrado("Perfil no completado"));
+        persona.actualizarDatosCredito(r);
+        auditoria.registrar(usuarioId, "DATOS_CREDITO_ACTUALIZADOS", "PERSONA", "persona", persona.getId(), null, null, null);
+        return persona;
+    }
+
+    @Transactional(readOnly = true)
+    public boolean datosCreditoCompletos(Long personaId) {
+        return repository.findById(personaId).map(Persona::datosCreditoCompletos).orElse(false);
     }
 
     @Transactional(readOnly = true)

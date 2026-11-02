@@ -1,76 +1,309 @@
 @import "tailwindcss";
 
-/* Identidad de Janery: todo el sitio va del blanco al verde. */
+/* Janery 2.0: el verde da la identidad; los neutros sostienen la interfaz y los colores de apoyo comunican estados. */
 @theme {
-  --color-texto: #14532d;
-  --color-suave: #3f7a58;
-  --color-borde: #bbf7d0;
-  --color-fondo: #f0fdf4;
-  --color-primario: #15803d;
-  --color-intenso: #052e16;
+  --font-sans: "Inter", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
 
-  --animate-entrada: entrada 0.3s ease-out;
+  --color-texto: #1b2a25;
+  --color-suave: #5a6a64;
+  --color-borde: #c9d5cf;
+  --color-fondo: #eef2f0;
+  --color-superficie: #ffffff;
+  --color-primario: #15803d;
+  --color-primario-hondo: #166534;
+  --color-primario-tenue: #e8f5ec;
+  --color-intenso: #0c3b2c;
+  --color-intenso-claro: #15503d;
+  --color-lateral-texto: #c5d8d0;
+
+  --color-exito: #15803d;
+  --color-exito-tenue: #e8f5ec;
+  --color-informacion: #1d4ed8;
+  --color-informacion-tenue: #e8effd;
+  --color-advertencia: #b45309;
+  --color-advertencia-tenue: #fdf1e0;
+  --color-peligro: #b91c1c;
+  --color-peligro-tenue: #fcebea;
+  --color-neutro-tenue: #e3e8e6;
+
+  --animate-entrada: entrada 0.2s ease-out;
 
   @keyframes entrada {
-    from { opacity: 0; transform: translateY(0.5rem); }
+    from { opacity: 0; transform: translateY(0.25rem); }
     to { opacity: 1; transform: translateY(0); }
   }
 }
 
 @layer base {
-  body { @apply min-h-screen bg-linear-to-b from-white to-fondo text-texto leading-normal; }
-  h1 { @apply mb-4 text-3xl font-bold text-green-800; }
-  h2 { @apply mb-2 text-xl font-semibold text-green-800; }
-  h3 { @apply mb-2 text-lg font-semibold text-green-800; }
+  /* Series de los gráficos: el orden está validado para daltonismo; se asignan en este orden, sin ciclar.
+     Van fuera de @theme porque el nombre se arma en el código y Tailwind eliminaría las que no ve escritas. */
+  :root {
+    --color-serie-1: #2a78d6;
+    --color-serie-2: #eb6834;
+    --color-serie-3: #1baf7a;
+    --color-serie-4: #eda100;
+    --color-serie-5: #e87ba4;
+    --color-serie-otros: #8a938f;
+  }
+
+  /* El logo, centrado y sin repetir, sobre el verde de la marca. */
+  body { @apply min-h-screen bg-intenso bg-fixed bg-center bg-no-repeat text-texto leading-normal antialiased; background-image: url("/logo-icono.png"); background-size: min(85vmin, 44rem); }
+  h1 { @apply mb-5 text-2xl font-bold tracking-tight text-texto sm:text-3xl; }
+  h2 { @apply mb-2 text-lg font-semibold text-texto; }
+  h3 { @apply mb-2 text-base font-semibold text-texto; }
   p { @apply mb-3; }
-  a { @apply text-primario underline transition-colors duration-200 hover:text-green-500; }
-  label { @apply mb-3 block font-medium; }
-  input, select { @apply mt-1 block w-full rounded-md border border-green-300 bg-white p-2 transition duration-200 hover:border-green-500 focus:border-primario focus:ring-2 focus:ring-green-200 focus:outline-none; }
-  button { @apply cursor-pointer rounded-md border border-primario bg-primario px-3.5 py-2 text-white transition duration-200 hover:-translate-y-0.5 hover:bg-green-800 hover:shadow-md active:translate-y-0 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 disabled:hover:bg-primario disabled:hover:shadow-none; }
+  a { @apply text-primario underline-offset-2 transition-colors duration-150 hover:text-primario-hondo hover:underline; }
+  label { @apply mb-3 block text-sm font-medium; }
+  input, select { @apply mt-1 block w-full rounded-lg border border-borde bg-superficie px-3 py-2 text-base font-normal transition duration-150 hover:border-suave focus:border-primario focus:ring-2 focus:ring-primario-tenue focus:outline-none; }
+  input[type="checkbox"] { @apply mt-0 inline-block w-auto; }
+  button { @apply cursor-pointer rounded-lg border border-primario bg-primario px-3.5 py-2 text-sm font-medium text-white transition duration-150 hover:border-primario-hondo hover:bg-primario-hondo active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-primario; }
   :focus-visible { @apply outline-2 outline-offset-2 outline-primario; }
-  table { @apply w-full border-collapse overflow-hidden rounded-md bg-white; }
-  th, td { @apply border-b border-borde p-2 text-left align-top; }
-  th { @apply bg-green-100 font-semibold whitespace-nowrap text-green-900; }
-  tbody tr { @apply transition-colors duration-150 hover:bg-green-50; }
+  table { @apply w-full border-collapse bg-superficie text-sm; }
+  th, td { @apply border-b border-borde px-4 py-3 text-left align-middle; }
+  th { @apply bg-fondo text-xs font-semibold tracking-wide whitespace-nowrap text-suave uppercase; }
+  tbody tr { @apply transition-colors duration-100 hover:bg-fondo; }
+  tbody tr:last-child td { @apply border-b-0; }
 }
 
 @layer components {
-  .barra { @apply sticky top-0 z-10 flex flex-wrap items-center gap-x-6 gap-y-2 border-b border-green-300 bg-linear-to-r from-white via-green-50 to-green-200 px-6 py-3 shadow-sm; }
-  .barra nav { @apply flex flex-wrap items-center gap-x-4 gap-y-1; }
-  .barra nav a { @apply inline-block font-medium text-green-900 no-underline transition duration-200 hover:scale-110 hover:text-green-500; }
-  .barra nav a.activo { @apply font-bold text-primario underline decoration-2 underline-offset-4; }
-  .marca { @apply inline-block text-xl font-extrabold text-green-800 no-underline transition duration-200 hover:scale-110 hover:text-green-500; }
-  .en-vivo { @apply inline-flex items-center gap-1.5 text-xs font-medium text-green-800; }
-  .en-vivo i { @apply size-2 animate-pulse rounded-full bg-green-500; }
-  .sin-conexion { @apply text-xs font-medium text-suave; }
+  /* Sitio público */
+  .publico { @apply flex min-h-screen flex-col; }
+  .publico-barra { @apply sticky top-0 z-10 border-b border-borde bg-superficie/95 backdrop-blur; }
+  .publico-barra > div { @apply mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3 sm:px-6; }
+  .publico-barra nav { @apply ml-auto flex flex-wrap items-center gap-x-4 gap-y-2; }
+  .publico-barra nav a:not(.boton) { @apply text-sm font-medium text-texto hover:text-primario hover:no-underline; }
+  .publico-barra nav a.activo:not(.boton) { @apply text-primario; }
+  .publico-contenido { @apply mx-auto my-4 w-full max-w-[min(72rem,calc(100%-1.5rem))] flex-1 rounded-2xl bg-superficie/90 px-4 py-8 sm:px-6; }
+  .publico-pie { @apply border-t border-borde bg-fondo px-6 py-5 text-center text-sm text-suave; }
+  .marca { @apply inline-flex shrink-0 items-center gap-2.5 font-bold text-texto hover:text-texto hover:no-underline; }
+  .marca img { @apply block size-11 object-contain; }
+  .caja-acceso { @apply mx-auto max-w-md py-6; }
 
-  .contenido { @apply mx-auto max-w-5xl p-6; }
+  .portada { @apply mb-10 rounded-2xl bg-intenso px-6 py-12 text-white sm:px-12 sm:py-16; }
+  .portada h1 { @apply max-w-2xl text-4xl font-extrabold text-white sm:text-5xl; }
+  .portada p { @apply mb-6 max-w-xl text-lg text-lateral-texto; }
+  .portada .boton-claro { @apply border-white; }
+  .rejilla-productos { @apply mb-8 grid gap-4 md:grid-cols-3; }
+  .producto-icono { @apply mb-3 flex size-10 items-center justify-center rounded-lg; }
+  .estado-servidor { @apply mb-0 text-sm text-suave; }
+
+  /* Marco de portal y panel */
+  .marco { @apply flex min-h-screen; }
+  .lateral { @apply fixed inset-y-0 left-0 z-40 flex w-68 -translate-x-full flex-col overflow-y-auto bg-intenso text-lateral-texto transition-transform duration-200 lg:sticky lg:top-0 lg:h-screen lg:translate-x-0; }
+  .lateral.abierto { @apply translate-x-0; }
+  .lateral-marca { @apply flex items-center gap-3 px-5 py-4 text-white hover:text-white hover:no-underline; }
+  .lateral-marca img { @apply size-11 object-contain; }
+  .lateral-marca strong { @apply block leading-tight; }
+  .lateral-marca small { @apply block text-xs font-normal text-lateral-texto; }
+  .lateral nav { @apply flex-1 px-3 pb-6; }
+  .lateral-seccion { @apply mt-3; }
+  .lateral-grupo { @apply mb-1 flex cursor-pointer list-none items-center justify-between rounded-md px-3 py-1 text-[0.6875rem] font-semibold tracking-wider uppercase opacity-80 hover:opacity-100; }
+  .lateral-grupo::-webkit-details-marker { display: none; }
+  .lateral-grupo::after { content: "›"; @apply text-sm leading-none transition-transform duration-150; }
+  .lateral-seccion[open] > .lateral-grupo::after { @apply rotate-90; }
+  .lateral-enlace { @apply mb-0.5 flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-lateral-texto hover:bg-intenso-claro hover:text-white hover:no-underline; }
+  .lateral-enlace.activo { @apply bg-primario text-white; }
+  /* Acción de la entrada anterior: pequeña y con sangría, para gastar menos espacio en el menú. */
+  .lateral-subenlace { @apply mb-0 ml-6 gap-2 py-1 text-xs font-normal; }
+
+  /* El portal del socio usa un lateral claro: se distingue de un vistazo del panel de gestión. */
+  .lateral-claro { @apply border-r border-borde bg-superficie text-suave; }
+  .lateral-claro .lateral-marca { @apply text-texto hover:text-texto; }
+  .lateral-claro .lateral-marca small { @apply text-suave; }
+  .lateral-claro .lateral-enlace { @apply text-texto hover:bg-fondo hover:text-texto; }
+  .lateral-claro .lateral-enlace.activo { @apply bg-primario-tenue text-primario-hondo; }
+
+  button.velo { @apply fixed inset-0 z-30 rounded-none border-0 bg-black/40 p-0 hover:bg-black/40 active:scale-100 lg:hidden; }
+  .principal { @apply flex min-w-0 flex-1 flex-col; }
+  .cabecera { @apply sticky top-0 z-20 flex items-center gap-2 border-b border-borde bg-superficie px-4 py-2.5 sm:gap-3 sm:px-6; }
+  .cabecera-titulo { @apply m-0 truncate text-sm font-semibold; }
+  .cabecera-acciones { @apply ml-auto flex items-center gap-1 sm:gap-3; }
+  .cambio-experiencia { @apply hidden items-center gap-1.5 rounded-lg border border-borde px-3 py-1.5 text-sm font-medium text-texto hover:bg-fondo hover:text-texto hover:no-underline sm:inline-flex; }
+  .cambio-movil { @apply mt-4 border-t border-white/10 pt-4 sm:hidden; }
+  button.icono-boton { @apply relative flex rounded-lg border-transparent bg-transparent p-2 text-suave hover:border-transparent hover:bg-fondo hover:text-texto; }
+  .contador { @apply absolute -top-0.5 -right-0.5 flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-peligro px-1 text-[0.6875rem] font-semibold text-white; }
+  .en-vivo { @apply hidden items-center gap-1.5 text-xs font-medium text-suave md:inline-flex; }
+  .en-vivo i { @apply size-2 animate-pulse rounded-full bg-exito; }
+  .sin-conexion { @apply hidden text-xs font-medium text-advertencia md:inline; }
+
+  /* Una hoja clara sobre la imagen de fondo: todo el texto de la pantalla conserva su contraste. */
+  .contenido { @apply mx-auto my-3 w-full max-w-[min(80rem,calc(100%-1.5rem))] flex-1 rounded-2xl bg-fondo/90 p-4 shadow-lg sm:my-5 sm:p-6 lg:p-8; }
   .contenido > router-outlet + * { @apply block animate-entrada; }
   .estrecho { @apply max-w-md; }
-  .tarjeta { @apply mb-4 rounded-lg border border-borde bg-white p-5 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-green-400 hover:shadow-lg; }
-  .portada { @apply mb-6 rounded-xl bg-linear-to-br from-green-50 via-green-200 to-green-600 p-10; }
-  .portada h1 { @apply text-5xl font-extrabold text-green-950; }
-  .portada p { @apply text-lg text-green-950; }
-  .boton { @apply inline-block rounded-md border border-primario bg-primario px-4 py-2 font-medium text-white no-underline transition duration-200 hover:-translate-y-0.5 hover:bg-green-800 hover:text-white hover:shadow-md active:scale-95; }
-  .boton-claro { @apply inline-block rounded-md border border-primario bg-white px-4 py-2 font-medium text-primario no-underline transition duration-200 hover:-translate-y-0.5 hover:bg-green-100 hover:text-green-800 hover:shadow-md active:scale-95; }
 
-  /* Sin rojo: el error se distingue por el símbolo, el borde y el verde más oscuro. */
-  .error { @apply rounded-md border-l-4 border-intenso bg-green-100 px-3 py-2 font-semibold text-intenso; }
+  /* Menús desplegables de la cabecera */
+  .ajustes, .avisos { @apply relative block; }
+  button.ajustes-boton { @apply flex rounded-full border-transparent bg-transparent p-1.5 text-suave hover:border-transparent hover:bg-fondo hover:text-texto; }
+  .ajustes-menu { @apply absolute top-full right-0 z-20 mt-2 w-64 animate-entrada overflow-hidden rounded-xl border border-borde bg-superficie shadow-lg; }
+  .ajustes-correo { @apply m-0 truncate border-b border-borde px-4 py-3 text-sm text-suave; }
+  .ajustes-rol { @apply m-0 mt-0.5 text-xs font-semibold text-primario; }
+  .ajustes-menu a, .ajustes-menu button { @apply flex w-full items-center gap-3 rounded-none border-0 bg-transparent px-4 py-2.5 text-left text-sm font-medium text-texto hover:bg-fondo hover:text-texto hover:no-underline active:scale-100; }
+  .ajustes-menu button { @apply border-t border-borde; }
+  .pestanas { @apply mb-5 flex flex-wrap gap-x-5 gap-y-1 border-b border-borde; }
+  .pestanas a { @apply -mb-px border-b-2 border-transparent pb-2 text-sm font-medium text-suave hover:text-texto hover:no-underline; }
+  .pestanas a.activo { @apply border-primario text-primario; }
+
+  /* Tarjetas e indicadores */
+  .tarjeta { @apply mb-4 rounded-xl border border-borde bg-superficie p-5 shadow-sm; }
+  .tarjeta > :last-child { @apply mb-0; }
+  .tarjeta > h2:first-child, .tarjeta > h3:first-child, .tarjeta > .encabezado-tarjeta:first-child { @apply -mx-5 -mt-5 mb-4 rounded-t-xl border-b border-borde bg-primario-tenue px-5 py-3; }
+  .tarjeta .tarjeta { @apply bg-fondo shadow-none; }
+  /* Datos y formularios dentro de una tarjeta: cada uno con su propia área. */
+  .tarjeta .importes > div { @apply rounded-lg border border-borde bg-fondo p-3 text-sm text-suave; }
+  .tarjeta .importes .importe { @apply mt-1 mb-0 text-xl; }
+  .tarjeta form.acciones { @apply my-3 rounded-lg border border-borde bg-fondo p-3; }
+
+  /* Sección: agrupa tarjetas de un mismo tema en un área visible. */
+  .seccion { @apply mb-6 rounded-2xl border-2 border-borde bg-neutro-tenue/70 p-4 sm:p-5; }
+  .seccion > :last-child, .seccion > .rejilla-dos > :last-child { @apply mb-0; }
+  .seccion .rejilla-dos > .tarjeta { @apply mb-0; }
+  .seccion-titulo { @apply mb-3 border-l-4 border-primario pl-3 text-lg font-bold; }
+  .seccion-accion { @apply border-primario/40 bg-primario-tenue; }
+
+  /* Total destacado de una pantalla */
+  .total { @apply mb-6 flex flex-wrap items-center justify-between gap-x-8 gap-y-3 rounded-xl bg-intenso px-6 py-5 text-white shadow-md; }
+  .total h2 { @apply mb-1 text-sm font-medium text-lateral-texto; }
+  .total-importe { @apply m-0 text-3xl font-bold tracking-tight tabular-nums; }
+  .total-partes { @apply m-0 flex flex-wrap gap-x-6 gap-y-1 text-sm text-lateral-texto; }
+  .total-partes strong { @apply block text-base font-semibold text-white tabular-nums; }
+
+  .alerta-atraso { @apply mb-4 rounded-lg border-l-4 border-peligro bg-peligro-tenue px-4 py-3 text-sm font-medium text-peligro; }
+  .alerta-atraso a { @apply font-semibold text-peligro underline; }
+  .enlaces-pequenos { @apply flex flex-wrap gap-x-4 gap-y-1 text-sm; }
+  .importes { @apply mb-4 grid grid-cols-[repeat(auto-fit,minmax(14rem,1fr))] gap-4; }
+  .importes > .tarjeta { @apply mb-0; }
+  .importes h2 { @apply mb-1 text-sm font-medium text-suave; }
+  .importe { @apply mb-1 text-2xl font-bold tracking-tight text-texto tabular-nums; }
+  .indicador { @apply block rounded-xl border border-borde bg-superficie p-5 text-texto shadow-xs transition-colors duration-150 hover:border-primario hover:text-texto hover:no-underline; }
+  .indicador-titulo { @apply mb-2 flex items-center gap-2 text-sm font-medium text-suave; }
+  .indicador-icono { @apply flex size-7 items-center justify-center rounded-lg; }
+  .indicador-valor { @apply m-0 text-2xl font-bold tracking-tight tabular-nums; }
+  .indicador-nota { @apply mt-1 mb-0 text-xs text-suave; }
+  .rejilla-indicadores { @apply mb-6 grid grid-cols-[repeat(auto-fit,minmax(13rem,1fr))] gap-4; }
+  .rejilla-dos { @apply grid items-start gap-4 lg:grid-cols-2; }
+  .tono-primario { @apply bg-primario-tenue text-primario; }
+  .tono-informacion { @apply bg-informacion-tenue text-informacion; }
+  .tono-advertencia { @apply bg-advertencia-tenue text-advertencia; }
+  .encabezado-tarjeta { @apply mb-3 flex flex-wrap items-center justify-between gap-2; }
+  .encabezado-tarjeta h2 { @apply mb-0; }
+  .fila-dato { @apply mb-3 flex items-center justify-between gap-3; }
+  .fila-dato > div { @apply min-w-0; }
+  .fila-dato p { @apply mb-0; }
+
+  .alerta { @apply mb-1.5 flex items-center gap-2.5 rounded-lg bg-advertencia-tenue px-3 py-2 text-sm text-texto hover:text-texto hover:no-underline; }
+  .alerta lucide-icon { @apply text-advertencia; }
+  .alerta strong { @apply ml-auto tabular-nums; }
+
+  /* Gráfico de barras */
+  .grafico-fila { @apply mb-2.5 grid grid-cols-[7.5rem_1fr_5.5rem] items-center gap-3 text-sm; }
+  .grafico-fila svg { @apply block h-2.5 w-full; }
+  .grafico-pista { fill: var(--color-neutro-tenue); }
+  .grafico-barra { fill: var(--color-primario); }
+  .grafico-fila:hover .grafico-barra { fill: var(--color-primario-hondo); }
+  .grafico-valor { @apply text-right font-semibold tabular-nums; }
+
+  /* Gráfico circular */
+  .circular { @apply grid items-center gap-5 sm:grid-cols-[13rem_1fr]; }
+  .circular svg { @apply mx-auto block w-52 max-w-full; }
+  .circular-porcion { fill: none; stroke-width: 15; @apply cursor-pointer transition-opacity duration-150; }
+  .circular-porcion.apagada { opacity: 0.3; }
+  .circular-valor { @apply fill-texto text-[0.6875rem] font-bold; text-anchor: middle; }
+  .circular-nota { @apply fill-suave text-[0.4375rem]; text-anchor: middle; }
+
+  /* Leyenda de gráficos: el color va en la marca; el texto conserva sus colores de lectura. */
+  .leyenda { @apply m-0 list-none p-0 text-sm; }
+  .leyenda li { @apply flex items-center gap-2 border-b border-borde py-1.5 last:border-b-0; }
+  .leyenda i { @apply size-3 shrink-0 rounded-sm; }
+  .leyenda span { @apply min-w-0 flex-1; }
+  .leyenda strong { @apply tabular-nums; }
+  .leyenda small { @apply w-10 text-right text-xs text-suave tabular-nums; }
+  .leyenda-fila { @apply mb-3 flex flex-wrap gap-x-5; }
+  .leyenda-fila li { @apply border-0 py-0; }
+
+  /* Gráfico de columnas */
+  .columnas { @apply grid grid-cols-[2.75rem_1fr] pb-6; }
+  .columnas-eje { @apply relative h-56; }
+  .columnas-eje span { @apply absolute right-2 translate-y-1/2 text-xs text-suave tabular-nums; }
+  .columnas-area { @apply relative flex h-56 border-b border-suave/50; }
+  .columnas-guia { @apply pointer-events-none absolute inset-x-0 h-px bg-neutro-tenue; }
+  .columnas-grupo { @apply relative flex min-w-0 flex-1 flex-col justify-end rounded-t-md hover:bg-fondo focus-visible:bg-fondo; }
+  .columnas-barras { @apply relative flex h-full items-end justify-center gap-0.5 px-0.5; }
+  .columnas-barra { @apply block w-full max-w-5 rounded-t; }
+  .columnas-etiqueta { @apply absolute inset-x-0 top-full pt-1.5 text-center text-xs text-suave; }
+  .columnas-detalle { @apply pointer-events-none invisible absolute bottom-3/4 left-1/2 z-10 w-52 rounded-lg border border-borde bg-superficie p-3 text-xs shadow-lg; }
+  .columnas-detalle.al-final { @apply right-1/2 left-auto; }
+  .columnas-detalle strong { @apply mb-1 block text-sm capitalize; }
+  .columnas-detalle span { @apply flex items-center gap-1.5 py-0.5; }
+  .columnas-detalle i { @apply size-2.5 rounded-sm; }
+  .columnas-detalle b { @apply ml-auto tabular-nums; }
+  .columnas-grupo:hover .columnas-detalle, .columnas-grupo:focus-visible .columnas-detalle { @apply visible; }
+  .grafico-tabla summary { @apply mb-2 cursor-pointer text-sm font-medium text-primario; }
+
+  /* Estados */
+  .estado { @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium whitespace-nowrap; }
+  .estado::before { content: ""; @apply size-1.5 rounded-full bg-current; }
+  .estado-exito { @apply bg-exito-tenue text-exito; }
+  .estado-informacion { @apply bg-informacion-tenue text-informacion; }
+  .estado-advertencia { @apply bg-advertencia-tenue text-advertencia; }
+  .estado-peligro { @apply bg-peligro-tenue text-peligro; }
+  .estado-neutro { @apply bg-neutro-tenue text-suave; }
+
+  /* Botones y mensajes */
+  .boton { @apply inline-block rounded-lg border border-primario bg-primario px-4 py-2 text-sm font-medium text-white transition duration-150 hover:border-primario-hondo hover:bg-primario-hondo hover:text-white hover:no-underline active:scale-[0.98]; }
+  .boton-claro { @apply inline-block rounded-lg border border-borde bg-superficie px-4 py-2 text-sm font-medium text-texto transition duration-150 hover:bg-fondo hover:text-texto hover:no-underline active:scale-[0.98]; }
+  button.secundario { @apply border-borde bg-superficie text-texto hover:border-suave hover:bg-fondo disabled:hover:bg-superficie; }
+  button.peligro { @apply border-peligro bg-superficie text-peligro hover:border-peligro hover:bg-peligro hover:text-white; }
+  .error { @apply mb-3 rounded-lg border-l-4 border-peligro bg-peligro-tenue px-3 py-2 text-sm font-medium text-peligro; }
   .error::before { content: "⚠ "; }
-  .exito { @apply animate-entrada font-medium text-primario; }
+  .exito { @apply mb-3 animate-entrada rounded-lg border-l-4 border-exito bg-exito-tenue px-3 py-2 text-sm font-medium text-exito; }
   .exito::before { content: "✓ "; }
-  .suave { @apply text-suave; }
+  .suave { @apply text-sm text-suave; }
+  /* El tipo de producto resalta sobre su explicación. */
+  .suave strong { @apply font-semibold text-texto; }
   .acciones { @apply flex flex-wrap items-end gap-2; }
-  .tabla { @apply overflow-x-auto; }
+  .acciones label { @apply mb-0; }
+  .tabla + p { @apply mt-3; }
+  .fila-opcion { @apply mb-2 flex flex-wrap items-center gap-2; }
+  .fila-opcion label { @apply m-0; }
+  .fila-opcion input[type="number"] { @apply m-0 w-36; }
+
+  /* Tablas */
+  .herramientas { @apply mb-4 flex flex-wrap items-end gap-3; }
+  .herramientas label { @apply m-0 w-full sm:w-64; }
+  .tabla { @apply overflow-x-auto rounded-xl border border-borde bg-superficie shadow-xs; }
+  .tabla .acciones { @apply items-center; }
   .num { @apply text-right whitespace-nowrap tabular-nums; }
-  .importes { @apply grid grid-cols-[repeat(auto-fit,minmax(14rem,1fr))] gap-4; }
-  .importe { @apply text-2xl font-semibold text-green-800 tabular-nums; }
-  .paginador { @apply mt-3 flex items-center gap-3; }
-  button.secundario { @apply bg-white text-primario hover:bg-green-100 hover:text-green-800 disabled:hover:bg-white; }
-  button.peligro { @apply border-2 border-intenso bg-white font-semibold text-intenso hover:bg-intenso hover:text-white; }
+  .positivo { @apply font-medium text-exito; }
+  .negativo { @apply font-medium text-peligro; }
+  .paginador { @apply mt-3 flex flex-wrap items-center gap-3 text-sm; }
+  .paginador span:first-of-type { @apply text-suave; }
+  .cargando { @apply flex items-center gap-2 text-sm text-suave; }
+  .cargando::before { content: ""; @apply size-4 animate-spin rounded-full border-2 border-borde border-t-primario; }
+  .vacio { @apply rounded-xl border border-dashed border-borde bg-superficie p-8 text-center text-sm text-suave; }
+
+  .cierre-cuenta { @apply mt-10 border-dashed shadow-none; }
+  button.enlace-discreto { @apply border-transparent bg-transparent p-0 font-normal text-suave underline hover:border-transparent hover:bg-transparent hover:text-peligro disabled:hover:bg-transparent; }
+
+  .ficha-datos { @apply grid gap-x-6 gap-y-2 sm:grid-cols-2; }
+  .ficha-datos dt { @apply text-xs text-suave; }
+  .ficha-datos dd { @apply m-0 mb-2 text-sm font-medium; }
+
+  /* Balance */
+  .rejilla-balance { @apply grid items-start gap-4 lg:grid-cols-2; }
+  .fila-total td { @apply bg-fondo font-bold; }
+  .fila-detalle td:nth-child(2) { @apply pl-8 text-suave; }
+  .resultado-mes { @apply mb-4 flex items-center justify-between gap-3 rounded-xl border border-borde bg-superficie p-5 font-semibold shadow-xs; }
+  .resultado-mes strong { @apply text-2xl tabular-nums; }
+  .ficha-detalle { @apply mt-4; }
+
+  /* Diálogo de confirmación */
+  .dialogo { @apply m-auto w-[calc(100%-2rem)] max-w-md rounded-xl border border-borde bg-superficie p-6 text-texto shadow-xl backdrop:bg-black/40; }
+  .dialogo-mensaje { @apply mb-4 font-medium; }
+  .dialogo input { @apply mb-4; }
+  .dialogo-acciones { @apply flex justify-end gap-2; }
 
   /* Barra de pruebas: solo aparece con el perfil de simulación. */
-  .simulacion { @apply flex flex-wrap items-center gap-x-3 gap-y-2 border-b-2 border-intenso bg-green-200 px-6 py-2; }
+  .simulacion { @apply flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-advertencia/30 bg-advertencia-tenue px-4 py-2 text-sm sm:px-6; }
   .simulacion label { @apply m-0 inline-flex items-center gap-2; }
   .simulacion input { @apply m-0 w-auto; }
 }

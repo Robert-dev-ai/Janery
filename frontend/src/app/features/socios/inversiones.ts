@@ -37,6 +37,15 @@ const TIPOS: Record<string, string> = {
           <p class="suave">{{ r.porcentaje | number: '1.2-4' }} % de la participación</p>
         </section>
         <section class="tarjeta">
+          <h2>Rendimiento de este mes</h2>
+          @if (r.rendimientoMes !== null) {
+            <p class="importe" [class.positivo]="r.rendimientoMes > 0" [class.negativo]="r.rendimientoMes < 0">{{ r.rendimientoMes > 0 ? '+' : '' }}{{ r.rendimientoMes | number: '1.2-2' }} %</p>
+          } @else {
+            <p class="importe">—</p>
+          }
+          <p class="suave">Sube con cada ingreso de Janery y baja con cada gasto. Al cerrar el mes, lo ganado cuenta para los repartos siguientes.</p>
+        </section>
+        <section class="tarjeta">
           <h2>Aportes iniciales</h2>
           <p class="importe">{{ r.totalInicial | currency: 'USD' }}</p>
         </section>
@@ -55,7 +64,7 @@ const TIPOS: Record<string, string> = {
           @if (r.gananciasDisponibles > 0 && r.retiroAutorizado) {
             <form class="acciones" (ngSubmit)="retirar()">
               <label>Importe (USD)
-                <input type="number" min="0.01" step="0.01" name="retiro" [(ngModel)]="importeRetiro" />
+                <input type="number" min="0" step="1" name="retiro" [(ngModel)]="importeRetiro" />
               </label>
               <button type="submit" [disabled]="!importeRetiro || importeRetiro <= 0">Retirar</button>
             </form>
@@ -81,7 +90,7 @@ const TIPOS: Record<string, string> = {
           <p class="importe">{{ r.totalPersonal | currency: 'USD' }}</p>
           <form class="acciones" (ngSubmit)="personal()">
             <label>Importe (USD)
-              <input type="number" min="0.01" step="0.01" name="personal" [(ngModel)]="importe" />
+              <input type="number" min="0" step="1" name="personal" [(ngModel)]="importe" />
             </label>
             <button type="submit" [disabled]="!importe || importe <= 0">Aportar</button>
           </form>
@@ -98,13 +107,18 @@ const TIPOS: Record<string, string> = {
         </section>
       </div>
     } @else if (!error()) {
-      <p role="status">Cargando…</p>
+      <p class="cargando" role="status">Cargando…</p>
     }
 
     <h2>Evolución mensual</h2>
     @for (p of periodos(); track p.periodo) {
       <section class="tarjeta">
-        <h3>{{ p.periodo }}</h3>
+        <div class="encabezado-tarjeta">
+          <h3 class="m-0">{{ p.periodo }}</h3>
+          @if (p.rendimiento !== null && p.rendimiento !== 0) {
+            <span class="estado" [class.estado-exito]="p.rendimiento > 0" [class.estado-peligro]="p.rendimiento < 0">{{ p.rendimiento > 0 ? '+' : '' }}{{ p.rendimiento | number: '1.2-2' }} %</span>
+          }
+        </div>
         <p>Valor al inicio: {{ p.valorInicial | currency: 'USD' }}</p>
         @if (p.variaciones.length) {
           <div class="tabla">

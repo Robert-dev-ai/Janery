@@ -29,6 +29,7 @@ final class Entidades {
         @GeneratedValue(strategy = GenerationType.IDENTITY)
         private Long id;
         private Long personaId;
+        private Instant precanceladoEn;
         private String familia;
         private String modalidad;
         private String perfil;
@@ -47,6 +48,32 @@ final class Entidades {
         private LocalDate fechaInicio;
         private String motivoRechazo;
         private Instant finalizadoEn;
+        private Instant creadoEn;
+        private String origenEncaje;
+        private Long ahorroEncajeId;
+        private BigDecimal tasaMora = BigDecimal.ZERO;
+        private String claveSolicitud;
+    }
+
+    /** Un retiro del cupo de socio, en espera de aprobación. */
+    @Entity(name = "SolicitudCupo")
+    @Table(name = "solicitudes_cupo")
+    @Getter
+    @Setter
+    @NoArgsConstructor
+    @AllArgsConstructor
+    static class SolicitudCupo {
+        @Id
+        @GeneratedValue(strategy = GenerationType.IDENTITY)
+        private Long id;
+        private Long personaId;
+        private BigDecimal importe;
+        private String promocion;
+        private String estado;
+        private String motivo;
+        private String clave;
+        private Long resueltaPor;
+        private Instant resueltaEn;
         private Instant creadoEn;
     }
 
@@ -71,6 +98,8 @@ final class Entidades {
         private BigDecimal interesPagado = BigDecimal.ZERO;
         private BigDecimal desgravamenPagado = BigDecimal.ZERO;
         private BigDecimal ahorroPagado = BigDecimal.ZERO;
+        private BigDecimal moraPagada = BigDecimal.ZERO;
+        private LocalDate moraHasta;
         private Instant pagadaEn;
 
         CuotaCredito(Long creditoId, Integer numero, LocalDate vencimiento, BigDecimal capital, BigDecimal ahorroLetras,
@@ -91,6 +120,19 @@ final class Entidades {
 
         BigDecimal pendiente() {
             return total.subtract(pagado());
+        }
+
+        /** Días de atraso: corren desde el vencimiento hasta que se paga lo que no es mora. */
+        long diasAtraso(LocalDate hoy) {
+            if (pagadaEn != null) {
+                return 0;
+            }
+            return Math.max(0, java.time.temporal.ChronoUnit.DAYS.between(vencimiento, moraHasta != null ? moraHasta : hoy));
+        }
+
+        BigDecimal moraPendiente(LocalDate hoy, BigDecimal tasa) {
+            return tasa.multiply(BigDecimal.valueOf(diasAtraso(hoy))).setScale(2, java.math.RoundingMode.HALF_UP)
+                    .subtract(moraPagada).max(BigDecimal.ZERO);
         }
     }
 

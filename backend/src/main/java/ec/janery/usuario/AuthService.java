@@ -24,6 +24,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import ec.janery.auditoria.AuditoriaService;
 import ec.janery.common.NegocioException;
+import ec.janery.persona.PersonaController;
+import ec.janery.persona.PersonaService;
 
 @Service
 public class AuthService {
@@ -38,6 +40,7 @@ public class AuthService {
     private final PasswordEncoder encoder;
     private final JwtEncoder jwtEncoder;
     private final AuditoriaService auditoria;
+    private final PersonaService personas;
     private final Clock reloj;
     private final Duration duracionAccess;
     private final Duration duracionRefresh;
@@ -45,7 +48,7 @@ public class AuthService {
     private final SecureRandom aleatorio = new SecureRandom();
 
     AuthService(Repositorios.UsuarioRepository usuarios, Repositorios.TokenRefrescoRepository tokens,
-            PasswordEncoder encoder, JwtEncoder jwtEncoder, AuditoriaService auditoria, Clock reloj,
+            PasswordEncoder encoder, JwtEncoder jwtEncoder, AuditoriaService auditoria, PersonaService personas, Clock reloj,
             @Value("${janery.jwt.access-minutos}") long accessMinutos,
             @Value("${janery.jwt.refresh-dias}") long refreshDias) {
         this.usuarios = usuarios;
@@ -53,6 +56,7 @@ public class AuthService {
         this.encoder = encoder;
         this.jwtEncoder = jwtEncoder;
         this.auditoria = auditoria;
+        this.personas = personas;
         this.reloj = reloj;
         this.duracionAccess = Duration.ofMinutes(accessMinutos);
         this.duracionRefresh = Duration.ofDays(refreshDias);
@@ -74,15 +78,25 @@ public class AuthService {
         return usuario.getId();
     }
 
+    /** Usuario y datos personales se crean juntos: si la identificación ya existe, tampoco queda el usuario. */
+    @Transactional
+    public Long registrarConPerfil(String correo, String contrasena, PersonaController.PerfilRequest perfil) {
+        Long id = registrar(correo, contrasena);
+        personas.completarPerfil(id, perfil);
+        return id;
+    }
+
     /** Sin transacción exterior: el intento fallido debe quedar auditado aunque se lance la excepción. */
-    public Sesion iniciarSesion(String correo, String contrasena) {
-        Usuario usuario = usuarios.findByCorreo(normalizar(correo)).orElse(null);
+    public Sesion iniciarSesion(String identificador, String contrasena) {
+        // Un correo siempre lleva arroba; una cédula, nunca.
+        Usuario usuario = (identificador.contains("@") ? usuarios.findByCorreo(normalizar(identificador))
+                : usuarios.findByIdentificacion(identificador.trim())).orElse(null);
         // Con usuario inexistente también se compara un hash, para no revelar por tiempo qué correos existen.
         boolean valida = encoder.matches(contrasena, usuario == null ? hashFicticio : usuario.getHashContrasena());
         if (usuario == null || !valida || !usuario.activo()) {
             auditoria.registrar(usuario == null ? null : usuario.getId(), "LOGIN_FALLIDO", MODULO, "usuario",
                     usuario == null ? null : usuario.getId(), null, null, null);
-            throw new NegocioException(HttpStatus.UNAUTHORIZED, "CREDENCIALES", "Correo o contraseña incorrectos");
+            throw new NegocioException(HttpStatus.UNAUTHORIZED, "CREDENCIALES", "Credenciales incorrectas");
         }
         auditoria.registrar(usuario.getId(), "LOGIN", MODULO, "usuario", usuario.getId(), null, null, null);
         return emitir(usuario);
@@ -110,6 +124,36 @@ public class AuthService {
                 auditoria.registrar(t.getUsuarioId(), "LOGOUT", MODULO, "usuario", t.getUsuarioId(), null, null, null);
             });
         }
+    }
+
+    /** Sin deshacer ante el rechazo: el intento fallido debe quedar auditado, y antes de él no se escribe nada. */
+    @Transactional(noRollbackFor = NegocioException.class)
+    public void cambiarContrasena(Long usuarioId, String actual, String nueva, String refreshToken) {
+        Usuario usuario = usuarios.findById(usuarioId).filter(Usuario::activo)
+                .orElseThrow(() -> NegocioException.noEncontrado("Usuario no encontrado"));
+        // Con 401 el cliente entendería que caducó la sesión.
+        if (!encoder.matches(actual, usuario.getHashContrasena())) {
+            auditoria.registrar(usuarioId, "CONTRASENA_FALLIDA", MODULO, "usuario", usuarioId, null, null, null);
+            throw new NegocioException(HttpStatus.BAD_REQUEST, "CONTRASENA_ACTUAL_INCORRECTA",
+                    "La contraseña actual no es correcta");
+        }
+        if (encoder.matches(nueva, usuario.getHashContrasena())) {
+            throw new NegocioException(HttpStatus.BAD_REQUEST, "CONTRASENA_REPETIDA",
+                    "La contraseña nueva debe ser distinta de la actual");
+        }
+        usuario.cambiarContrasena(encoder.encode(nueva));
+        revocarOtrasSesiones(usuarioId, refreshToken);
+        auditoria.registrar(usuarioId, "CONTRASENA_CAMBIADA", MODULO, "usuario", usuarioId, null, null, null);
+    }
+
+    @Transactional
+    public void cerrarOtrasSesiones(Long usuarioId, String refreshToken) {
+        revocarOtrasSesiones(usuarioId, refreshToken);
+        auditoria.registrar(usuarioId, "SESIONES_CERRADAS", MODULO, "usuario", usuarioId, null, null, null);
+    }
+
+    private void revocarOtrasSesiones(Long usuarioId, String refreshToken) {
+        tokens.revocarOtros(usuarioId, refreshToken == null ? "" : hash(refreshToken), Instant.now(reloj));
     }
 
     private Sesion emitir(Usuario usuario) {

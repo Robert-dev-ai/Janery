@@ -193,6 +193,12 @@ public class SocioController {
         return Pagina.de(service.listarResultados(Math.max(pagina, 0), Pagina.limitar(tamano)), v -> v);
     }
 
+    @GetMapping("/admin/resultados/en-espera")
+    @PreAuthorize("hasAuthority('SCOPE_GESTIONAR_RESULTADOS')")
+    public ParticipacionService.EnEsperaVista resultadosEnEspera() {
+        return service.enEspera();
+    }
+
     @PostMapping("/admin/resultados")
     @PreAuthorize("hasAuthority('SCOPE_GESTIONAR_RESULTADOS')")
     @ResponseStatus(HttpStatus.NO_CONTENT)

@@ -5,6 +5,7 @@ import { Observable } from 'rxjs';
 
 import { ApiService, MenuObligaciones, Obligacion, ResumenSocio } from '../../core/services/api';
 import { alCambiar } from '../../core/services/tiempo-real';
+import { DialogoService } from '../../shared/components/dialogo';
 import { mensajeDeError } from '../../shared/utils/errores';
 
 @Component({
@@ -17,7 +18,7 @@ import { mensajeDeError } from '../../shared/utils/errores';
     @if (aviso()) { <p class="exito" role="status">{{ aviso() }}</p> }
 
     @if (socios().length === 0) {
-      <p>Aún no hay socios.</p>
+      <p class="vacio">Aún no hay socios.</p>
     } @else {
       <div class="tabla">
         <table>
@@ -38,7 +39,7 @@ import { mensajeDeError } from '../../shared/utils/errores';
     }
 
     @if (menu(); as m) {
-      <section class="tarjeta" style="margin-top:1rem">
+      <section class="tarjeta mt-4">
         <h2>{{ m.nombre }}</h2>
         <p>Ganancias liberadas: <strong>{{ m.gananciasDisponibles | currency: 'USD' }}</strong> · Debe: <strong>{{ m.total | currency: 'USD' }}</strong></p>
 
@@ -46,13 +47,13 @@ import { mensajeDeError } from '../../shared/utils/errores';
           <h3>Descontar de sus ganancias</h3>
           <form (ngSubmit)="descontar(m)">
             @for (o of m.obligaciones; track $index) {
-              <div class="acciones" style="align-items:center;margin-bottom:0.5rem">
-                <label style="margin:0">
-                  <input type="checkbox" style="display:inline;width:auto" name="o{{ $index }}" [(ngModel)]="elegidas[$index]" />
+              <div class="fila-opcion">
+                <label>
+                  <input type="checkbox" name="o{{ $index }}" [(ngModel)]="elegidas[$index]" />
                   {{ o.descripcion }}: {{ o.importe | currency: 'USD' }}
                 </label>
                 @if (o.tipo === 'CUOTA' && elegidas[$index]) {
-                  <input type="number" min="0.01" step="0.01" style="width:9rem;margin:0" name="i{{ $index }}"
+                  <input type="number" min="0" step="1" name="i{{ $index }}"
                     aria-label="Importe a descontar de esta letra; vacío, completa" placeholder="Completa"
                     [(ngModel)]="importes[$index]" />
                 }
@@ -79,6 +80,7 @@ import { mensajeDeError } from '../../shared/utils/errores';
 })
 export class AdminRetiros implements OnInit {
   private readonly api = inject(ApiService);
+  private readonly dialogo = inject(DialogoService);
 
   protected readonly socios = signal<ResumenSocio[]>([]);
   protected readonly menu = signal<MenuObligaciones | null>(null);
@@ -133,8 +135,8 @@ export class AdminRetiros implements OnInit {
     });
   }
 
-  protected autorizar(m: MenuObligaciones): void {
-    if (confirm(`¿Autorizar a ${m.nombre} a retirar sus ganancias este año?`)) {
+  protected async autorizar(m: MenuObligaciones): Promise<void> {
+    if (await this.dialogo.confirmar(`¿Autorizar a ${m.nombre} a retirar sus ganancias este año?`, 'Autorizar')) {
       this.ejecutar(this.api.autorizarRetiro(m.socioId), 'Retiro autorizado.', m.socioId);
     }
   }

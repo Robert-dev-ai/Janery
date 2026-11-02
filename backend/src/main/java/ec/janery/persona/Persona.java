@@ -1,6 +1,8 @@
 package ec.janery.persona;
 
+import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -28,4 +30,40 @@ public class Persona {
     private String telefono;
     private String direccion;
     private Instant creadoEn;
+    private String lugarTrabajo;
+    private String ocupacion;
+    private String antiguedadTrabajo;
+    private BigDecimal ingresosMensuales;
+    private LocalDate fechaNacimiento;
+    private String estadoCivil;
+    private String referenciaNombre;
+    private String referenciaTelefono;
+    private String banco;
+    private String tipoCuentaBanco;
+    private String numeroCuentaBanco;
+
+    public void actualizarDatosCredito(PersonaController.DatosCreditoRequest r) {
+        lugarTrabajo = r.lugarTrabajo().trim();
+        ocupacion = r.ocupacion().trim();
+        antiguedadTrabajo = r.antiguedadTrabajo().trim();
+        ingresosMensuales = r.ingresosMensuales();
+        fechaNacimiento = r.fechaNacimiento();
+        estadoCivil = r.estadoCivil();
+        referenciaNombre = r.referenciaNombre().trim();
+        referenciaTelefono = r.referenciaTelefono().trim();
+        banco = r.banco().trim();
+        tipoCuentaBanco = r.tipoCuentaBanco();
+        numeroCuentaBanco = r.numeroCuentaBanco().trim();
+    }
+
+    /** Lo que se exige para pedir un crédito a letras. Quien es socio no se bloquea. */
+    public boolean datosCreditoCompletos() {
+        return direccion != null && !direccion.isBlank() && lugarTrabajo != null && ingresosMensuales != null
+                && fechaNacimiento != null && banco != null;
+    }
+
+    public void actualizarContacto(String telefono, String direccion) {
+        this.telefono = telefono;
+        this.direccion = direccion;
+    }
 }

@@ -162,16 +162,15 @@ El propietario autorizó el 30/10/2026 usar valores provisionales de tasas, enca
 
 - **Letras (definido por el propietario):** mensuales. El interés es fijo sobre el capital sacado, y la letra es la misma hasta el final del crédito. El ahorro letras completa hasta el dólar entero. Si el capital no se divide exacto, la última letra lleva los centavos que faltan y esos mismos centavos menos de ahorro letras. Ejemplo: USD 100 a 3 meses lleva capital de 33,33, 33,33 y 33,34.
 - **Desgravamen de letras:** fijo sobre el capital sacado, igual que el interés. Pendiente de confirmación.
-- **Pagos parciales de letras (definido por el propietario):** se admiten, y lo primero que se cobra es el capital. Luego, a criterio del desarrollo, interés, desgravamen y ahorro letras. También aplican al emergente de cliente. Encaje y ahorro letras solo se usan para cubrir lo que falta de la última letra completa.
-- **Encaje:** porcentaje del importe, descontado de la cuenta principal al desembolsar.
+- **Pagos parciales de letras (definido por el propietario):** se admiten y se cobran en este orden: capital, fondo de desgravamen, interés y ahorro letras. La mora, a criterio del desarrollo, se cobra al final. También aplican al emergente de cliente. Encaje y ahorro letras solo se usan para cubrir lo que falta de la última letra completa.
+- **Encaje:** porcentaje del importe, cobrado al aprobar según lo elegido al solicitar (sección 15).
 - **Tasas de un crédito a letras:** quedan fijadas al solicitarlo.
-- **Emergente de cliente:** interés y desgravamen de un mes sobre el importe, en una sola cuota al mes siguiente. Se desembolsa al momento, sin aprobación.
+- **Emergente de cliente:** interés y desgravamen de un mes sobre el importe, en una sola cuota que vence un mes después de aprobarse. Se aprueba antes de desembolsar (sección 15).
 - **Cupo de socio:** interés y desgravamen diarios simples sobre el capital utilizado. Cada pago cubre primero cargos y luego capital. No tiene fecha de vencimiento. Cada disposición actualiza la tasa a la vigente.
 - **Promociones:** usan solo la tasa de 0,05 % diario, sin desgravamen. El máximo cuenta todo lo retirado en la promoción, aunque se haya pagado.
 - **Perfil:** quien es socio usa las condiciones de socio; el resto, las de cliente.
-- **Ahorro normal:** interés anual dividido en 12, abonado el día 1 sobre el saldo de ese momento. Si el proceso no corre ese día, ese mes no se abona automáticamente.
-- **Plazo fijo:** interés simple al vencer, con retiro total; sin penalización porque no hay retiro anticipado.
-- **Caja principal:** refleja el dinero real. Solo cambia con depósitos, retiros e ingreso de apertura; créditos y ahorros se mueven dentro de la cuenta de cada persona.
+- **Ahorro normal y plazo fijo:** ver sección 15.
+- **Caja principal:** refleja el dinero real. Solo cambia con depósitos, retiros, el pago de apertura completo y el encaje en efectivo; créditos y ahorros se mueven dentro de la cuenta de cada persona.
 - **Aprobación de créditos a letras:** Presidencia, con el permiso `APROBAR_CREDITOS`.
 
 ## 11. Socios y fondos
@@ -180,7 +179,7 @@ El propietario autorizó el 30/10/2026 usar valores provisionales de tasas, enca
 
 - **Fondo personal:** el dinero de cada socio es un solo valor, pero se lleva separado por origen: aportes iniciales, aportes mensuales, aportes personales y ganancias.
 - **Ganancias:** van al fondo personal de cada socio y se quedan ahí; no se pagan a la cuenta principal.
-- **Fondo de reserva:** el 10 % se separa cada vez que se reparte una ganancia, no al cerrar el año.
+- **Fondo de reserva:** el 10 % se separa cada vez que se reparte una ganancia, no al cerrar el año. Es la línea 3.5 Reservas del balance.
 - **Cierre:** es anual.
 - **Pérdidas:** se restan de las ganancias. La reserva no se devuelve.
 - **Aportes:** al aportar, el dinero pasa a ser parte de Janery y no se retira. Solo puede venderse a otro socio, en una compraventa interna.
@@ -196,7 +195,7 @@ El propietario autorizó el 30/10/2026 usar valores provisionales de tasas, enca
 - **Compraventa:** la registra Presidencia cuando ambos socios la acordaron. Se vende solo capital, no ganancias, al precio que acuerden. El comprador paga al vendedor entre sus cuentas principales; la caja no cambia.
 
 - **Participación:** fondo personal del socio dividido entre la suma de los fondos de todos los socios activos.
-- **Registro de ganancias y pérdidas:** a mano, por quien tenga `GESTIONAR_RESULTADOS`; ningún ingreso se convierte solo en ganancia. Se reparten según el valor de cada socio en ese momento. Una pérdida no puede superar el capital total.
+- **Registro de ganancias y pérdidas a mano:** por quien tenga `GESTIONAR_RESULTADOS`, solo para lo extraordinario; lo demás se reparte solo (sección 14). Una pérdida no puede superar el capital total.
 - **Evolución mensual:** se calcula de las variaciones; el valor inicial de un mes es el final del anterior.
 - **Cierre anual:** solo años terminados y una vez por año. Totaliza y bloquea nuevos resultados en ese año; no mueve dinero.
 - **Aportes iniciales:** los registra Presidencia como dinero recibido fuera del sistema; entran a la caja principal y al fondo personal.
@@ -205,4 +204,113 @@ El propietario autorizó el 30/10/2026 usar valores provisionales de tasas, enca
 - **Aportes mensuales y personales:** los paga el socio desde su cuenta principal, y puede ponerse al día con meses pasados.
 - **Cierre de cuenta:** un socio activo no puede cerrar su cuenta principal.
 
-**Fuera de esta versión, por decisión del propietario:** mora y refinanciación. Las letras pueden pagarse antes de su vencimiento, una a una.
+**Fuera de esta versión, por decisión del propietario:** mora y refinanciación. Las letras pueden pagarse antes de su vencimiento; ver sección 13.
+
+## 12. Retiros, área de socios y contabilidad
+
+**Definido por el propietario (01/11/2026):**
+
+- **El dinero está en la caja:** el saldo de una persona es lo que Janery le debe, no dinero guardado en la aplicación. Puede sacarlo en efectivo o a su cuenta de banco.
+- **Retiro:** la persona lo solicita desde su cuenta principal, indicando efectivo o los datos de su banco. El importe se aparta de su saldo y la caja no cambia. Quien tenga `GESTIONAR_CUENTAS` confirma cuando ya entregó el dinero, y solo entonces sale de la caja principal; o lo rechaza con un motivo. La persona puede cancelar mientras esté pendiente. Rechazar o cancelar devuelve lo apartado.
+- **Depósito:** la persona avisa cuánto deposita, en efectivo o por transferencia con su número. Quien tenga `GESTIONAR_CUENTAS` confirma cuando ya recibió el dinero, y solo entonces entra a la cuenta y a la caja principal; o lo rechaza con un motivo. Criterio del desarrollo, pendiente de confirmación.
+- **Ahorros:** para sacar un ahorro, primero pasa a la cuenta principal. El plazo fijo sigue sin poder retirarse antes de vencer.
+- **Área general de socios:** solo los socios activos ven las personas con cuenta, con nombres e importes de créditos, cuotas, ahorros y movimientos, y los totales de la caja. No incluye identificación, teléfono, dirección, correo ni datos bancarios. Tener un cargo o un permiso no da acceso si no se es socio.
+- **Balance:** sigue el formato en Excel del propietario, con los mismos códigos.
+
+| Línea | Qué contiene |
+|---|---|
+| 1.1 Caja | Caja principal y fondo de reserva, más los depósitos de apertura aún no devueltos |
+| 1.4 Créditos por cobrar | Capital desembolsado menos capital cobrado. 1.42: crédito con alguna letra vencida; 1.41: el resto |
+| 2.1 Ahorros captados | Ahorros normales, saldos de cuenta principal y retiros apartados sin entregar |
+| 2.2 Plazo fijo | Plazos fijos |
+| 2.3 Cuentas por pagar | Encajes, ahorro letras y depósitos de USD 5 |
+| 2.5 Fondo de desgravamen | Desgravamen cobrado: se debe, no es ganancia |
+| 3.1 y 3.2 | Aportes iniciales; aportes mensuales y personales |
+| 3.5 Reservas | Fondo de reserva |
+| 3.6 Resultado del mes | Ganancias menos gastos del mes |
+| 3.7 Resultado acumulado | Resultado de meses anteriores, menos reservas separadas y ganancias retiradas o descontadas |
+| 4.1 / 4.7 / 5.1 | Intereses cobrados / USD 15 de apertura / intereses de ahorros |
+
+- **Caja chica:** queda fuera del balance; lleva sus cuentas aparte.
+- **Registro manual:** las demás líneas se llenan con un registro auditado, con quien tenga `REGISTRAR_ASIENTOS`. Nada se edita ni se borra: se corrige con un reverso.
+
+**Criterios del desarrollo, pendientes de confirmación:**
+
+- **Depósitos de USD 5 en 1.1:** no pasan por la caja principal, pero son efectivo recibido que se debe. Sin contarlos, el balance no cuadraría.
+- **Registro manual y caja:** un activo o gasto que aumenta se paga de la caja principal; un ingreso, pasivo o patrimonio que aumenta entra a ella. La provisión (5.9) no mueve caja y reduce la cartera en 1.99.
+- **Registrar una ganancia o pérdida en Resultados** reparte entre socios, pero no es un ingreso ni un gasto del balance.
+- **Indicadores:** morosidad (1.42 / 1.4), liquidez (1.1 / pasivos), solvencia (patrimonio / activos) y rentabilidad del mes (resultado / activos).
+- **Permisos nuevos:** `CONSULTAR_CONTABILIDAD` y `REGISTRAR_ASIENTOS`, concedidos solo a Presidencia. Personas usa `ADMIN_USUARIOS` e Historial crediticio, `APROBAR_CREDITOS`.
+- **Saldos iniciales:** el balance empieza con lo registrado en Janery; las cifras actuales del Excel no se importaron.
+
+## 13. Pagos adelantados, precancelación y perfil
+
+**Definido por el propietario (01/11/2026):**
+
+- **Pago adelantado:** se puede pagar más que una letra; lo que excede pasa a las siguientes, en orden. Cada letra cobra en el orden de la sección 10. No se puede pagar más de lo que falta del crédito.
+- **Precancelación de créditos a letras:** con la mitad de las letras redondeada hacia abajo, más una, ya pagadas por completo (12 letras exigen 7; 5 letras exigen 3), se termina el crédito pagando solo el capital pendiente. No se cobra interés, desgravamen ni ahorro letras de lo que falte. El encaje y el ahorro letras acumulado vuelven a la cuenta principal.
+- **Registro:** pide correo, nombres, apellidos, identificación, teléfono y contraseña. Se puede entrar con el correo o con la identificación.
+- **Datos para crédito:** dirección, lugar de trabajo, ocupación y antigüedad, ingresos mensuales, fecha de nacimiento, estado civil, contacto de referencia y cuenta bancaria. Se llenan en el perfil o al solicitar, y son obligatorios para solicitar un crédito a letras, también para socios; no bloquean los emergentes.
+- **Rol visible:** el cargo de la persona (`ADMINISTRACION` se muestra como Administrador); sin cargo, Socio; si no es socio, Cliente. El panel personal se llama Panel del socio o Panel del cliente.
+
+**Criterios del desarrollo, pendientes de confirmación:**
+
+- Quien tenga `APROBAR_CREDITOS` ve estos datos al revisar un crédito. No aparecen en el área general de socios.
+- Con un pago parcial, solo cuentan para precancelar las letras pagadas por completo.
+- Las notificaciones del panel personal son letras vencidas, retiros en espera y depósitos en espera.
+
+## 14. Reparto automático de ganancias
+
+**Definido por el propietario (01/11/2026):**
+
+- **Cada ingreso se reparte al momento:** intereses cobrados, aperturas de cuenta e ingresos del registro manual. El 10 % va a reservas (3.5) y el resto a los socios. El fondo de desgravamen no es ganancia.
+- **Proporción:** según el fondo personal completo de cada socio.
+- **Cierre mensual:** las ganancias se ven al momento, pero solo cuentan como base del reparto desde el mes siguiente. Siguen separadas de los aportes, porque al final del año se decide si se pueden retirar.
+- **Retiro:** no se pueden retirar hasta el 1 de enero siguiente y con la autorización del presidente, si el socio está al día.
+- **Rendimiento:** cada socio ve cuánto subió o bajó su fondo cada mes, en porcentaje.
+- **Desde cuándo:** se aplica a lo cobrado desde este cambio; lo anterior no se reparte.
+- **Resultados y Secretaría:** el registro a mano sigue por ahora para lo extraordinario. Más adelante, el área de Secretaría registrará gastos y pérdidas por tipo.
+- **Centavos en espera:** un importe que no se puede dividir entre los socios no se reparte: queda a la espera hasta que sea repartible. Ejemplo: 0,01 entre dos socios espera; al llegar otro centavo, cada uno recibe 0,01.
+
+**Cómo se aplica la regla de los centavos (criterio del desarrollo, pendiente de confirmación):**
+
+- **Repartible:** cuando todos los socios de la base recibirían al menos 0,01 según su proporción. Si uno no llega, nadie recibe nada todavía.
+- **Lo que sobra:** cada parte se redondea hacia abajo y los centavos sobrantes también esperan, en lugar de asignarse al socio mayor como se hacía antes. Ejemplo: 0,03 entre dos socios iguales da 0,01 a cada uno y 0,01 espera.
+- **Ganancias y pérdidas esperan por separado:** no se compensan entre sí. Cada reparto suma lo que espera de su mismo tipo.
+- **Reserva:** el 10 % se separa al registrar la ganancia; solo espera la parte de los socios.
+- **Sin guardar otra copia:** lo que espera se calcula como lo registrado en `resultados`, sin la reserva, menos lo que llegó a `variaciones_participacion`. Se ve en Resultados y en Estado de caja.
+- **Balance y cierre anual:** esperar no cambia la caja ni el balance, porque repartir es interno al patrimonio. El cierre anual totaliza lo registrado; lo que siga esperando pasa al año siguiente.
+- **Socio con muy poca participación:** puede retrasar el reparto, porque también debe alcanzarle un centavo. Con fondos de 1 y 1000, el reparto espera hasta juntar unos USD 10.
+
+**Criterios del desarrollo, pendientes de confirmación:**
+
+- **Gastos:** cada gasto (líneas 5.x, incluidos los intereses de ahorros) baja los fondos de los socios al momento, sin tocar la reserva.
+- **Comprar un bien:** registrado en 1.6 a 1.8, saca dinero de la caja pero no baja los fondos, porque el bien sigue siendo de Janery. Registrado como gasto, sí los baja.
+- **Rendimiento del mes:** ganancias menos pérdidas del mes, sobre el fondo con que empezó más sus aportes del mes.
+- **Sin capital de socios:** el importe queda en el balance sin repartir, sin bloquear la operación que lo originó.
+- **Reversos del registro manual:** deshacen el reparto, incluida la reserva que se separó.
+
+## 15. Aprobaciones, encaje, mora y ahorros
+
+**Definido por el propietario (01/11/2026):**
+
+- **Dinero en la caja:** los USD 5 de apertura, los ahorros normales y los encajes son del cliente, pero están en la caja y se pueden prestar. Estado de caja detalla a quién pertenece.
+- **Aprobación:** ningún crédito sale sin aprobarse, tampoco los emergentes. El dinero llega a la cuenta principal al aprobar.
+- **Solicitud de crédito a letras:** obliga a llenar los datos para crédito y a elegir de dónde sale el encaje: efectivo, cuenta principal, ahorros o descontado del crédito. Tiene un panel para subir varios documentos PDF, que se usará en el futuro.
+- **Letras atrasadas:** se marcan como atrasadas con sus días, y el cliente recibe la notificación y un aviso.
+- **Mora:** solo para clientes, USD 0,01 por día, modificable en el parámetro `MORA_DIARIA`.
+- **Ahorro normal:** interés del 5 % anual calculado cada día. Se muestra aparte del saldo y se habilita para retirar el día 1 de cada mes.
+- **Plazo fijo:** a 3, 6, 9 o 12 meses o 2 años, nada más, cada uno con su tasa modificable por el presidente. El interés se muestra aparte y se retira todo al terminar el contrato.
+
+**Criterios del desarrollo, pendientes de confirmación:**
+
+- **Mora por letra:** cada letra atrasada suma su propio centavo diario. Corre desde el vencimiento hasta que se paga lo demás de la letra, y se cobra al final. Es ganancia (línea 4.2) y se reparte como las demás.
+- **Tasa de mora:** queda fijada en el crédito al aprobarlo, como las otras tasas. Cambiar `MORA_DIARIA` afecta a los créditos nuevos. Los activos de clientes al crear esta regla quedaron con USD 0,01, contando su atraso desde el vencimiento.
+- **Precancelación:** además del capital, cobra la mora ya generada.
+- **Interés del ahorro normal:** saldo × tasa ÷ 365 por día, sin capitalizar. Lo liberado el día 1 sigue disponible después de ese día, para que quien no entre ese día no lo pierda. Solo el interés tiene esta restricción: el saldo se retira cuando se quiera.
+- **Contabilidad del interés de ahorros:** es gasto (5.1) y baja los fondos de los socios cuando se retira, no mientras corre. Lo que corre aún no aparece como deuda en el balance.
+- **Cerrar la cuenta:** exige retirar antes el saldo y el interés de los ahorros, por lo que puede haber que esperar al siguiente día 1.
+- **Tasas iniciales de plazo fijo:** 5,5 %, 6 %, 6,5 %, 7 % y 8 % anual. Son provisionales, a ajustar por el presidente. Los plazos fijos abiertos conservan su tasa.
+- **Encaje:** "cuenta principal" exige tener el dinero antes del desembolso; "descontado del crédito" lo paga con el desembolso; "ahorros" sale de un ahorro normal, aunque no sea día 1; "efectivo" entra a la caja al aprobar, y quien aprueba confirma haberlo recibido.
+- **Cupo de socio:** cada retiro espera aprobación y aparta cupo mientras tanto. La promoción abierta y los límites se validan al pedirlo y otra vez al aprobarlo.
+- **Documentos:** solo PDF comprobado por su contenido, hasta 10 por crédito y 10 MB cada uno, en la base de datos. Son opcionales y no condicionan la aprobación.

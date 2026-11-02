@@ -11,10 +11,11 @@ import lombok.RequiredArgsConstructor;
 class CreditosCierre implements RestriccionCierre {
 
     private final CreditoService.CreditoRepository creditos;
+    private final CreditoService.SolicitudCupoRepository solicitudes;
 
     @Override
     public void verificar(Long personaId) {
-        if (creditos.tieneObligaciones(personaId)) {
+        if (creditos.tieneObligaciones(personaId) || solicitudes.existsByPersonaIdAndEstado(personaId, "PENDIENTE")) {
             throw NegocioException.conflicto("CREDITOS_PENDIENTES", "Tiene créditos pendientes");
         }
     }

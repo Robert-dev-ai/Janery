@@ -3,13 +3,15 @@ import { Component, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { forkJoin, Observable } from 'rxjs';
 
-import { ApiService, CierreAnual, Pagina, Resultado, ResumenSocio } from '../../core/services/api';
+import { ApiService, CierreAnual, Pagina, Resultado, ResultadosEnEspera, ResumenSocio } from '../../core/services/api';
 import { alCambiar } from '../../core/services/tiempo-real';
+import { Paginador } from '../../shared/components/paginador';
+import { DialogoService } from '../../shared/components/dialogo';
 import { mensajeDeError } from '../../shared/utils/errores';
 
 @Component({
   selector: 'app-admin-resultados',
-  imports: [CurrencyPipe, DatePipe, DecimalPipe, FormsModule],
+  imports: [CurrencyPipe, DatePipe, DecimalPipe, FormsModule, Paginador],
   template: `
     <h1>Resultados y socios</h1>
     @if (error()) { <p class="error" role="alert">{{ error() }}</p> }
@@ -17,11 +19,11 @@ import { mensajeDeError } from '../../shared/utils/errores';
 
     <h2>Socios</h2>
     @if (socios().length === 0) {
-      <p>Aún no hay socios. Regístrelos en Usuarios.</p>
+      <p class="vacio">Aún no hay socios. Regístrelos en Usuarios.</p>
     } @else {
       <div class="tabla">
         <table>
-          <thead><tr><th>Socio</th><th class="num">Iniciales</th><th class="num">Mensuales</th><th class="num">Personales</th><th class="num">Ganancias</th><th class="num">Fondo personal</th><th class="num">Participación</th><th class="num">Caja chica</th></tr></thead>
+          <thead><tr><th>Socio</th><th class="num">Iniciales</th><th class="num">Mensuales</th><th class="num">Personales</th><th class="num">Ganancias</th><th class="num">Fondo personal</th><th class="num">Participación</th><th class="num">Este mes</th><th class="num">Caja chica</th></tr></thead>
           <tbody>
             @for (s of socios(); track s.socioId) {
               <tr>
@@ -32,6 +34,7 @@ import { mensajeDeError } from '../../shared/utils/errores';
                 <td class="num">{{ s.ganancias | currency: 'USD' }}</td>
                 <td class="num">{{ s.valorActual | currency: 'USD' }}</td>
                 <td class="num">{{ s.porcentaje | number: '1.2-4' }} %</td>
+                <td class="num">{{ s.rendimientoMes === null ? '—' : (s.rendimientoMes > 0 ? '+' : '') + (s.rendimientoMes | number: '1.2-2') + ' %' }}</td>
                 <td class="num">{{ s.totalCajaChica | currency: 'USD' }}</td>
               </tr>
             }
@@ -39,7 +42,7 @@ import { mensajeDeError } from '../../shared/utils/errores';
         </table>
       </div>
 
-      <form class="tarjeta estrecho" style="margin-top:1rem" (ngSubmit)="registrarInicial()">
+      <form class="tarjeta estrecho mt-4" (ngSubmit)="registrarInicial()">
         <h2>Registrar aporte inicial</h2>
         <p class="suave">Dinero recibido fuera del sistema. Entra a la caja principal y al fondo personal del socio.</p>
         <label>Socio
@@ -47,7 +50,7 @@ import { mensajeDeError } from '../../shared/utils/errores';
             @for (s of socios(); track s.socioId) { <option [ngValue]="s.socioId">{{ s.nombre }}</option> }
           </select>
         </label>
-        <label>Importe (USD) <input type="number" min="0.01" step="0.01" name="importeInicial" [(ngModel)]="importeInicial" /></label>
+        <label>Importe (USD) <input type="number" min="0" step="1" name="importeInicial" [(ngModel)]="importeInicial" /></label>
         <label>Forma de pago
           <select name="metodoInicial" [(ngModel)]="metodoInicial">
             <option value="EFECTIVO">Efectivo</option>
@@ -71,14 +74,15 @@ import { mensajeDeError } from '../../shared/utils/errores';
             @for (s of socios(); track s.socioId) { <option [ngValue]="s.socioId">{{ s.nombre }}</option> }
           </select>
         </label>
-        <label>Capital que cambia de manos (USD) <input type="number" min="0.01" step="0.01" name="capital" [(ngModel)]="capitalVenta" /></label>
-        <label>Precio acordado (USD) <input type="number" min="0.01" step="0.01" name="precio" [(ngModel)]="precioVenta" /></label>
+        <label>Capital que cambia de manos (USD) <input type="number" min="0" step="1" name="capital" [(ngModel)]="capitalVenta" /></label>
+        <label>Precio acordado (USD) <input type="number" min="0" step="1" name="precio" [(ngModel)]="precioVenta" /></label>
         <button type="submit" [disabled]="!vendedor || !comprador || vendedor === comprador || !capitalVenta || !precioVenta">Registrar</button>
       </form>
     }
 
-    <form class="tarjeta estrecho" style="margin-top:1rem" (ngSubmit)="registrar()">
+    <form class="tarjeta estrecho mt-4" (ngSubmit)="registrar()">
       <h2>Registrar ganancia o pérdida</h2>
+      <p class="suave"><strong>Intereses, aperturas y lo que entre por el registro manual ya se reparten solos.</strong> Use esto solo para lo extraordinario: registrar aquí algo ya cobrado lo repartiría dos veces.</p>
       <p class="suave">Con cada ganancia se separa al momento el fondo de reserva, y el resto va a los fondos personales según el valor de cada socio. La pérdida se reparte igual, sin tocar la reserva.</p>
       <label>Tipo
         <select name="tipo" [(ngModel)]="tipo">
@@ -86,16 +90,22 @@ import { mensajeDeError } from '../../shared/utils/errores';
           <option value="PERDIDA">Pérdida</option>
         </select>
       </label>
-      <label>Importe (USD) <input type="number" min="0.01" step="0.01" name="importe" [(ngModel)]="importe" /></label>
+      <label>Importe (USD) <input type="number" min="0" step="1" name="importe" [(ngModel)]="importe" /></label>
       <label>Concepto <input name="concepto" maxlength="200" [(ngModel)]="concepto" /></label>
       <label>Fecha (vacío: hoy) <input type="date" name="fecha" [(ngModel)]="fecha" /></label>
       <button type="submit" [disabled]="!importe || importe <= 0 || !concepto.trim()">Registrar</button>
     </form>
 
+    @if (enEspera(); as e) {
+      @if (e.ganancia > 0 || e.perdida > 0) {
+        <p class="suave">En espera de reparto: {{ e.ganancia | currency: 'USD' }} de ganancia y {{ e.perdida | currency: 'USD' }} de pérdida. Se repartirán cuando alcance para todos los socios.</p>
+      }
+    }
+
     @if (resultados(); as r) {
       <h2>Resultados registrados</h2>
       @if (r.total === 0) {
-        <p>Aún no hay resultados.</p>
+        <p class="vacio">Aún no hay resultados.</p>
       } @else {
         <div class="tabla">
           <table>
@@ -112,15 +122,11 @@ import { mensajeDeError } from '../../shared/utils/errores';
             </tbody>
           </table>
         </div>
-        <div class="paginador">
-          <button type="button" class="secundario" [disabled]="r.pagina === 0" (click)="cargarResultados(r.pagina - 1)">Anterior</button>
-          <span>Página {{ r.pagina + 1 }}</span>
-          <button type="button" class="secundario" [disabled]="(r.pagina + 1) * r.tamano >= r.total" (click)="cargarResultados(r.pagina + 1)">Siguiente</button>
-        </div>
+        <app-paginador [pagina]="r.pagina" [tamano]="r.tamano" [total]="r.total" (cambiar)="cargarResultados($event)" />
       }
     }
 
-    <section class="tarjeta" style="margin-top:1rem">
+    <section class="tarjeta mt-4">
       <h2>Cierre anual</h2>
       <p class="suave">Totaliza el año y bloquea nuevos resultados en él. No mueve dinero: la reserva y el reparto ya ocurrieron con cada resultado. No se puede deshacer.</p>
       <form class="acciones" (ngSubmit)="cerrar()">
@@ -149,9 +155,11 @@ import { mensajeDeError } from '../../shared/utils/errores';
 })
 export class AdminResultados implements OnInit {
   private readonly api = inject(ApiService);
+  private readonly dialogo = inject(DialogoService);
 
   protected readonly socios = signal<ResumenSocio[]>([]);
   protected readonly resultados = signal<Pagina<Resultado> | null>(null);
+  protected readonly enEspera = signal<ResultadosEnEspera | null>(null);
   protected readonly cierres = signal<CierreAnual[]>([]);
   protected readonly error = signal<string | null>(null);
   protected readonly aviso = signal<string | null>(null);
@@ -213,13 +221,17 @@ export class AdminResultados implements OnInit {
       });
   }
 
-  protected cerrar(): void {
-    if (confirm(`¿Cerrar el año ${this.anio}? No se puede deshacer.`)) {
+  protected async cerrar(): Promise<void> {
+    if (await this.dialogo.confirmar(`¿Cerrar el año ${this.anio}? No se puede deshacer.`, 'Cerrar año', true)) {
       this.ejecutar(this.api.cerrarAnio(this.anio!), `Año ${this.anio} cerrado.`);
     }
   }
 
   protected cargarResultados(pagina: number): void {
+    this.api.resultadosEnEspera().subscribe({
+      next: (e) => this.enEspera.set(e),
+      error: (e) => this.error.set(mensajeDeError(e)),
+    });
     this.api.resultados(pagina).subscribe({
       next: (r) => this.resultados.set(r),
       error: (e) => this.error.set(mensajeDeError(e)),

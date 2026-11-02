@@ -1,5 +1,7 @@
-import { Component, computed, inject, OnInit, signal } from '@angular/core';
+import { Component, computed, DestroyRef, inject, OnInit, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
+import { ActivatedRoute } from '@angular/router';
 
 import { ApiService, DefinicionInforme, TablaInforme } from '../../core/services/api';
 import { descargar } from '../../shared/utils/descarga';
@@ -31,7 +33,7 @@ import { mensajeDeError } from '../../shared/utils/errores';
 
     @if (tabla(); as t) {
       @if (t.filas.length === 0) {
-        <p>Sin datos para este informe.</p>
+        <p class="vacio">Sin datos para este informe.</p>
       } @else {
         @if (t.truncado) {
           <p class="suave">Se muestran las primeras {{ t.filas.length }} filas. El CSV incluye más.</p>
@@ -58,6 +60,8 @@ import { mensajeDeError } from '../../shared/utils/errores';
 })
 export class AdminReportes implements OnInit {
   private readonly api = inject(ApiService);
+  private readonly ruta = inject(ActivatedRoute);
+  private readonly destruir = inject(DestroyRef);
 
   protected readonly catalogo = signal<DefinicionInforme[]>([]);
   protected readonly codigo = signal('');
@@ -73,9 +77,18 @@ export class AdminReportes implements OnInit {
       next: (c) => {
         this.catalogo.set(c);
         this.codigo.set(c[0]?.codigo ?? '');
+        // El menú abre un informe concreto con ?informe=CODIGO.
+        this.ruta.queryParamMap.pipe(takeUntilDestroyed(this.destruir)).subscribe((q) => this.abrir(q.get('informe')));
       },
       error: (e) => this.error.set(mensajeDeError(e)),
     });
+  }
+
+  private abrir(codigo: string | null): void {
+    if (codigo && this.catalogo().some((d) => d.codigo === codigo)) {
+      this.elegir(codigo);
+      this.consultar();
+    }
   }
 
   protected elegir(codigo: string): void {

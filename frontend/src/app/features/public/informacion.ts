@@ -13,11 +13,11 @@ import { Component } from '@angular/core';
     </section>
     <section class="tarjeta">
       <h2>Créditos</h2>
-      <p>Créditos a letras (normal, inversión, estudio y personalizado) y créditos emergentes.</p>
+      <p><strong>Créditos a letras</strong> (normal, inversión, estudio y personalizado) y <strong>créditos emergentes</strong>. Todos se aprueban antes de entregar el dinero.</p>
     </section>
     <section class="tarjeta">
       <h2>Ahorros</h2>
-      <p>Ahorro normal, con retiro cuando lo desee, y ahorro a plazo fijo.</p>
+      <p><strong>Ahorro normal</strong>: retira su saldo cuando lo desee y gana interés cada día. <strong>Plazo fijo</strong>: a 3, 6, 9, 12 o 24 meses, con mayor interés al terminar el contrato.</p>
     </section>
   `,
 })

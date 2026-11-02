@@ -1,7 +1,37 @@
 # Arranca el backend con el reloj simulado sobre la base janery_simulacion (docs/testing.md).
 # Uso: .\simulacion.ps1             continua la simulacion anterior
 #      .\simulacion.ps1 -Reiniciar  borra los datos simulados y vuelve a la fecha real
-param([switch]$Reiniciar)
+#      .\simulacion.ps1 -SegundoPlano  arranca sin ventana: cerrar una consola no lo detiene (salida en simulacion.log)
+#      .\simulacion.ps1 -Detener    detiene el backend que escucha en el puerto
+param([switch]$Reiniciar, [switch]$SegundoPlano, [switch]$Detener)
+
+if ($Detener) {
+    $escucha = Get-NetTCPConnection -State Listen -LocalPort 8080 -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($escucha) {
+        # Sube hasta el proceso de Maven para no dejarlo huerfano.
+        $id = $escucha.OwningProcess
+        $raiz = $id
+        while ($id) {
+            $proceso = Get-CimInstance Win32_Process -Filter "ProcessId=$id"
+            if (-not $proceso -or $proceso.CommandLine -notmatch 'JaneryApplication|plexus-classworlds|mvnw') { break }
+            $raiz = $id
+            $id = $proceso.ParentProcessId
+        }
+        taskkill /PID $raiz /T /F | Out-Null
+    }
+    return
+}
+
+if ($SegundoPlano) {
+    # Sin ventana: nadie puede cerrarla ni interrumpirla con Ctrl+C por accidente.
+    $registro = Join-Path $PSScriptRoot 'simulacion.log'
+    $argumentos = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$PSCommandPath`"")
+    if ($Reiniciar) { $argumentos += '-Reiniciar' }
+    Start-Process powershell.exe -ArgumentList $argumentos -WindowStyle Hidden -WorkingDirectory $PSScriptRoot `
+        -RedirectStandardOutput $registro -RedirectStandardError "$registro.err"
+    Write-Output "Simulacion arrancando. Salida en $registro. Para detenerla: .\simulacion.ps1 -Detener"
+    return
+}
 
 $base = 'janery_simulacion'
 

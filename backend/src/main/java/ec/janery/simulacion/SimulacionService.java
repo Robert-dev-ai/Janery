@@ -3,13 +3,11 @@ package ec.janery.simulacion;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
-import java.time.YearMonth;
 
 import org.springframework.context.annotation.Profile;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
-import ec.janery.ahorro.AhorroService;
 import ec.janery.auditoria.AuditoriaService;
 import ec.janery.common.NegocioException;
 import lombok.RequiredArgsConstructor;
@@ -20,13 +18,11 @@ import lombok.RequiredArgsConstructor;
 public class SimulacionService {
 
     private static final int MAX_DIAS = 3660;
-    private static final LocalTime HORA_PROCESO_MENSUAL = LocalTime.of(1, 0);
 
     public record Estado(LocalDate fecha, Instant ahora, long diasAdelantados) {
     }
 
     private final RelojSimulado reloj;
-    private final AhorroService.InteresMensual interesMensual;
     private final AuditoriaService auditoria;
 
     public Estado estado() {
@@ -34,7 +30,7 @@ public class SimulacionService {
     }
 
     /**
-     * Detiene el reloj en cada día 1 que cruza para ejecutar el proceso mensual, igual que si el tiempo hubiera pasado.
+     * Interés de ahorros y mora se calculan con la fecha al consultarlos: no hay procesos que ejecutar al cruzar un mes.
      * Se indica una sola de las dos opciones: días a sumar o fecha de destino.
      */
     public synchronized Estado avanzar(Long actorId, Integer dias, LocalDate fecha) {
@@ -53,10 +49,6 @@ public class SimulacionService {
             throw excesivo();
         }
         LocalTime hora = LocalTime.now(reloj);
-        for (YearMonth mes = YearMonth.from(hoy).plusMonths(1); !mes.atDay(1).isAfter(destino); mes = mes.plusMonths(1)) {
-            reloj.avanzarHasta(mes.atDay(1).atTime(HORA_PROCESO_MENSUAL).atZone(reloj.getZone()).toInstant());
-            interesMensual.ejecutar();
-        }
         reloj.avanzarHasta(destino.atTime(hora).atZone(reloj.getZone()).toInstant());
         auditoria.registrar(actorId, "RELOJ_AVANZADO", "SIMULACION", "reloj", null, hoy.toString(), destino.toString(), null);
         return estado();

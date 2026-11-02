@@ -117,6 +117,36 @@ class SociosIntegrationTest {
     }
 
     @Test
+    void elCentavoQueNoSePuedeRepartirEsperaHastaSerDivisible() throws Exception {
+        Persona a = socio("100.00");
+        Persona b = socio("100.00");
+        aportar(a, "{\"tipo\":\"PERSONAL\",\"importe\":100.00}").andExpect(status().isOk());
+        aportar(b, "{\"tipo\":\"PERSONAL\",\"importe\":100.00}").andExpect(status().isOk());
+        BigDecimal valorA = resumen(a).get("valorActual").decimalValue();
+
+        // 0,01 no alcanza para dos socios: nadie recibe nada y el centavo queda a la espera.
+        resultado("GANANCIA", "0.01", null).andExpect(status().isNoContent());
+        assertThat(resumen(a).get("valorActual").decimalValue()).isEqualByComparingTo(valorA);
+        assertThat(enEspera().get("ganancia").decimalValue()).isEqualByComparingTo("0.01");
+
+        // Con otro centavo ya es divisible: a cada uno 0,01 y no queda nada.
+        resultado("GANANCIA", "0.01", null).andExpect(status().isNoContent());
+        assertThat(resumen(a).get("valorActual").decimalValue()).isEqualByComparingTo(valorA.add(new BigDecimal("0.01")));
+        assertThat(resumen(b).get("valorActual").decimalValue()).isEqualByComparingTo(valorA.add(new BigDecimal("0.01")));
+        assertThat(enEspera().get("ganancia").decimalValue()).isEqualByComparingTo("0");
+
+        // Lo mismo con una pérdida, y lo que sobra de una división inexacta también espera.
+        resultado("PERDIDA", "0.03", null).andExpect(status().isNoContent());
+        assertThat(resumen(a).get("valorActual").decimalValue()).isEqualByComparingTo(valorA);
+        assertThat(enEspera().get("perdida").decimalValue()).isEqualByComparingTo("0.01");
+    }
+
+    private JsonNode enEspera() throws Exception {
+        return json.readTree(mvc.perform(get("/api/v1/admin/resultados/en-espera").header(HttpHeaders.AUTHORIZATION, bearer(presidente())))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+    }
+
+    @Test
     void gananciasYPerdidasSeRepartenYLaEvolucionMensualCuadra() throws Exception {
         Persona a = socio("400.00");
         Persona b = socio("100.00");
@@ -375,14 +405,21 @@ class SociosIntegrationTest {
         aportar(a, "{\"tipo\":\"PERSONAL\",\"importe\":100.00}").andExpect(status().isOk());
         long socioId = resumen(a).get("socioId").asLong();
         resultado("GANANCIA", "1000.00", ANIO_ANTERIOR + "-06-30").andExpect(status().isNoContent());
+        jdbc.update("update personas set direccion = 'Quito' where usuario_id = (select id from usuarios where correo = ?)", a.correo());
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put("/api/v1/personas/me/datos-credito").header(HttpHeaders.AUTHORIZATION, bearer(a.token()))
+                .contentType(MediaType.APPLICATION_JSON).content("""
+                        {"lugarTrabajo":"Tienda","ocupacion":"Vendedora","antiguedadTrabajo":"2 años","ingresosMensuales":500.00,
+                         "fechaNacimiento":"1990-01-01","estadoCivil":"SOLTERO","referenciaNombre":"Luis","referenciaTelefono":"099",
+                         "banco":"Pichincha","tipoCuentaBanco":"AHORROS","numeroCuentaBanco":"123"}""")).andExpect(status().isOk());
         String r = mvc.perform(post("/api/v1/creditos/letras/solicitudes").header(HttpHeaders.AUTHORIZATION, bearer(a.token()))
-                        .contentType(MediaType.APPLICATION_JSON).content("{\"modalidad\":\"NORMAL\",\"importe\":300.00,\"plazoMeses\":3}"))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"modalidad\":\"NORMAL\",\"importe\":300.00,\"plazoMeses\":3,\"origenEncaje\":\"CREDITO\"}"))
                 .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
         long credito = json.readTree(r).get("id").asLong();
         mvc.perform(post("/api/v1/admin/creditos/" + credito + "/aprobar").header(HttpHeaders.AUTHORIZATION, bearer(presidente())))
                 .andExpect(status().isNoContent());
         BigDecimal saldoAntes = saldo(a);
-        jdbc.update("update cuotas_credito set vencimiento = current_date - 1 where credito_id = ? and numero = 1", credito);
+        // Dos días: la fecha de la base de datos está en UTC y de noche ya es el día siguiente.
+        jdbc.update("update cuotas_credito set vencimiento = current_date - 2 where credito_id = ? and numero = 1", credito);
         BigDecimal cuota = jdbc.queryForObject("select total from cuotas_credito where credito_id = ? and numero = 1", BigDecimal.class, credito);
         JsonNode linea = menu(socioId).get("obligaciones").get(0);
         assertThat(linea.get("tipo").asText()).isEqualTo("CUOTA");

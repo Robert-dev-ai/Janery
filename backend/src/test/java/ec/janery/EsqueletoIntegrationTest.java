@@ -169,7 +169,8 @@ class EsqueletoIntegrationTest {
                 .andExpect(jsonPath("$.estado").value("ACTIVA"))
                 .andExpect(jsonPath("$.saldoDisponible").value(0))
                 .andExpect(jsonPath("$.depositoReembolsable").value(5));
-        assertThat(saldoCaja()).isEqualByComparingTo(cajaAntes.add(new BigDecimal("15")));
+        // Los USD 5 reembolsables también están en la caja, aunque sigan siendo del cliente.
+        assertThat(saldoCaja()).isEqualByComparingTo(cajaAntes.add(new BigDecimal("20")));
     }
 
     @Test

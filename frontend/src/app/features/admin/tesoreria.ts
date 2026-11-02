@@ -18,7 +18,7 @@ import { mensajeDeError } from '../../shared/utils/errores';
         <p class="importe">{{ d.saldo | currency: 'USD' }}</p>
       </section>
       @if (d.movimientos.total === 0) {
-        <p>Aún no hay movimientos.</p>
+        <p class="vacio">Aún no hay movimientos.</p>
       } @else {
         <div class="tabla">
           <table>
@@ -36,7 +36,7 @@ import { mensajeDeError } from '../../shared/utils/errores';
         </div>
       }
     } @else {
-      <p role="status">Cargando…</p>
+      <p class="cargando" role="status">Cargando…</p>
     }
   `,
 })

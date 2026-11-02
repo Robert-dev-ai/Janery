@@ -2,11 +2,13 @@ package ec.janery.socio;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-/** Reparte un importe según los valores de cada socio. La suma es exacta: el mayor absorbe los centavos de redondeo. */
+/**
+ * Reparte un importe según los valores de cada socio. Cada parte se redondea hacia abajo: los centavos que sobran no se
+ * asignan a nadie. Si algún socio no alcanzaría ni un centavo, no se reparte nada: el importe aún no es repartible.
+ */
 final class RepartoProporcional {
 
     private RepartoProporcional() {
@@ -18,15 +20,13 @@ final class RepartoProporcional {
             throw new IllegalArgumentException("No hay participación que repartir");
         }
         Map<Long, BigDecimal> partes = new LinkedHashMap<>();
-        BigDecimal asignado = BigDecimal.ZERO;
         for (var valor : valores.entrySet()) {
             BigDecimal parte = importe.multiply(valor.getValue()).divide(total, 2, RoundingMode.DOWN);
+            if (parte.signum() <= 0) {
+                return Map.of();
+            }
             partes.put(valor.getKey(), parte);
-            asignado = asignado.add(parte);
         }
-        Long mayor = valores.entrySet().stream().max(Map.Entry.comparingByValue(Comparator.naturalOrder()))
-                .orElseThrow().getKey();
-        partes.merge(mayor, importe.subtract(asignado), BigDecimal::add);
         return partes;
     }
 }

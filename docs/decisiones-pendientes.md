@@ -13,7 +13,7 @@ Claude no debe inventar respuestas a estos puntos. Puede preparar estructuras ex
 
 ## Necesario antes de publicar con datos reales
 
-- Pantalla para cambiar y recuperar la contraseña.
+- Pantalla para recuperar la contraseña.
 - Límite de intentos de inicio de sesión y verificación de correo.
 - Contraseña fuerte de PostgreSQL y usuario propio de la aplicación.
 - Actualizar Spring Boot: revisar si 3.5 sigue recibiendo soporte.

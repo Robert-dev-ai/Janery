@@ -28,6 +28,7 @@ Leer todos los documentos de `docs/` antes de programar:
 13. `despliegue.md`
 14. `decisiones-pendientes.md`
 15. `neon.md`
+16. `diseno.md`
 
 ## Instrucciones críticas
 
@@ -107,7 +108,7 @@ Fases 0 a 7 construidas para uso local, con valores provisionales y fórmulas po
 |---|---|
 | `usuario` | Registro, sesión, cargos y permisos |
 | `persona` | Datos personales |
-| `cuenta` | Cuenta principal y libro de movimientos |
+| `cuenta` | Cuenta principal, libro de movimientos y retiros de dinero |
 | `parametros` | CMS con vigencias e historial |
 | `credito` | Letras, emergentes, promociones, encajes y ahorro letras |
 | `ahorro` | Ahorro normal y plazo fijo |
@@ -115,6 +116,8 @@ Fases 0 a 7 construidas para uso local, con valores provisionales y fórmulas po
 | `caja` | Caja principal, caja chica y fondo de reserva |
 | `reportes` | Informes y exportación CSV |
 | `auditoria` | Registro de acciones |
+| `contabilidad` | Balance, libros, indicadores y registro manual |
+| `consultas` | Área general de socios, personas e historial crediticio |
 
 ## Ejecución local
 

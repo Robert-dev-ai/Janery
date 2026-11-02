@@ -31,6 +31,10 @@ public class Usuario {
         this.creadoEn = creadoEn;
     }
 
+    public void cambiarContrasena(String hashContrasena) {
+        this.hashContrasena = hashContrasena;
+    }
+
     public boolean activo() {
         return "ACTIVO".equals(estado);
     }

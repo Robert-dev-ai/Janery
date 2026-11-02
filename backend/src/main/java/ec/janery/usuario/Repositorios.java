@@ -1,9 +1,11 @@
 package ec.janery.usuario;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -16,6 +18,11 @@ final class Repositorios {
         Optional<Usuario> findByCorreo(String correo);
 
         boolean existsByCorreo(String correo);
+
+        @org.springframework.data.jpa.repository.Query(value = """
+                SELECT u.* FROM usuarios u JOIN personas p ON p.usuario_id = u.id WHERE p.identificacion = :identificacion
+                """, nativeQuery = true)
+        Optional<Usuario> findByIdentificacion(@org.springframework.data.repository.query.Param("identificacion") String identificacion);
 
         @Query(value = """
                 SELECT DISTINCT p.codigo FROM usuario_cargos uc
@@ -37,6 +44,14 @@ final class Repositorios {
 
     interface TokenRefrescoRepository extends JpaRepository<TokenRefresco, Long> {
         Optional<TokenRefresco> findByHashToken(String hashToken);
+
+        @Modifying
+        @Query("""
+                UPDATE TokenRefresco t SET t.revocadoEn = :ahora
+                WHERE t.usuarioId = :usuarioId AND t.revocadoEn IS NULL AND t.hashToken <> :hashConservado
+                """)
+        int revocarOtros(@Param("usuarioId") Long usuarioId, @Param("hashConservado") String hashConservado,
+                @Param("ahora") Instant ahora);
     }
 
     interface UsuarioCargoRepository extends JpaRepository<UsuarioCargo, Long> {

@@ -7,6 +7,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import org.springframework.data.domain.Page;
@@ -21,7 +22,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import ec.janery.ahorro.AhorroService;
 import ec.janery.auditoria.AuditoriaService;
+import ec.janery.caja.CajaService;
 import ec.janery.common.NegocioException;
 import ec.janery.credito.CalculadoraCredito.Letra;
 import ec.janery.credito.Entidades.AhorroLetrasCredito;
@@ -32,6 +35,7 @@ import ec.janery.credito.Entidades.DetallePago;
 import ec.janery.credito.Entidades.EncajeCredito;
 import ec.janery.credito.Entidades.MovimientoAhorroLetras;
 import ec.janery.credito.Entidades.PagoCredito;
+import ec.janery.credito.Entidades.SolicitudCupo;
 import ec.janery.cuenta.CuentaPrincipal;
 import ec.janery.cuenta.CuentaService;
 import ec.janery.parametros.ParametroService;
@@ -84,13 +88,34 @@ public class CreditoService {
 
         @Query("""
                 select count(c) > 0 from Credito c
-                where c.personaId = :personaId and c.familia = 'EMERGENTE_CLIENTE' and c.estado = 'ACTIVO'
+                where c.personaId = :personaId and c.familia = 'EMERGENTE_CLIENTE' and c.estado in ('ACTIVO', 'SOLICITADO')
                 """)
         boolean tieneEmergenteClienteAbierto(@Param("personaId") Long personaId);
+
+        Optional<Credito> findByClaveSolicitud(String clave);
+    }
+
+    interface SolicitudCupoRepository extends JpaRepository<SolicitudCupo, Long> {
+        @Lock(LockModeType.PESSIMISTIC_WRITE)
+        @Query("select s from SolicitudCupo s where s.id = :id")
+        Optional<SolicitudCupo> bloquear(@Param("id") Long id);
+
+        Optional<SolicitudCupo> findByClave(String clave);
+
+        List<SolicitudCupo> findByPersonaIdOrderByIdDesc(Long personaId);
+
+        List<SolicitudCupo> findByEstadoOrderById(String estado);
+
+        boolean existsByPersonaIdAndEstado(Long personaId, String estado);
+
+        @Query("select coalesce(sum(s.importe), 0) from SolicitudCupo s where s.personaId = :personaId and s.estado = 'PENDIENTE'")
+        BigDecimal pendiente(@Param("personaId") Long personaId);
     }
 
     interface CuotaRepository extends JpaRepository<CuotaCredito, Long> {
         List<CuotaCredito> findByCreditoIdOrderByNumero(Long creditoId);
+
+        List<CuotaCredito> findByCreditoIdInOrderByNumero(java.util.Collection<Long> creditoIds);
 
         @Query("""
                 select q from CuotaCredito q, Credito c where c.id = q.creditoId and c.personaId = :personaId
@@ -113,10 +138,14 @@ public class CreditoService {
 
     interface EncajeRepository extends JpaRepository<EncajeCredito, Long> {
         Optional<EncajeCredito> findByCreditoId(Long creditoId);
+
+        List<EncajeCredito> findByCreditoIdIn(java.util.Collection<Long> creditoIds);
     }
 
     interface AhorroLetrasRepository extends JpaRepository<AhorroLetrasCredito, Long> {
         Optional<AhorroLetrasCredito> findByCreditoId(Long creditoId);
+
+        List<AhorroLetrasCredito> findByCreditoIdIn(java.util.Collection<Long> creditoIds);
     }
 
     interface MovimientoAhorroLetrasRepository extends JpaRepository<MovimientoAhorroLetras, Long> {
@@ -127,11 +156,18 @@ public class CreditoService {
             BigDecimal importe, Integer plazoMeses, BigDecimal tasaInteres, BigDecimal tasaDesgravamen,
             String unidadTasa, BigDecimal capitalPendiente, BigDecimal interes, BigDecimal desgravamen,
             BigDecimal totalPendiente, BigDecimal encaje, boolean encajeDevuelto, BigDecimal ahorroLetras,
-            String titular, String motivoRechazo, List<CuotaVista> cuotas, List<Integer> cuotasPagadas) {
+            String titular, String motivoRechazo, List<CuotaVista> cuotas, List<Integer> cuotasPagadas,
+            int letrasParaPrecancelar, boolean precancelable, Instant precanceladoEn, Instant creadoEn, Instant finalizadoEn,
+            String origenEncaje, BigDecimal tasaMora, BigDecimal moraPendiente, int letrasAtrasadas) {
     }
 
     public record CuotaVista(int numero, LocalDate vencimiento, BigDecimal capital, BigDecimal ahorroLetras,
-            BigDecimal fondoDesgravamen, BigDecimal interes, BigDecimal total, BigDecimal pagado) {
+            BigDecimal fondoDesgravamen, BigDecimal interes, BigDecimal total, BigDecimal pagado, long diasAtraso,
+            BigDecimal mora) {
+    }
+
+    public record SolicitudCupoVista(Long id, String titular, BigDecimal importe, String promocion, String estado,
+            String motivo, Instant creadoEn) {
     }
 
     /** total es lo que falta por pagar de la cuota, tras los pagos parciales. */
@@ -167,6 +203,8 @@ public class CreditoService {
     private static final String ENTRADA = "ENTRADA";
     private static final String SALIDA = "SALIDA";
     private static final String MODULO = "CREDITO";
+    private static final String PENDIENTE = "PENDIENTE";
+    private static final List<String> ORIGENES_ENCAJE = List.of("EFECTIVO", "CUENTA", "AHORROS", "CREDITO");
     private static final List<String> MODALIDADES = List.of("NORMAL", "INVERSION", "ESTUDIO", "PERSONALIZADO");
 
     private final CreditoRepository creditos;
@@ -177,12 +215,18 @@ public class CreditoService {
     private final EncajeRepository encajes;
     private final AhorroLetrasRepository ahorros;
     private final MovimientoAhorroLetrasRepository movimientosAhorro;
+    private final SolicitudCupoRepository solicitudesCupo;
+    private final AhorroService ahorrosPersona;
+    private final CajaService caja;
     private final CuentaService cuentas;
     private final PersonaService personas;
     private final SocioService socios;
     private final ParametroService parametros;
     private final AuditoriaService auditoria;
     private final Clock reloj;
+    private final org.springframework.context.ApplicationEventPublisher eventos;
+    @jakarta.persistence.PersistenceContext
+    private jakarta.persistence.EntityManager em;
 
     // --- Consulta de productos
 
@@ -190,21 +234,25 @@ public class CreditoService {
     public Productos productos(Long usuarioId) {
         Long personaId = personaDe(usuarioId);
         String perfil = perfil(personaId);
-        List<ProductoLetras> letras = MODALIDADES.stream().map(m -> new ProductoLetras(m,
-                parametros.valorVigente("LETRAS_INTERES_%s_%s".formatted(m, perfil)),
-                parametros.valorVigente("LETRAS_ENCAJE_%s_%s".formatted(m, perfil)))).toList();
         boolean socio = SOCIO.equals(perfil);
-        BigDecimal limite = parametros.valorVigente(socio ? "EMERGENTE_SOCIO_CUPO" : "EMERGENTE_CLIENTE_LIMITE");
+        String cupo = socio ? "EMERGENTE_SOCIO_CUPO" : "EMERGENTE_CLIENTE_LIMITE";
+        String interes = socio ? "EMERGENTE_SOCIO_INTERES" : "EMERGENTE_CLIENTE_INTERES";
+        String desgravamen = socio ? "EMERGENTE_SOCIO_DESGRAVAMEN" : "EMERGENTE_CLIENTE_DESGRAVAMEN";
+        List<String> codigos = new java.util.ArrayList<>(List.of(cupo, interes, desgravamen, "LETRAS_DESGRAVAMEN", "LETRAS_IMPORTE_MIN",
+                "LETRAS_IMPORTE_MAX", "LETRAS_PLAZO_MIN", "LETRAS_PLAZO_MAX", "ESTACIONAL_LIMITE", "ESTACIONAL_TASA"));
+        MODALIDADES.forEach(m -> {
+            codigos.add("LETRAS_INTERES_%s_%s".formatted(m, perfil));
+            codigos.add("LETRAS_ENCAJE_%s_%s".formatted(m, perfil));
+        });
+        Map<String, BigDecimal> v = parametros.valoresVigentes(codigos);
+        List<ProductoLetras> letras = MODALIDADES.stream().map(m -> new ProductoLetras(m,
+                v.get("LETRAS_INTERES_%s_%s".formatted(m, perfil)), v.get("LETRAS_ENCAJE_%s_%s".formatted(m, perfil)))).toList();
+        BigDecimal limite = v.get(cupo);
         BigDecimal utilizado = socio ? creditos.cupoUtilizado(personaId) : BigDecimal.ZERO;
-        return new Productos(perfil, letras, parametros.valorVigente("LETRAS_DESGRAVAMEN"),
-                parametros.valorVigente("LETRAS_IMPORTE_MIN"), parametros.valorVigente("LETRAS_IMPORTE_MAX"),
-                parametros.valorVigente("LETRAS_PLAZO_MIN").intValue(), parametros.valorVigente("LETRAS_PLAZO_MAX").intValue(),
-                limite, utilizado, limite.subtract(utilizado).max(BigDecimal.ZERO),
-                parametros.valorVigente(socio ? "EMERGENTE_SOCIO_INTERES" : "EMERGENTE_CLIENTE_INTERES"),
-                parametros.valorVigente(socio ? "EMERGENTE_SOCIO_DESGRAVAMEN" : "EMERGENTE_CLIENTE_DESGRAVAMEN"),
-                socio ? PCT_DIARIO : PCT_MENSUAL,
-                socio ? promocionAbierta() : null,
-                parametros.valorVigente("ESTACIONAL_LIMITE"), parametros.valorVigente("ESTACIONAL_TASA"));
+        return new Productos(perfil, letras, v.get("LETRAS_DESGRAVAMEN"), v.get("LETRAS_IMPORTE_MIN"), v.get("LETRAS_IMPORTE_MAX"),
+                v.get("LETRAS_PLAZO_MIN").intValue(), v.get("LETRAS_PLAZO_MAX").intValue(),
+                limite, utilizado, limite.subtract(utilizado).max(BigDecimal.ZERO), v.get(interes), v.get(desgravamen),
+                socio ? PCT_DIARIO : PCT_MENSUAL, socio ? promocionAbierta() : null, v.get("ESTACIONAL_LIMITE"), v.get("ESTACIONAL_TASA"));
     }
 
     // --- Crédito a letras
@@ -220,19 +268,30 @@ public class CreditoService {
                 CalculadoraCredito.letras(importe, plazo, interes, desgravamen, hoy()));
     }
 
-    /** Las tasas quedan fijadas al solicitar; las fechas de las letras, al aprobar. */
+    /** Las tasas y el origen del encaje quedan fijados al solicitar; las fechas de las letras, al aprobar. */
     @Transactional
-    public Long solicitarLetras(Long usuarioId, String modalidad, BigDecimal importe, int plazo) {
+    public Long solicitarLetras(Long usuarioId, String modalidad, BigDecimal importe, int plazo, String origenEncaje, Long ahorroEncajeId) {
         Long personaId = personaDe(usuarioId);
         cuentas.cuentaActivaBloqueada(personaId);
         String perfil = perfil(personaId);
         validarLetras(importe, plazo);
+        if (!personas.datosCreditoCompletos(personaId)) {
+            throw NegocioException.conflicto("DATOS_CREDITO_INCOMPLETOS", "Complete la dirección y los datos para crédito antes de solicitarlo");
+        }
+        if (origenEncaje == null || !ORIGENES_ENCAJE.contains(origenEncaje)) {
+            throw new NegocioException(HttpStatus.BAD_REQUEST, "ORIGEN_ENCAJE_REQUERIDO", "Indique de dónde pagará el encaje");
+        }
+        if ("AHORROS".equals(origenEncaje)) {
+            ahorrosPersona.exigirAhorroNormal(personaId, ahorroEncajeId);
+        }
         Credito c = nuevo(personaId, LETRAS, modalidad, perfil, SOLICITADO, PCT_MENSUAL,
                 parametros.valorVigente("LETRAS_INTERES_%s_%s".formatted(modalidad, perfil)),
                 parametros.valorVigente("LETRAS_DESGRAVAMEN"));
         c.setImporte(importe);
         c.setPlazoMeses(plazo);
         c.setPorcentajeEncaje(parametros.valorVigente("LETRAS_ENCAJE_%s_%s".formatted(modalidad, perfil)));
+        c.setOrigenEncaje(origenEncaje);
+        c.setAhorroEncajeId("AHORROS".equals(origenEncaje) ? ahorroEncajeId : null);
         creditos.save(c);
         auditoria.registrar(usuarioId, "CREDITO_SOLICITADO", MODULO, "credito", c.getId(), null, importe.toPlainString(), null);
         return c.getId();
@@ -245,16 +304,22 @@ public class CreditoService {
         CuentaPrincipal cuenta = cuentas.cuentaActivaBloqueada(personaId);
         Credito c = bloquear(creditoId);
         exigirSolicitado(c);
+        if (EMERGENTE_CLIENTE.equals(c.getFamilia())) {
+            aprobarEmergente(actorId, cuenta, c);
+            return;
+        }
         Instant ahora = Instant.now(reloj);
+        BigDecimal encaje = CalculadoraCredito.porcentaje(c.getImporte(), c.getPorcentajeEncaje());
+        // Solo "CREDITO" paga con el propio desembolso: los demás deben tener el dinero antes de recibirlo.
+        if ("CUENTA".equals(c.getOrigenEncaje()) && encaje.compareTo(cuenta.getSaldoDisponible()) > 0) {
+            throw NegocioException.conflicto("SALDO_INSUFICIENTE", "La cuenta del solicitante no cubre el encaje");
+        }
 
         Long desembolso = cuentas.crearOperacionInterna("DESEMBOLSO", c.getImporte(), null, actorId);
         cuentas.mover(cuenta, desembolso, ENTRADA, c.getImporte(), "DESEMBOLSO_CREDITO");
         desembolsos.save(new DesembolsoCredito(null, c.getId(), desembolso, c.getImporte(), ahora));
 
-        BigDecimal encaje = CalculadoraCredito.porcentaje(c.getImporte(), c.getPorcentajeEncaje());
-        if (encaje.signum() > 0) {
-            cuentas.mover(cuenta, desembolso, SALIDA, encaje, "ENCAJE_CREDITO");
-        }
+        cobrarEncaje(c, cuenta, desembolso, encaje);
         encajes.save(new EncajeCredito(null, c.getId(), desembolso, encaje, ahora, null));
         ahorros.save(new AhorroLetrasCredito(null, c.getId(), BigDecimal.ZERO.setScale(2), null));
 
@@ -262,8 +327,26 @@ public class CreditoService {
         guardarCuotas(c.getId(), CalculadoraCredito.letras(c.getImporte(), c.getPlazoMeses(), c.getTasaInteres(),
                 c.getTasaDesgravamen(), c.getFechaInicio()));
         c.setCapitalPendiente(c.getImporte());
+        c.setTasaMora(tasaMora(c));
         c.setEstado(ACTIVO);
-        auditoria.registrar(actorId, "CREDITO_APROBADO", MODULO, "credito", c.getId(), SOLICITADO, ACTIVO, null);
+        auditoria.registrar(actorId, "CREDITO_APROBADO", MODULO, "credito", c.getId(), SOLICITADO, ACTIVO, c.getOrigenEncaje());
+    }
+
+    /** Definido por el propietario: el encaje se paga en efectivo, de la cuenta, de un ahorro o del propio crédito. */
+    private void cobrarEncaje(Credito c, CuentaPrincipal cuenta, Long operacion, BigDecimal encaje) {
+        if (encaje.signum() <= 0) {
+            return;
+        }
+        switch (c.getOrigenEncaje() == null ? "CREDITO" : c.getOrigenEncaje()) {
+            case "EFECTIVO" -> caja.registrarEnPrincipal(operacion, ENTRADA, encaje, "ENCAJE_EFECTIVO");
+            case "AHORROS" -> ahorrosPersona.descontarEncaje(c.getPersonaId(), c.getAhorroEncajeId(), encaje, operacion);
+            default -> cuentas.mover(cuenta, operacion, SALIDA, encaje, "ENCAJE_CREDITO");
+        }
+    }
+
+    /** La mora solo aplica a clientes y queda fijada al aprobar, como las demás tasas del crédito. */
+    private BigDecimal tasaMora(Credito c) {
+        return CLIENTE.equals(c.getPerfil()) ? parametros.valorVigente("MORA_DIARIA") : BigDecimal.ZERO;
     }
 
     @Transactional
@@ -277,14 +360,17 @@ public class CreditoService {
 
     // --- Emergentes
 
-    /** Emergente de cliente: se desembolsa al momento, dentro del límite y de la frecuencia mensual. */
+    /** Emergente de cliente: queda por aprobar, dentro del límite y de la frecuencia mensual. La clave evita duplicarlo. */
     @Transactional
     public Long solicitarEmergenteCliente(Long usuarioId, BigDecimal importe, String clave) {
         Long personaId = personaDe(usuarioId);
-        CuentaPrincipal cuenta = cuentas.cuentaActivaBloqueada(personaId);
-        Optional<Long> previa = cuentas.operacionPrevia(clave, "DESEMBOLSO", importe, usuarioId);
+        cuentas.cuentaActivaBloqueada(personaId);
+        Optional<Credito> previa = creditos.findByClaveSolicitud(clave);
         if (previa.isPresent()) {
-            return previa.get();
+            if (!previa.get().getPersonaId().equals(personaId) || previa.get().getImporte().compareTo(importe) != 0) {
+                throw NegocioException.conflicto("CLAVE_REUTILIZADA", "La clave de idempotencia ya se usó en otra operación");
+            }
+            return previa.get().getId();
         }
         if (socios.esSocio(personaId)) {
             throw NegocioException.conflicto("PERFIL_INCORRECTO", "Los socios usan el cupo emergente");
@@ -295,44 +381,85 @@ public class CreditoService {
         if (creditos.tieneEmergenteClienteAbierto(personaId)) {
             throw NegocioException.conflicto("EMERGENTE_ABIERTO", "Debe pagar su emergente actual antes de pedir otro");
         }
+        exigirFrecuenciaEmergente(personaId);
+        Credito c = nuevo(personaId, EMERGENTE_CLIENTE, null, CLIENTE, SOLICITADO, PCT_MENSUAL,
+                parametros.valorVigente("EMERGENTE_CLIENTE_INTERES"), parametros.valorVigente("EMERGENTE_CLIENTE_DESGRAVAMEN"));
+        c.setImporte(importe);
+        c.setPlazoMeses(1);
+        c.setClaveSolicitud(clave);
+        creditos.save(c);
+        auditoria.registrar(usuarioId, "CREDITO_SOLICITADO", MODULO, "credito", c.getId(), null, importe.toPlainString(), null);
+        return c.getId();
+    }
+
+    private void exigirFrecuenciaEmergente(Long personaId) {
         LocalDate hoy = hoy();
         long usados = creditos.emergentesClienteEnPeriodo(personaId, hoy.withDayOfMonth(1), hoy.withDayOfMonth(hoy.lengthOfMonth()));
         if (usados >= parametros.valorVigente("EMERGENTE_CLIENTE_FRECUENCIA").longValue()) {
             throw NegocioException.conflicto("FRECUENCIA_EXCEDIDA", "Ya utilizó el emergente este mes");
         }
-        BigDecimal tasa = parametros.valorVigente("EMERGENTE_CLIENTE_INTERES");
-        BigDecimal desgravamen = parametros.valorVigente("EMERGENTE_CLIENTE_DESGRAVAMEN");
-        Credito c = nuevo(personaId, EMERGENTE_CLIENTE, null, CLIENTE, ACTIVO, PCT_MENSUAL, tasa, desgravamen);
-        c.setImporte(importe);
-        c.setPlazoMeses(1);
-        c.setCapitalPendiente(importe);
-        c.setFechaInicio(hoy);
-        creditos.save(c);
-
-        BigDecimal interes = CalculadoraCredito.porcentaje(importe, tasa);
-        BigDecimal cargoDesgravamen = CalculadoraCredito.porcentaje(importe, desgravamen);
-        cuotas.save(new CuotaCredito(c.getId(), 1, hoy.plusMonths(1), importe, BigDecimal.ZERO.setScale(2),
-                cargoDesgravamen, interes, importe.add(interes).add(cargoDesgravamen)));
-        return desembolsar(cuenta, c, importe, clave, usuarioId);
     }
 
-    /** Disposición del cupo de socio, general o de una promoción abierta. Las promociones consumen el mismo cupo. */
+    /** La letra vence un mes después de aprobarse: el plazo corre desde que la persona recibe el dinero. */
+    private void aprobarEmergente(Long actorId, CuentaPrincipal cuenta, Credito c) {
+        exigirFrecuenciaEmergente(c.getPersonaId());
+        LocalDate hoy = hoy();
+        BigDecimal importe = c.getImporte();
+        c.setCapitalPendiente(importe);
+        c.setFechaInicio(hoy);
+        c.setTasaMora(tasaMora(c));
+        c.setEstado(ACTIVO);
+        BigDecimal interes = CalculadoraCredito.porcentaje(importe, c.getTasaInteres());
+        BigDecimal cargoDesgravamen = CalculadoraCredito.porcentaje(importe, c.getTasaDesgravamen());
+        cuotas.save(new CuotaCredito(c.getId(), 1, hoy.plusMonths(1), importe, BigDecimal.ZERO.setScale(2),
+                cargoDesgravamen, interes, importe.add(interes).add(cargoDesgravamen)));
+        desembolsar(cuenta, c, importe, null, actorId);
+        auditoria.registrar(actorId, "CREDITO_APROBADO", MODULO, "credito", c.getId(), SOLICITADO, ACTIVO, null);
+    }
+
+    /** Retiro del cupo de socio, general o de una promoción abierta: queda por aprobar y aparta cupo mientras espera. */
     @Transactional
-    public Long disponerCupo(Long usuarioId, BigDecimal importe, String promocion, String clave) {
+    public Long solicitarCupo(Long usuarioId, BigDecimal importe, String promocion, String clave) {
         Long personaId = personaDe(usuarioId);
-        CuentaPrincipal cuenta = cuentas.cuentaActivaBloqueada(personaId);
-        Optional<Long> previa = cuentas.operacionPrevia(clave, "DESEMBOLSO", importe, usuarioId);
+        cuentas.cuentaActivaBloqueada(personaId);
+        Optional<SolicitudCupo> previa = solicitudesCupo.findByClave(clave);
         if (previa.isPresent()) {
-            return previa.get();
+            if (!previa.get().getPersonaId().equals(personaId) || previa.get().getImporte().compareTo(importe) != 0) {
+                throw NegocioException.conflicto("CLAVE_REUTILIZADA", "La clave de idempotencia ya se usó en otra operación");
+            }
+            return previa.get().getId();
         }
         if (!socios.esSocio(personaId)) {
             throw NegocioException.conflicto("SOLO_SOCIOS", "El cupo emergente es exclusivo de socios");
         }
+        validarCupo(personaId, importe.add(solicitudesCupo.pendiente(personaId)), promocion, importe);
+        SolicitudCupo s = solicitudesCupo.save(new SolicitudCupo(null, personaId, importe, promocion, PENDIENTE, null, clave,
+                null, null, Instant.now(reloj)));
+        auditoria.registrar(usuarioId, "CUPO_SOLICITADO", MODULO, "solicitud_cupo", s.getId(), null, importe.toPlainString(), promocion);
+        return s.getId();
+    }
+
+    private void validarCupo(Long personaId, BigDecimal totalPedido, String promocion, BigDecimal importe) {
+        if (promocion != null) {
+            exigirLimitePromocion(personaId, promocion, importe);
+        }
         BigDecimal disponible = parametros.valorVigente("EMERGENTE_SOCIO_CUPO").subtract(creditos.cupoUtilizado(personaId));
-        if (importe.compareTo(disponible) > 0) {
+        if (totalPedido.compareTo(disponible) > 0) {
             throw NegocioException.conflicto("CUPO_EXCEDIDO", "El importe supera su cupo disponible");
         }
-        Credito c = promocion == null ? lineaGeneral(personaId) : lineaPromocion(personaId, promocion, importe);
+    }
+
+    @Transactional
+    public void aprobarCupo(Long actorId, Long solicitudId) {
+        Long personaId = solicitudesCupo.findById(solicitudId).map(SolicitudCupo::getPersonaId)
+                .orElseThrow(() -> NegocioException.noEncontrado("Solicitud no encontrada"));
+        CuentaPrincipal cuenta = cuentas.cuentaActivaBloqueada(personaId);
+        SolicitudCupo s = bloquearSolicitud(solicitudId);
+        BigDecimal importe = s.getImporte();
+        String promocion = s.getPromocion();
+        validarCupo(personaId, importe, promocion, importe);
+        resolver(s, "APROBADA", actorId, null);
+        Credito c = promocion == null ? lineaGeneral(personaId) : lineaPromocion(personaId, promocion);
         // Lo ya devengado conserva su tasa; lo nuevo devenga con la vigente.
         devengar(c);
         if (promocion == null) {
@@ -343,7 +470,46 @@ public class CreditoService {
         }
         c.setCapitalPendiente(c.getCapitalPendiente().add(importe));
         creditos.save(c);
-        return desembolsar(cuenta, c, importe, clave, usuarioId);
+        desembolsar(cuenta, c, importe, null, actorId);
+        auditoria.registrar(actorId, "CUPO_APROBADO", MODULO, "solicitud_cupo", s.getId(), PENDIENTE, "APROBADA", null);
+    }
+
+    @Transactional
+    public void rechazarCupo(Long actorId, Long solicitudId, String motivo) {
+        SolicitudCupo s = bloquearSolicitud(solicitudId);
+        resolver(s, "RECHAZADA", actorId, motivo);
+        auditoria.registrar(actorId, "CUPO_RECHAZADO", MODULO, "solicitud_cupo", s.getId(), PENDIENTE, "RECHAZADA", motivo);
+    }
+
+    private SolicitudCupo bloquearSolicitud(Long id) {
+        SolicitudCupo s = solicitudesCupo.bloquear(id).orElseThrow(() -> NegocioException.noEncontrado("Solicitud no encontrada"));
+        em.refresh(s);
+        if (!PENDIENTE.equals(s.getEstado())) {
+            throw NegocioException.conflicto("ESTADO_INVALIDO", "La solicitud ya fue resuelta");
+        }
+        return s;
+    }
+
+    private void resolver(SolicitudCupo s, String estado, Long actorId, String motivo) {
+        s.setEstado(estado);
+        s.setMotivo(motivo);
+        s.setResueltaPor(actorId);
+        s.setResueltaEn(Instant.now(reloj));
+    }
+
+    @Transactional(readOnly = true)
+    public List<SolicitudCupoVista> misSolicitudesCupo(Long usuarioId) {
+        return solicitudesCupo.findByPersonaIdOrderByIdDesc(personaDe(usuarioId)).stream().map(this::vistaSolicitud).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<SolicitudCupoVista> solicitudesCupoPendientes() {
+        return solicitudesCupo.findByEstadoOrderById(PENDIENTE).stream().map(this::vistaSolicitud).toList();
+    }
+
+    private SolicitudCupoVista vistaSolicitud(SolicitudCupo s) {
+        return new SolicitudCupoVista(s.getId(), personas.nombreCompleto(s.getPersonaId()), s.getImporte(), s.getPromocion(),
+                s.getEstado(), s.getMotivo(), s.getCreadoEn());
     }
 
     private Credito lineaGeneral(Long personaId) {
@@ -353,23 +519,27 @@ public class CreditoService {
                         parametros.valorVigente("EMERGENTE_SOCIO_DESGRAVAMEN"))));
     }
 
-    private Credito lineaPromocion(Long personaId, String promocion, BigDecimal importe) {
-        if (!promocion.equals(promocionAbierta())) {
-            throw NegocioException.conflicto("PROMOCION_CERRADA", "Esa promoción no está abierta este mes");
-        }
+    private Credito lineaPromocion(Long personaId, String promocion) {
         int anio = hoy().getYear();
-        Credito c = creditos.findByPersonaIdAndFamiliaAndModalidadAndAnioPromocion(personaId, EMERGENTE_ESTACIONAL,
+        return creditos.findByPersonaIdAndFamiliaAndModalidadAndAnioPromocion(personaId, EMERGENTE_ESTACIONAL,
                 promocion, anio).orElseGet(() -> {
                     Credito nuevo = nuevo(personaId, EMERGENTE_ESTACIONAL, promocion, SOCIO, ACTIVO, PCT_DIARIO,
                             parametros.valorVigente("ESTACIONAL_TASA"), BigDecimal.ZERO);
                     nuevo.setAnioPromocion(anio);
                     return linea(nuevo);
                 });
-        // El límite es por promoción: lo ya retirado cuenta aunque se haya pagado.
-        if (desembolsos.totalDe(c.getId()).add(importe).compareTo(parametros.valorVigente("ESTACIONAL_LIMITE")) > 0) {
+    }
+
+    /** El límite es por promoción: lo ya retirado cuenta aunque se haya pagado. */
+    private void exigirLimitePromocion(Long personaId, String promocion, BigDecimal importe) {
+        if (!promocion.equals(promocionAbierta())) {
+            throw NegocioException.conflicto("PROMOCION_CERRADA", "Esa promoción no está abierta este mes");
+        }
+        BigDecimal retirado = creditos.findByPersonaIdAndFamiliaAndModalidadAndAnioPromocion(personaId, EMERGENTE_ESTACIONAL,
+                promocion, hoy().getYear()).map(c -> desembolsos.totalDe(c.getId())).orElse(BigDecimal.ZERO);
+        if (retirado.add(importe).compareTo(parametros.valorVigente("ESTACIONAL_LIMITE")) > 0) {
             throw NegocioException.conflicto("LIMITE_EXCEDIDO", "El importe supera el máximo de la promoción");
         }
-        return c;
     }
 
     private Credito linea(Credito c) {
@@ -419,20 +589,27 @@ public class CreditoService {
         return operacion;
     }
 
-    /** Sin importe, o usando encaje o ahorro letras, cubre lo que falta de la cuota. Un pago parcial cobra primero capital. */
+    /**
+     * Sin importe, o usando encaje o ahorro letras, cubre lo que falta de la cuota con su mora. Un pago parcial cobra primero capital.
+     * Lo que exceda de la letra pasa a las siguientes: la persona puede adelantarse hasta cubrir todo el crédito.
+     */
     private Long pagarCuota(CuentaPrincipal cuenta, Credito c, BigDecimal importe, boolean usarAhorro, boolean usarEncaje,
             String clave, Long actorId) {
         List<CuotaCredito> todas = cuotas.findByCreditoIdOrderByNumero(c.getId());
-        CuotaCredito cuota = todas.stream().filter(q -> q.getPagadaEn() == null).findFirst()
-                .orElseThrow(() -> new IllegalStateException("Crédito activo sin cuotas pendientes: " + c.getId()));
+        List<CuotaCredito> pendientes = todas.stream().filter(q -> q.getPagadaEn() == null).toList();
+        if (pendientes.isEmpty()) {
+            throw new IllegalStateException("Crédito activo sin cuotas pendientes: " + c.getId());
+        }
+        CuotaCredito cuota = pendientes.get(0);
         boolean ultima = cuota.getNumero().equals(todas.size());
         if ((usarAhorro || usarEncaje) && (!ultima || !LETRAS.equals(c.getFamilia()))) {
             throw NegocioException.conflicto("SOLO_ULTIMA_LETRA", "Ahorro letras y encaje solo pueden cubrir la última letra");
         }
-        BigDecimal pendiente = cuota.pendiente();
-        BigDecimal aPagar = importe == null || usarAhorro || usarEncaje ? pendiente : importe;
-        if (aPagar.compareTo(pendiente) > 0) {
-            throw NegocioException.conflicto("PAGO_EXCEDIDO", "El importe supera lo que falta de esta letra");
+        LocalDate hoy = hoy();
+        BigDecimal aPagar = importe == null || usarAhorro || usarEncaje ? deudaDe(cuota, c, hoy) : importe;
+        BigDecimal deuda = pendientes.stream().map(q -> deudaDe(q, c, hoy)).reduce(BigDecimal.ZERO, BigDecimal::add);
+        if (aPagar.compareTo(deuda) > 0) {
+            throw NegocioException.conflicto("PAGO_EXCEDIDO", "El importe supera lo que falta del crédito");
         }
         Instant ahora = Instant.now(reloj);
         Long operacion = cuentas.crearOperacionInterna("PAGO_CREDITO", aPagar, clave, actorId);
@@ -445,19 +622,44 @@ public class CreditoService {
         }
         cuentas.mover(cuenta, operacion, SALIDA, aPagar, "PAGO_CREDITO");
 
-        // Orden de cobro: capital, interés, desgravamen y ahorro letras.
-        BigDecimal aCapital = aPagar.min(cuota.getCapital().subtract(cuota.getCapitalPagado()));
-        BigDecimal resto = aPagar.subtract(aCapital);
+        BigDecimal resto = aPagar;
+        for (CuotaCredito q : pendientes) {
+            if (resto.signum() <= 0) {
+                break;
+            }
+            BigDecimal aEstaLetra = resto.min(deudaDe(q, c, hoy));
+            aplicarALetra(c, q, operacion, aEstaLetra, ahora, hoy, actorId);
+            resto = resto.subtract(aEstaLetra);
+        }
+        if (todas.get(todas.size() - 1).getPagadaEn() != null) {
+            finalizar(cuenta, c, operacion, todas.get(todas.size() - 1).getId(), ahora, actorId);
+        }
+        return operacion;
+    }
+
+    private static BigDecimal deudaDe(CuotaCredito q, Credito c, LocalDate hoy) {
+        return q.pendiente().add(q.moraPendiente(hoy, c.getTasaMora()));
+    }
+
+    /** Definido por el propietario: capital, desgravamen, interés y ahorro letras. La mora se cobra al final. */
+    private void aplicarALetra(Credito c, CuotaCredito cuota, Long operacion, BigDecimal monto, Instant ahora, LocalDate hoy, Long actorId) {
+        BigDecimal aCapital = monto.min(cuota.getCapital().subtract(cuota.getCapitalPagado()));
+        BigDecimal resto = monto.subtract(aCapital);
+        BigDecimal aDesgravamen = resto.min(cuota.getFondoDesgravamen().subtract(cuota.getDesgravamenPagado()));
+        resto = resto.subtract(aDesgravamen);
         BigDecimal aInteres = resto.min(cuota.getInteres().subtract(cuota.getInteresPagado()));
         resto = resto.subtract(aInteres);
-        BigDecimal aDesgravamen = resto.min(cuota.getFondoDesgravamen().subtract(cuota.getDesgravamenPagado()));
-        BigDecimal aAhorro = resto.subtract(aDesgravamen);
+        BigDecimal aAhorro = resto.min(cuota.getAhorroLetras().subtract(cuota.getAhorroPagado()));
+        BigDecimal aMora = resto.subtract(aAhorro);
 
-        PagoCredito pago = pagos.save(new PagoCredito(null, c.getId(), cuota.getId(), operacion, aPagar, ahora));
+        PagoCredito pago = pagos.save(new PagoCredito(null, c.getId(), cuota.getId(), operacion, monto, ahora));
         detalle(pago, "CAPITAL", aCapital);
         detalle(pago, "INTERES", aInteres);
         detalle(pago, "FONDO_DESGRAVAMEN", aDesgravamen);
         detalle(pago, "AHORRO_LETRAS", aAhorro);
+        detalle(pago, "MORA", aMora);
+        ganancia(aInteres, "Interés del crédito #" + c.getId() + ", letra " + cuota.getNumero(), actorId);
+        ganancia(aMora, "Mora del crédito #" + c.getId() + ", letra " + cuota.getNumero(), actorId);
 
         if (aAhorro.signum() > 0) {
             AhorroLetrasCredito ahorro = ahorros.findByCreditoId(c.getId())
@@ -469,21 +671,83 @@ public class CreditoService {
         cuota.setInteresPagado(cuota.getInteresPagado().add(aInteres));
         cuota.setDesgravamenPagado(cuota.getDesgravamenPagado().add(aDesgravamen));
         cuota.setAhorroPagado(cuota.getAhorroPagado().add(aAhorro));
+        cuota.setMoraPagada(cuota.getMoraPagada().add(aMora));
         c.setCapitalPendiente(c.getCapitalPendiente().subtract(aCapital));
-        boolean completa = cuota.pendiente().signum() == 0;
-        if (completa) {
-            cuota.setPagadaEn(ahora);
-        }
-        if (ultima && completa) {
-            if (LETRAS.equals(c.getFamilia())) {
-                liberarAhorro(cuenta, c, operacion, cuota.getId(), ahora);
-                liberarEncaje(cuenta, c, operacion, ahora);
+        if (cuota.pendiente().signum() == 0) {
+            // Pagada la letra, la mora deja de correr aunque quede mora por cobrar.
+            if (cuota.getMoraHasta() == null) {
+                cuota.setMoraHasta(hoy);
             }
-            c.setEstado(FINALIZADO);
-            c.setFinalizadoEn(ahora);
-            auditoria.registrar(actorId, "CREDITO_FINALIZADO", MODULO, "credito", c.getId(), ACTIVO, FINALIZADO, null);
+            if (cuota.moraPendiente(hoy, c.getTasaMora()).signum() == 0) {
+                cuota.setPagadaEn(ahora);
+            }
         }
+    }
+
+    private void finalizar(CuentaPrincipal cuenta, Credito c, Long operacion, Long cuotaId, Instant ahora, Long actorId) {
+        if (LETRAS.equals(c.getFamilia())) {
+            liberarAhorro(cuenta, c, operacion, cuotaId, ahora);
+            liberarEncaje(cuenta, c, operacion, ahora);
+        }
+        c.setEstado(FINALIZADO);
+        c.setFinalizadoEn(ahora);
+        auditoria.registrar(actorId, "CREDITO_FINALIZADO", MODULO, "credito", c.getId(), ACTIVO, FINALIZADO, null);
+    }
+
+    /** Definido por el propietario: con la mitad más una de las letras pagadas, se termina pagando solo el capital. */
+    @Transactional
+    public Long precancelar(Long usuarioId, Long creditoId, String clave) {
+        Long personaId = personaDe(usuarioId);
+        Credito leido = creditos.findById(creditoId).filter(x -> x.getPersonaId().equals(personaId))
+                .orElseThrow(() -> NegocioException.noEncontrado("Crédito no encontrado"));
+        CuentaPrincipal cuenta = cuentas.cuentaActivaBloqueada(personaId);
+        Optional<Long> previa = cuentas.operacionPrevia(clave, "PAGO_CREDITO", null, usuarioId);
+        if (previa.isPresent()) {
+            return previa.get();
+        }
+        Credito c = bloquear(leido.getId());
+        if (!ACTIVO.equals(c.getEstado()) || !LETRAS.equals(c.getFamilia())) {
+            throw NegocioException.conflicto("ESTADO_INVALIDO", "Este crédito no admite precancelación");
+        }
+        List<CuotaCredito> todas = cuotas.findByCreditoIdOrderByNumero(c.getId());
+        long pagadas = todas.stream().filter(q -> q.getPagadaEn() != null).count();
+        if (pagadas < letrasParaPrecancelar(todas.size())) {
+            throw NegocioException.conflicto("PRECANCELACION_NO_DISPONIBLE",
+                    "Puede precancelar cuando haya pagado " + letrasParaPrecancelar(todas.size()) + " letras");
+        }
+        BigDecimal capital = c.getCapitalPendiente();
+        if (capital.signum() <= 0) {
+            throw NegocioException.conflicto("SIN_CAPITAL_PENDIENTE", "No queda capital por precancelar: pague lo que falta de la letra");
+        }
+        Instant ahora = Instant.now(reloj);
+        LocalDate hoy = hoy();
+        // Lo que no se perdona es la mora ya generada: el atraso sí ocurrió.
+        BigDecimal mora = BigDecimal.ZERO;
+        for (CuotaCredito q : todas) {
+            BigDecimal deMora = q.getPagadaEn() == null ? q.moraPendiente(hoy, c.getTasaMora()) : BigDecimal.ZERO;
+            q.setMoraPagada(q.getMoraPagada().add(deMora));
+            mora = mora.add(deMora);
+        }
+        Long operacion = cuentas.crearOperacionInterna("PAGO_CREDITO", capital.add(mora), clave, usuarioId);
+        // Encaje y ahorro letras vuelven antes del cobro: esos fondos también pueden cubrir el capital.
+        liberarAhorro(cuenta, c, operacion, null, ahora);
+        liberarEncaje(cuenta, c, operacion, ahora);
+        cuentas.mover(cuenta, operacion, SALIDA, capital.add(mora), "PRECANCELACION_CREDITO");
+        PagoCredito pago = pagos.save(new PagoCredito(null, c.getId(), null, operacion, capital.add(mora), ahora));
+        detalle(pago, "CAPITAL", capital);
+        detalle(pago, "MORA", mora);
+        ganancia(mora, "Mora del crédito #" + c.getId(), usuarioId);
+        c.setCapitalPendiente(BigDecimal.ZERO.setScale(2));
+        c.setPrecanceladoEn(ahora);
+        c.setEstado(FINALIZADO);
+        c.setFinalizadoEn(ahora);
+        auditoria.registrar(usuarioId, "CREDITO_PRECANCELADO", MODULO, "credito", c.getId(), ACTIVO, FINALIZADO, capital.toPlainString());
         return operacion;
+    }
+
+    /** Mitad redondeada hacia abajo, más una: 12 letras exigen 7 y 5 letras exigen 3. */
+    static int letrasParaPrecancelar(int letras) {
+        return letras / 2 + 1;
     }
 
     private void liberarAhorro(CuentaPrincipal cuenta, Credito c, Long operacion, Long cuotaId, Instant ahora) {
@@ -531,12 +795,20 @@ public class CreditoService {
         detalle(pago, "INTERES", aInteres);
         detalle(pago, "FONDO_DESGRAVAMEN", aDesgravamen);
         detalle(pago, "CAPITAL", aCapital);
+        ganancia(aInteres, "Interés del crédito #" + c.getId(), actorId);
 
         boolean saldado = importe.compareTo(adeudado) == 0;
         c.setInteresAcumulado(saldado ? BigDecimal.ZERO : c.getInteresAcumulado().subtract(aInteres).max(BigDecimal.ZERO));
         c.setDesgravamenAcumulado(saldado ? BigDecimal.ZERO : c.getDesgravamenAcumulado().subtract(aDesgravamen).max(BigDecimal.ZERO));
         c.setCapitalPendiente(c.getCapitalPendiente().subtract(aCapital));
         return operacion;
+    }
+
+    /** El interés cobrado es ganancia; el desgravamen no: es un fondo que se debe. */
+    private void ganancia(BigDecimal interes, String concepto, Long actorId) {
+        if (interes.signum() > 0) {
+            eventos.publishEvent(new ec.janery.common.ResultadoGenerado("GANANCIA", interes, concepto, actorId));
+        }
     }
 
     private void detalle(PagoCredito pago, String concepto, BigDecimal importe) {
@@ -565,13 +837,13 @@ public class CreditoService {
         return cuotas.vencidas(personaId, hoy()).stream().map(q -> {
             Credito c = creditos.findById(q.getCreditoId()).orElseThrow();
             return new CuotaVencida(q.getCreditoId(), q.getId(), q.getNumero(), q.getVencimiento(), c.getFamilia(),
-                    c.getModalidad(), q.pendiente());
+                    c.getModalidad(), deudaDe(q, c, hoy()));
         }).toList();
     }
 
     @Transactional(readOnly = true)
     public List<CreditoVista> misCreditos(Long usuarioId) {
-        return creditos.findByPersonaIdOrderByIdDesc(personaDe(usuarioId)).stream().map(this::vista).toList();
+        return vistas(creditos.findByPersonaIdOrderByIdDesc(personaDe(usuarioId)));
     }
 
     @Transactional(readOnly = true)
@@ -588,6 +860,26 @@ public class CreditoService {
     }
 
     private CreditoVista vista(Credito c) {
+        return vistas(List.of(c)).get(0);
+    }
+
+    /** Lee cuotas, encajes y ahorros de todos los créditos de una vez: cada consulta es un viaje a la base de datos. */
+    private List<CreditoVista> vistas(List<Credito> lista) {
+        if (lista.isEmpty()) {
+            return List.of();
+        }
+        List<Long> ids = lista.stream().map(Credito::getId).toList();
+        Map<Long, List<CuotaCredito>> porCredito = cuotas.findByCreditoIdInOrderByNumero(ids).stream()
+                .collect(java.util.stream.Collectors.groupingBy(CuotaCredito::getCreditoId));
+        Map<Long, EncajeCredito> encajesPorCredito = encajes.findByCreditoIdIn(ids).stream()
+                .collect(java.util.stream.Collectors.toMap(EncajeCredito::getCreditoId, e -> e));
+        Map<Long, BigDecimal> ahorrosPorCredito = ahorros.findByCreditoIdIn(ids).stream()
+                .collect(java.util.stream.Collectors.toMap(AhorroLetrasCredito::getCreditoId, AhorroLetrasCredito::getSaldo));
+        return lista.stream().map(c -> vista(c, porCredito.getOrDefault(c.getId(), List.of()), encajesPorCredito.get(c.getId()),
+                ahorrosPorCredito.get(c.getId()))).toList();
+    }
+
+    private CreditoVista vista(Credito c, List<CuotaCredito> propias, EncajeCredito encaje, BigDecimal ahorro) {
         BigDecimal interes = c.getInteresAcumulado();
         BigDecimal desgravamen = c.getDesgravamenAcumulado();
         if (esLinea(c)) {
@@ -595,20 +887,26 @@ public class CreditoService {
             interes = interes.add(CalculadoraCredito.devengo(c.getCapitalPendiente(), c.getTasaInteres(), dias));
             desgravamen = desgravamen.add(CalculadoraCredito.devengo(c.getCapitalPendiente(), c.getTasaDesgravamen(), dias));
         }
-        List<CuotaCredito> propias = cuotas.findByCreditoIdOrderByNumero(c.getId());
+        LocalDate hoy = hoy();
+        boolean corre = ACTIVO.equals(c.getEstado());
         List<CuotaVista> letras = propias.stream().map(q -> new CuotaVista(q.getNumero(), q.getVencimiento(), q.getCapital(),
-                q.getAhorroLetras(), q.getFondoDesgravamen(), q.getInteres(), q.getTotal(), q.pagado())).toList();
+                q.getAhorroLetras(), q.getFondoDesgravamen(), q.getInteres(), q.getTotal(), q.pagado(),
+                corre ? q.diasAtraso(hoy) : 0, corre ? q.moraPendiente(hoy, c.getTasaMora()) : BigDecimal.ZERO.setScale(2))).toList();
+        BigDecimal mora = letras.stream().map(CuotaVista::mora).reduce(BigDecimal.ZERO.setScale(2), BigDecimal::add);
+        int atrasadas = (int) letras.stream().filter(q -> q.diasAtraso() > 0).count();
         List<Integer> pagadas = propias.stream().filter(q -> q.getPagadaEn() != null).map(CuotaCredito::getNumero).toList();
         BigDecimal pendiente = esLinea(c)
                 ? interes.setScale(2, RoundingMode.HALF_UP).add(desgravamen.setScale(2, RoundingMode.HALF_UP)).add(c.getCapitalPendiente())
-                : propias.stream().map(CuotaCredito::pendiente).reduce(BigDecimal.ZERO, BigDecimal::add);
-        EncajeCredito encaje = encajes.findByCreditoId(c.getId()).orElse(null);
-        BigDecimal ahorro = ahorros.findByCreditoId(c.getId()).map(AhorroLetrasCredito::getSaldo).orElse(null);
+                : c.getPrecanceladoEn() != null ? BigDecimal.ZERO.setScale(2) : propias.stream().map(CuotaCredito::pendiente).reduce(BigDecimal.ZERO, BigDecimal::add).add(mora);
+        int requeridas = letrasParaPrecancelar(letras.size());
         return new CreditoVista(c.getId(), c.getFamilia(), c.getModalidad(), c.getPerfil(), c.getEstado(), c.getImporte(),
                 c.getPlazoMeses(), c.getTasaInteres(), c.getTasaDesgravamen(), c.getUnidadTasa(), c.getCapitalPendiente(),
                 interes.setScale(2, RoundingMode.HALF_UP), desgravamen.setScale(2, RoundingMode.HALF_UP), pendiente,
                 encaje == null ? null : encaje.getImporte(), encaje != null && encaje.getDevueltoEn() != null, ahorro,
-                personas.nombreCompleto(c.getPersonaId()), c.getMotivoRechazo(), letras, pagadas);
+                personas.nombreCompleto(c.getPersonaId()), c.getMotivoRechazo(), letras, pagadas, requeridas,
+                LETRAS.equals(c.getFamilia()) && ACTIVO.equals(c.getEstado()) && !letras.isEmpty() && pagadas.size() >= requeridas
+                        && c.getCapitalPendiente().signum() > 0,
+                c.getPrecanceladoEn(), c.getCreadoEn(), c.getFinalizadoEn(), c.getOrigenEncaje(), c.getTasaMora(), mora, atrasadas);
     }
 
     // --- Apoyo
@@ -654,8 +952,14 @@ public class CreditoService {
         }
     }
 
+    /**
+     * Si la fila ya estaba cargada en esta transacción, la consulta con bloqueo devuelve esa copia antigua: hay que releerla.
+     * Sin esto, quien esperó el bloqueo pisaría lo que acaba de guardar la operación anterior.
+     */
     private Credito bloquear(Long id) {
-        return creditos.bloquear(id).orElseThrow(() -> NegocioException.noEncontrado("Crédito no encontrado"));
+        Credito c = creditos.bloquear(id).orElseThrow(() -> NegocioException.noEncontrado("Crédito no encontrado"));
+        em.refresh(c);
+        return c;
     }
 
     private Long personaDe(Long usuarioId) {

@@ -1,13 +1,31 @@
 <section class="portada">
-  <h1>Janery</h1>
-  <p>Caja de ahorro y crédito.</p>
+  <h1>Su caja de ahorro y crédito, en un solo lugar</h1>
+  <p>Consulte su cuenta, sus ahorros y sus créditos con la Caja Familiar Janery.</p>
   <div class="acciones">
-    <a class="boton" routerLink="/informacion">Conocer Janery</a>
-    <a class="boton-claro" routerLink="/registro">Registrarse</a>
+    <a class="boton" routerLink="/registro">Registrarse</a>
+    <a class="boton-claro" routerLink="/informacion">Conocer Janery</a>
   </div>
 </section>
 
-<p class="suave" role="status" aria-live="polite">
+<div class="rejilla-productos">
+  <section class="tarjeta">
+    <div class="producto-icono tono-primario"><lucide-icon [img]="iconos.Wallet" [size]="20" aria-hidden="true" /></div>
+    <h2>Cuenta principal</h2>
+    <p class="suave">Su cuenta central: recibe desembolsos y fondos liberados, y mantiene su dinero disponible.</p>
+  </section>
+  <section class="tarjeta">
+    <div class="producto-icono tono-informacion"><lucide-icon [img]="iconos.HandCoins" [size]="20" aria-hidden="true" /></div>
+    <h2>Créditos</h2>
+    <p class="suave"><strong>Créditos a letras</strong> (normal, inversión, estudio y personalizado) y <strong>créditos emergentes</strong>.</p>
+  </section>
+  <section class="tarjeta">
+    <div class="producto-icono tono-advertencia"><lucide-icon [img]="iconos.PiggyBank" [size]="20" aria-hidden="true" /></div>
+    <h2>Ahorros</h2>
+    <p class="suave"><strong>Ahorro normal</strong>, con interés diario y retiro cuando lo desee, y <strong>plazo fijo</strong> de 3 meses a 2 años.</p>
+  </section>
+</div>
+
+<p class="estado-servidor" role="status" aria-live="polite">
   @switch (conexion()) {
     @case ('comprobando') { Comprobando la conexión con el servidor… }
     @case ('disponible') { Servidor disponible. }

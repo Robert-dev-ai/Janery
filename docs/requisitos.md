@@ -32,7 +32,7 @@ Es la cuenta central de la persona, similar conceptualmente a una cuenta bancari
 - Permite mantener dinero disponible y transferirlo a productos de ahorro.
 - Registra depósitos, retiros y otros movimientos habilitados.
 
-Mostrar por separado saldo disponible y depósito reembolsable de USD 5. Los USD 5 no son utilizables.
+El saldo disponible no incluye el depósito reembolsable de USD 5, que no es utilizable y solo se muestra al solicitar el cierre de la cuenta.
 
 Debe existir la posibilidad de cerrar la cuenta. Para la primera versión, mantener el proceso simple; no implementar un sistema complejo de liquidación.
 

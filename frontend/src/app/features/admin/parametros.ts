@@ -38,7 +38,7 @@ interface Edicion {
         <h2>{{ e.parametro.nombre }}</h2>
         <p class="suave">{{ e.parametro.descripcion }}</p>
         <label>Nuevo valor ({{ unidad(e.parametro.unidad) }})
-          <input type="number" min="0" step="any" name="valor" [(ngModel)]="e.valor" required />
+          <input type="number" min="0" step="1" name="valor" [(ngModel)]="e.valor" required />
         </label>
         <label>Vigente desde (vacío: ahora)
           <input type="datetime-local" name="desde" [(ngModel)]="e.vigenteDesde" />

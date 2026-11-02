@@ -25,7 +25,7 @@ import { mensajeDeError } from '../../shared/utils/errores';
               <td>{{ p.descripcion }}</td>
               @for (c of cargos(); track c.codigo) {
                 <td>
-                  <input type="checkbox" style="width:auto"
+                  <input type="checkbox"
                     [attr.aria-label]="c.nombre + ': ' + p.descripcion"
                     [checked]="c.permisos.includes(p.codigo)"
                     [disabled]="protegido(c, p)"

@@ -1,5 +1,6 @@
 # Secretos
 .env
+simulacion.log*
 .env.*
 !.env.example
 

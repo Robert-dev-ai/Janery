@@ -3,11 +3,12 @@ import { Component, inject, OnInit, signal } from '@angular/core';
 
 import { ApiService, EventoAuditoria, Pagina } from '../../core/services/api';
 import { alCambiar } from '../../core/services/tiempo-real';
+import { Paginador } from '../../shared/components/paginador';
 import { mensajeDeError } from '../../shared/utils/errores';
 
 @Component({
   selector: 'app-admin-auditoria',
-  imports: [DatePipe],
+  imports: [DatePipe, Paginador],
   template: `
     <h1>Auditoría</h1>
     @if (error()) { <p class="error" role="alert">{{ error() }}</p> }
@@ -30,11 +31,7 @@ import { mensajeDeError } from '../../shared/utils/errores';
           </tbody>
         </table>
       </div>
-      <div class="paginador">
-        <button type="button" class="secundario" [disabled]="d.pagina === 0" (click)="cargar(d.pagina - 1)">Anterior</button>
-        <span>Página {{ d.pagina + 1 }}</span>
-        <button type="button" class="secundario" [disabled]="(d.pagina + 1) * d.tamano >= d.total" (click)="cargar(d.pagina + 1)">Siguiente</button>
-      </div>
+      <app-paginador [pagina]="d.pagina" [tamano]="d.tamano" [total]="d.total" (cambiar)="cargar($event)" />
     }
   `,
 })

@@ -1,11 +1,11 @@
 import { Routes } from '@angular/router';
 
-import { autenticadoGuard, cuentaActivaGuard, permisoGuard } from './core/auth/guards';
+import { autenticadoGuard, cuentaActivaGuard, permisoGuard, personalGuard, socioGuard } from './core/auth/guards';
 
 export const routes: Routes = [
   {
     path: '',
-    loadComponent: () => import('./layout/shell').then((m) => m.Shell),
+    loadComponent: () => import('./layout/layout-publico').then((m) => m.LayoutPublico),
     children: [
       {
         path: '',
@@ -24,24 +24,105 @@ export const routes: Routes = [
         path: 'iniciar-sesion',
         loadComponent: () => import('./features/auth/iniciar-sesion').then((m) => m.IniciarSesion),
       },
+    ],
+  },
+  {
+    path: '',
+    canActivate: [autenticadoGuard],
+    data: { experiencia: 'portal' },
+    loadComponent: () => import('./layout/layout-panel').then((m) => m.LayoutPanel),
+    children: [
+      {
+        path: 'mis-cargos',
+        loadComponent: () => import('./features/areas/areas').then((m) => m.Areas),
+      },
       {
         path: 'activar-cuenta',
-        canActivate: [autenticadoGuard],
         loadComponent: () => import('./features/cuenta/activar-cuenta').then((m) => m.ActivarCuenta),
+      },
+      {
+        path: 'configuracion',
+        loadComponent: () => import('./features/configuracion/configuracion').then((m) => m.Configuracion),
+        children: [
+          { path: '', pathMatch: 'full', redirectTo: 'perfil' },
+          { path: 'perfil', loadComponent: () => import('./features/configuracion/perfil').then((m) => m.PerfilPagina) },
+          { path: 'contrasena', loadComponent: () => import('./features/configuracion/contrasena').then((m) => m.Contrasena) },
+          { path: 'sesiones', loadComponent: () => import('./features/configuracion/sesiones').then((m) => m.Sesiones) },
+        ],
       },
       {
         path: 'app',
         canActivate: [cuentaActivaGuard],
         children: [
           { path: '', pathMatch: 'full', redirectTo: 'inicio' },
-          { path: 'inicio', redirectTo: 'cuenta' },
+          { path: 'inicio', loadComponent: () => import('./features/cuenta/resumen').then((m) => m.Resumen) },
           { path: 'cuenta', loadComponent: () => import('./features/cuenta/mi-cuenta').then((m) => m.MiCuenta) },
           { path: 'movimientos', loadComponent: () => import('./features/cuenta/movimientos').then((m) => m.Movimientos) },
-          { path: 'perfil', loadComponent: () => import('./features/cuenta/perfil').then((m) => m.PerfilPagina) },
+          { path: 'retiros', loadComponent: () => import('./features/cuenta/retiros').then((m) => m.Retiros) },
+          { path: 'depositos', loadComponent: () => import('./features/cuenta/depositos').then((m) => m.Depositos) },
+          { path: 'perfil', redirectTo: '/configuracion/perfil' },
           { path: 'creditos', loadComponent: () => import('./features/creditos/creditos').then((m) => m.Creditos) },
           { path: 'ahorros', loadComponent: () => import('./features/ahorros/ahorros').then((m) => m.Ahorros) },
           { path: 'inversiones', loadComponent: () => import('./features/socios/inversiones').then((m) => m.Inversiones) },
+          {
+            path: 'socios/general',
+            canActivate: [socioGuard],
+            loadComponent: () => import('./features/socios/area-general').then((m) => m.AreaGeneral),
+          },
         ],
+      },
+    ],
+  },
+  {
+    path: '',
+    canActivate: [autenticadoGuard],
+    data: { experiencia: 'admin' },
+    loadComponent: () => import('./layout/layout-panel').then((m) => m.LayoutPanel),
+    children: [
+      {
+        path: 'admin/panel',
+        canActivate: [personalGuard],
+        loadComponent: () => import('./features/admin/panel').then((m) => m.AdminPanel),
+      },
+      {
+        path: 'admin/solicitudes-deposito',
+        canActivate: [permisoGuard('GESTIONAR_CUENTAS')],
+        loadComponent: () => import('./features/admin/solicitudes-deposito').then((m) => m.SolicitudesDeposito),
+      },
+      {
+        path: 'admin/solicitudes-retiro',
+        canActivate: [permisoGuard('GESTIONAR_CUENTAS')],
+        loadComponent: () => import('./features/admin/solicitudes-retiro').then((m) => m.SolicitudesRetiro),
+      },
+      {
+        path: 'admin/personas',
+        canActivate: [permisoGuard('ADMIN_USUARIOS')],
+        loadComponent: () => import('./features/admin/personas').then((m) => m.AdminPersonas),
+      },
+      {
+        path: 'admin/historial-crediticio',
+        canActivate: [permisoGuard('APROBAR_CREDITOS')],
+        loadComponent: () => import('./features/admin/historial-crediticio').then((m) => m.HistorialCrediticioPagina),
+      },
+      {
+        path: 'admin/contabilidad/balance',
+        canActivate: [permisoGuard('CONSULTAR_CONTABILIDAD')],
+        loadComponent: () => import('./features/contabilidad/balance').then((m) => m.Balance),
+      },
+      {
+        path: 'admin/contabilidad/diario',
+        canActivate: [permisoGuard('CONSULTAR_CONTABILIDAD')],
+        loadComponent: () => import('./features/contabilidad/libro-diario').then((m) => m.LibroDiarioPagina),
+      },
+      {
+        path: 'admin/contabilidad/mayor',
+        canActivate: [permisoGuard('CONSULTAR_CONTABILIDAD')],
+        loadComponent: () => import('./features/contabilidad/libro-mayor').then((m) => m.LibroMayorPagina),
+      },
+      {
+        path: 'admin/contabilidad/registro',
+        canActivate: [permisoGuard('REGISTRAR_ASIENTOS')],
+        loadComponent: () => import('./features/contabilidad/registro-manual').then((m) => m.RegistroManual),
       },
       {
         path: 'admin/cuentas',
@@ -71,7 +152,6 @@ export const routes: Routes = [
       {
         path: 'areas',
         pathMatch: 'full',
-        canActivate: [autenticadoGuard],
         loadComponent: () => import('./features/areas/areas').then((m) => m.Areas),
       },
       {
@@ -98,6 +178,11 @@ export const routes: Routes = [
         path: 'areas/caja-chica',
         canActivate: [permisoGuard('GESTIONAR_CAJA_CHICA')],
         loadComponent: () => import('./features/admin/caja-chica').then((m) => m.AreaCajaChica),
+      },
+      {
+        path: 'areas/estado-caja',
+        canActivate: [permisoGuard('CONSULTAR_CAJA')],
+        loadComponent: () => import('./features/admin/estado-caja').then((m) => m.EstadoCaja),
       },
       {
         path: 'areas/tesoreria',

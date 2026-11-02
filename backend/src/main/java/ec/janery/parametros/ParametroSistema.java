@@ -21,4 +21,5 @@ public class ParametroSistema {
     private String nombre;
     private String descripcion;
     private String unidad;
+    private boolean activo;
 }

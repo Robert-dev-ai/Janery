@@ -27,13 +27,16 @@ class RepartoProporcionalTest {
     }
 
     @Test
-    void laSumaEsExactaYElMayorAbsorbeLosCentavos() {
-        Map<Long, BigDecimal> partes = RepartoProporcional.repartir(new BigDecimal("10.00"), valores("50", "25", "25.01"));
-        assertThat(partes.values().stream().reduce(BigDecimal.ZERO, BigDecimal::add)).isEqualByComparingTo("10");
+    void losCentavosQueSobranNoSeAsignanANadie() {
+        Map<Long, BigDecimal> partes = RepartoProporcional.repartir(new BigDecimal("0.03"), valores("1", "1"));
+        assertThat(partes.get(0L)).isEqualByComparingTo("0.01");
+        assertThat(partes.get(1L)).isEqualByComparingTo("0.01");
+    }
 
-        Map<Long, BigDecimal> tres = RepartoProporcional.repartir(new BigDecimal("0.01"), valores("1", "1", "2"));
-        assertThat(tres.get(2L)).isEqualByComparingTo("0.01");
-        assertThat(tres.get(0L)).isEqualByComparingTo("0");
+    @Test
+    void siUnSocioNoAlcanzaUnCentavoNoSeReparteNada() {
+        assertThat(RepartoProporcional.repartir(new BigDecimal("0.01"), valores("1", "1", "2"))).isEmpty();
+        assertThat(RepartoProporcional.repartir(new BigDecimal("0.04"), valores("1", "1", "2"))).hasSize(3);
     }
 
     @Test

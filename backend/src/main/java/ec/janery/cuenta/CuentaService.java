@@ -3,7 +3,9 @@ package ec.janery.cuenta;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import org.springframework.data.domain.Page;
@@ -14,6 +16,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -84,6 +87,10 @@ public class CuentaService {
     private final AuditoriaService auditoria;
     private final Clock reloj;
     private final List<RestriccionCierre> restricciones;
+    private final JdbcClient jdbc;
+    private final org.springframework.context.ApplicationEventPublisher eventos;
+    @jakarta.persistence.PersistenceContext
+    private jakarta.persistence.EntityManager em;
 
     @Transactional
     public CuentaVista solicitarApertura(Long usuarioId, String metodoPago, String referencia) {
@@ -118,9 +125,13 @@ public class CuentaService {
         OperacionFinanciera operacion = operaciones.save(new OperacionFinanciera(null, "APERTURA", total,
                 cuenta.getMetodoPago(), cuenta.getReferenciaPago(), null, actorId, ahora));
         depositos.save(new DepositoApertura(null, cuenta.getId(), operacion.getId(), total, ingreso, reembolsable, null));
-        // El reembolsable queda fuera del saldo disponible y de los ingresos de caja.
+        // El reembolsable sigue siendo del cliente y queda fuera de su saldo, pero está en la caja y se puede prestar.
         caja.registrarEnPrincipal(operacion.getId(), ENTRADA, ingreso, "INGRESO_APERTURA");
+        if (reembolsable.signum() > 0) {
+            caja.registrarEnPrincipal(operacion.getId(), ENTRADA, reembolsable, "DEPOSITO_REEMBOLSABLE");
+        }
         cuenta.activar(ahora);
+        eventos.publishEvent(new ec.janery.common.ResultadoGenerado("GANANCIA", ingreso, "Apertura de la cuenta " + cuenta.getNumero(), actorId));
         auditoria.registrar(actorId, "APERTURA_CONFIRMADA", MODULO, "cuenta", cuenta.getId(),
                 CuentaPrincipal.PENDIENTE_PAGO, CuentaPrincipal.ACTIVA, null);
         return new CuentaVista(cuenta, personas.nombreCompleto(cuenta.getPersonaId()), reembolsable);
@@ -262,8 +273,11 @@ public class CuentaService {
         DepositoApertura deposito = depositos.findByCuentaId(cuentaId)
                 .orElseThrow(() -> new IllegalStateException("Cuenta activa sin depósito de apertura: " + cuentaId));
         Instant ahora = Instant.now(reloj);
-        operaciones.save(new OperacionFinanciera(null, "DEVOLUCION_CIERRE", deposito.getImporteReembolsable(),
+        OperacionFinanciera operacion = operaciones.save(new OperacionFinanciera(null, "DEVOLUCION_CIERRE", deposito.getImporteReembolsable(),
                 cuenta.getMetodoPago(), null, null, actorId, ahora));
+        if (deposito.getImporteReembolsable().signum() > 0) {
+            caja.registrarEnPrincipal(operacion.getId(), SALIDA, deposito.getImporteReembolsable(), "DEVOLUCION_DEPOSITO");
+        }
         deposito.marcarDevuelto(ahora);
         cuenta.cerrar(ahora);
         auditoria.registrar(actorId, "CIERRE_CONFIRMADO", MODULO, "cuenta", cuenta.getId(),
@@ -279,6 +293,48 @@ public class CuentaService {
     public Page<MovimientoCuenta> misMovimientos(Long usuarioId, int pagina, int tamano) {
         return movimientos.findByCuentaId(cuentaDe(usuarioId).getId(),
                 PageRequest.of(pagina, tamano, Sort.by(Sort.Direction.DESC, "id")));
+    }
+
+    /** Para cada operación, a qué crédito y letras o a qué ahorro pertenece. Se deduce del libro: vale también para lo antiguo. */
+    @Transactional(readOnly = true)
+    public Map<Long, String> detalles(List<Long> operaciones) {
+        Map<Long, String> resultado = new HashMap<>();
+        if (operaciones.isEmpty()) {
+            return resultado;
+        }
+        jdbc.sql("""
+                SELECT p.operacion_id, c.id, c.familia, c.modalidad,
+                       string_agg(q.numero::text, ', ' ORDER BY q.numero) AS letras, COUNT(q.id) AS cantidad, MAX(c.plazo_meses) AS plazo
+                FROM pagos_credito p JOIN creditos c ON c.id = p.credito_id LEFT JOIN cuotas_credito q ON q.id = p.cuota_id
+                WHERE p.operacion_id IN (:ops) GROUP BY p.operacion_id, c.id, c.familia, c.modalidad
+                UNION ALL
+                SELECT d.operacion_id, c.id, c.familia, c.modalidad, NULL, 0, NULL
+                FROM desembolsos_credito d JOIN creditos c ON c.id = d.credito_id WHERE d.operacion_id IN (:ops)
+                """).param("ops", operaciones).query(rs -> {
+            String nombre = "Crédito #" + rs.getLong("id") + " " + nombreFamilia(rs.getString("familia"))
+                    + (rs.getString("modalidad") == null ? "" : " " + rs.getString("modalidad").toLowerCase(java.util.Locale.ROOT));
+            String letras = rs.getString("letras");
+            resultado.put(rs.getLong("operacion_id"), letras == null ? nombre
+                    : nombre + " · " + (rs.getLong("cantidad") > 1 ? "letras " : "letra ") + letras
+                            + (rs.getObject("plazo") == null ? "" : " de " + rs.getInt("plazo")));
+        });
+        jdbc.sql("""
+                SELECT DISTINCT m.operacion_id, a.nombre FROM movimientos_ahorro m JOIN cuentas_ahorro a ON a.id = m.cuenta_ahorro_id
+                WHERE m.operacion_id IN (:ops)
+                """).param("ops", operaciones).query(rs -> {
+            resultado.put(rs.getLong("operacion_id"), "Ahorro: " + rs.getString("nombre"));
+        });
+        return resultado;
+    }
+
+    private static String nombreFamilia(String familia) {
+        return switch (familia) {
+            case "LETRAS" -> "a letras";
+            case "EMERGENTE_CLIENTE" -> "emergente";
+            case "EMERGENTE_SOCIO" -> "cupo emergente";
+            case "EMERGENTE_ESTACIONAL" -> "emergente estacional";
+            default -> familia;
+        };
     }
 
     @Transactional(readOnly = true)
@@ -317,8 +373,14 @@ public class CuentaService {
                 .orElseThrow(() -> NegocioException.noEncontrado("No tiene una cuenta principal"));
     }
 
+    /**
+     * Si la fila ya estaba cargada en esta transacción, la consulta con bloqueo devuelve esa copia antigua: hay que releerla.
+     * Sin esto, quien esperó el bloqueo pisaría lo que acaba de guardar la operación anterior.
+     */
     private CuentaPrincipal bloquear(Long cuentaId) {
-        return cuentas.bloquear(cuentaId).orElseThrow(() -> NegocioException.noEncontrado("Cuenta no encontrada"));
+        CuentaPrincipal cuenta = cuentas.bloquear(cuentaId).orElseThrow(() -> NegocioException.noEncontrado("Cuenta no encontrada"));
+        em.refresh(cuenta);
+        return cuenta;
     }
 
     private static void exigirEstado(CuentaPrincipal cuenta, String estado, String mensaje) {

@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import ec.janery.common.Pagina;
+import ec.janery.socio.ParticipacionService;
 import lombok.RequiredArgsConstructor;
 
 @RestController
@@ -24,7 +25,17 @@ public class TesoreriaController {
     public record TesoreriaResponse(BigDecimal saldo, String moneda, Pagina<MovimientoResponse> movimientos) {
     }
 
+    public record EstadoResponse(EstadoCajaService.EstadoCaja caja, ParticipacionService.EnEsperaVista enEspera) {
+    }
+
     private final CajaService service;
+    private final EstadoCajaService estado;
+    private final ParticipacionService participacion;
+
+    @GetMapping("/estado")
+    public EstadoResponse estado() {
+        return new EstadoResponse(estado.consultar(), participacion.enEspera());
+    }
 
     @GetMapping
     public TesoreriaResponse consultar(@RequestParam(defaultValue = "0") int pagina,

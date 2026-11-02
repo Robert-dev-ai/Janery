@@ -24,7 +24,8 @@ public class AuditoriaService {
     }
 
     /** Se auditan, pero no cambian nada que una pantalla muestre. */
-    private static final Set<String> ACCIONES_SIN_CAMBIOS = Set.of("LOGIN", "LOGIN_FALLIDO", "LOGOUT", "INFORME_EXPORTADO");
+    private static final Set<String> ACCIONES_SIN_CAMBIOS = Set.of("LOGIN", "LOGIN_FALLIDO", "LOGOUT", "INFORME_EXPORTADO",
+            "CONTRASENA_CAMBIADA", "CONTRASENA_FALLIDA", "SESIONES_CERRADAS");
 
     private final AuditoriaRepository repository;
     private final Clock reloj;

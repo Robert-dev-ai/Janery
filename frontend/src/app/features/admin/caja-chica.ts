@@ -4,11 +4,12 @@ import { FormsModule } from '@angular/forms';
 
 import { ApiService, CajaChica } from '../../core/services/api';
 import { alCambiar } from '../../core/services/tiempo-real';
+import { Paginador } from '../../shared/components/paginador';
 import { mensajeDeError } from '../../shared/utils/errores';
 
 @Component({
   selector: 'app-area-caja-chica',
-  imports: [CurrencyPipe, DatePipe, FormsModule],
+  imports: [CurrencyPipe, DatePipe, FormsModule, Paginador],
   template: `
     <h1>Caja chica</h1>
     <p class="suave">Fondo independiente de la caja principal.</p>
@@ -20,12 +21,12 @@ import { mensajeDeError } from '../../shared/utils/errores';
       </section>
       <form class="tarjeta estrecho" (ngSubmit)="registrar()">
         <h2>Registrar gasto</h2>
-        <label>Importe (USD) <input type="number" min="0.01" step="0.01" name="importe" [(ngModel)]="importe" /></label>
+        <label>Importe (USD) <input type="number" min="0" step="1" name="importe" [(ngModel)]="importe" /></label>
         <label>Detalle <input name="detalle" maxlength="200" [(ngModel)]="detalle" /></label>
         <button type="submit" [disabled]="!importe || importe <= 0 || !detalle.trim()">Registrar</button>
       </form>
       @if (d.movimientos.total === 0) {
-        <p>Aún no hay movimientos.</p>
+        <p class="vacio">Aún no hay movimientos.</p>
       } @else {
         <div class="tabla">
           <table>
@@ -42,14 +43,10 @@ import { mensajeDeError } from '../../shared/utils/errores';
             </tbody>
           </table>
         </div>
-        <div class="paginador">
-          <button type="button" class="secundario" [disabled]="d.movimientos.pagina === 0" (click)="cargar(d.movimientos.pagina - 1)">Anterior</button>
-          <span>Página {{ d.movimientos.pagina + 1 }}</span>
-          <button type="button" class="secundario" [disabled]="(d.movimientos.pagina + 1) * d.movimientos.tamano >= d.movimientos.total" (click)="cargar(d.movimientos.pagina + 1)">Siguiente</button>
-        </div>
+        <app-paginador [pagina]="d.movimientos.pagina" [tamano]="d.movimientos.tamano" [total]="d.movimientos.total" (cambiar)="cargar($event)" />
       }
     } @else if (!error()) {
-      <p role="status">Cargando…</p>
+      <p class="cargando" role="status">Cargando…</p>
     }
   `,
 })

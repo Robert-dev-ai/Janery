@@ -15,13 +15,15 @@ const FUNCIONES: Record<string, { ruta: string; titulo: string }> = {
   ADMIN_USUARIOS: { ruta: '/admin/usuarios', titulo: 'Usuarios' },
   CONSULTAR_AUDITORIA: { ruta: '/admin/auditoria', titulo: 'Auditoría' },
   CONSULTAR_INFORMES: { ruta: '/admin/reportes', titulo: 'Informes' },
+  CONSULTAR_CONTABILIDAD: { ruta: '/admin/contabilidad/balance', titulo: 'Balance general' },
+  REGISTRAR_ASIENTOS: { ruta: '/admin/contabilidad/registro', titulo: 'Registro manual' },
 };
 
 @Component({
   selector: 'app-areas',
   imports: [RouterLink],
   template: `
-    <h1>Mis áreas de trabajo</h1>
+    <h1>Mis cargos</h1>
     @if (error()) {
       <p class="error" role="alert">{{ error() }}</p>
     } @else if (areas(); as lista) {
@@ -39,10 +41,10 @@ const FUNCIONES: Record<string, { ruta: string; titulo: string }> = {
           }
         </section>
       } @empty {
-        <p>No tiene cargos asignados.</p>
+        <p class="vacio">No tiene cargos asignados.</p>
       }
     } @else {
-      <p role="status">Cargando…</p>
+      <p class="cargando" role="status">Cargando…</p>
     }
   `,
 })

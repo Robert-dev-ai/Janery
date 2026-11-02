@@ -5,15 +5,16 @@ import java.math.RoundingMode;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.YearMonth;
+import java.time.temporal.ChronoUnit;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -62,6 +63,9 @@ public class AhorroService {
         private LocalDate venceEn;
         private Instant abiertaEn;
         private Instant cerradaEn;
+        private BigDecimal interesAcumulado;
+        private BigDecimal interesDisponible;
+        private LocalDate ultimoDevengo;
     }
 
     @Entity(name = "MovimientoAhorro")
@@ -91,21 +95,30 @@ public class AhorroService {
 
         List<CuentaAhorro> findByPersonaIdOrderByIdDesc(Long personaId);
 
-        @Query("select c.id from CuentaAhorro c where c.tipo = 'NORMAL' and c.estado = 'ACTIVA' and c.saldo > 0")
-        List<Long> normalesConSaldo();
-
-        @Query("select count(c) > 0 from CuentaAhorro c where c.personaId = :personaId and c.estado = 'ACTIVA' and c.saldo > 0")
+        @Query("""
+                select count(c) > 0 from CuentaAhorro c where c.personaId = :personaId and c.estado = 'ACTIVA'
+                and (c.saldo > 0 or c.interesAcumulado + c.interesDisponible >= 0.01)
+                """)
         boolean tieneSaldo(@Param("personaId") Long personaId);
     }
 
     interface MovimientoAhorroRepository extends JpaRepository<MovimientoAhorro, Long> {
         List<MovimientoAhorro> findByCuentaAhorroIdOrderByIdDesc(Long cuentaAhorroId);
-
-        boolean existsByCuentaAhorroIdAndPeriodoInteres(Long cuentaAhorroId, String periodo);
     }
 
     public record AhorroVista(Long id, String tipo, String nombre, String estado, BigDecimal saldo, BigDecimal tasaAnual,
-            Integer plazoMeses, LocalDate venceEn, BigDecimal interesAlVencimiento, boolean retirable) {
+            Integer plazoMeses, LocalDate venceEn, BigDecimal interesAlVencimiento, boolean retirable,
+            BigDecimal interesAcumulado, BigDecimal interesDisponible, LocalDate proximaLiberacion) {
+    }
+
+    public record PlazoVista(int meses, BigDecimal tasaAnual) {
+    }
+
+    public record Productos(BigDecimal tasaNormal, List<PlazoVista> plazos) {
+    }
+
+    /** Interés de un ahorro normal a hoy: lo disponible se liberó el último día 1; lo acumulado se libera el próximo. */
+    private record Interes(BigDecimal acumulado, BigDecimal disponible) {
     }
 
     public record MovimientoVista(Long id, String sentido, BigDecimal importe, String concepto,
@@ -120,6 +133,10 @@ public class AhorroService {
     private static final String MODULO = "AHORRO";
     private static final BigDecimal CIEN = BigDecimal.valueOf(100);
     private static final BigDecimal DOCE = BigDecimal.valueOf(12);
+    private static final BigDecimal DIAS_ANIO = BigDecimal.valueOf(365);
+    private static final BigDecimal CERO = BigDecimal.ZERO.setScale(6);
+    /** Definido por el propietario: solo estos plazos, cada uno con su tasa. */
+    private static final List<Integer> PLAZOS = List.of(3, 6, 9, 12, 24);
 
     private final CuentaAhorroRepository ahorros;
     private final MovimientoAhorroRepository movimientos;
@@ -127,6 +144,7 @@ public class AhorroService {
     private final PersonaService personas;
     private final ParametroService parametros;
     private final AuditoriaService auditoria;
+    private final org.springframework.context.ApplicationEventPublisher eventos;
     private final Clock reloj;
 
     @Transactional
@@ -134,7 +152,7 @@ public class AhorroService {
         Long personaId = personaDe(usuarioId);
         cuentas.cuentaActivaBloqueada(personaId);
         CuentaAhorro a = ahorros.save(new CuentaAhorro(null, personaId, NORMAL, nombre, ACTIVA,
-                BigDecimal.ZERO.setScale(2), null, null, null, Instant.now(reloj), null));
+                BigDecimal.ZERO.setScale(2), null, null, null, Instant.now(reloj), null, CERO, CERO, LocalDate.now(reloj)));
         auditoria.registrar(usuarioId, "AHORRO_CREADO", MODULO, "ahorro", a.getId(), null, NORMAL, null);
         return vista(a);
     }
@@ -147,13 +165,12 @@ public class AhorroService {
         if (previa.isPresent()) {
             throw NegocioException.conflicto("OPERACION_REPETIDA", "Este depósito ya se registró");
         }
-        if (plazo < parametros.valorVigente("PLAZO_FIJO_PLAZO_MIN").intValue()
-                || plazo > parametros.valorVigente("PLAZO_FIJO_PLAZO_MAX").intValue()) {
-            throw NegocioException.conflicto("PLAZO_FUERA_DE_RANGO", "El plazo está fuera de los límites permitidos");
+        if (!PLAZOS.contains(plazo)) {
+            throw NegocioException.conflicto("PLAZO_FUERA_DE_RANGO", "El plazo debe ser de 3, 6, 9, 12 o 24 meses");
         }
         CuentaAhorro a = ahorros.save(new CuentaAhorro(null, personaId, PLAZO_FIJO, nombre, ACTIVA, importe,
-                parametros.valorVigente("PLAZO_FIJO_TASA"), plazo, LocalDate.now(reloj).plusMonths(plazo),
-                Instant.now(reloj), null));
+                parametros.valorVigente(parametroPlazo(plazo)), plazo, LocalDate.now(reloj).plusMonths(plazo),
+                Instant.now(reloj), null, CERO, CERO, null));
         Long operacion = cuentas.crearOperacionInterna("APERTURA_AHORRO", importe, clave, usuarioId);
         cuentas.mover(cuenta, operacion, SALIDA, importe, "APERTURA_PLAZO_FIJO");
         asiento(a, operacion, ENTRADA, importe, "APERTURA", null, null);
@@ -174,6 +191,7 @@ public class AhorroService {
         if (!NORMAL.equals(a.getTipo())) {
             throw NegocioException.conflicto("PLAZO_FIJO_SIN_DEPOSITOS", "Un plazo fijo no admite depósitos adicionales");
         }
+        devengar(a);
         Long operacion = cuentas.crearOperacionInterna("DEPOSITO_AHORRO", importe, clave, usuarioId);
         cuentas.mover(cuenta, operacion, SALIDA, importe, "DEPOSITO_AHORRO");
         a.setSaldo(a.getSaldo().add(importe));
@@ -182,7 +200,7 @@ public class AhorroService {
         return operacion;
     }
 
-    /** Normal: cualquier importe disponible. Plazo fijo: solo al vencer, todo el saldo más su interés. */
+    /** Normal: cualquier importe del saldo; su interés va aparte. Plazo fijo: solo al vencer, todo el saldo más su interés. */
     @Transactional
     public Long retirar(Long usuarioId, Long ahorroId, BigDecimal importe, String clave) {
         Long personaId = personaDe(usuarioId);
@@ -207,6 +225,7 @@ public class AhorroService {
         if (importe.compareTo(a.getSaldo()) > 0) {
             throw NegocioException.conflicto("SALDO_INSUFICIENTE", "El ahorro no tiene saldo suficiente");
         }
+        devengar(a);
         Long operacion = cuentas.crearOperacionInterna("RETIRO_AHORRO", importe, clave, actorId);
         a.setSaldo(a.getSaldo().subtract(importe));
         asiento(a, operacion, SALIDA, importe, "RETIRO", null, null);
@@ -225,6 +244,7 @@ public class AhorroService {
         if (interes.signum() > 0) {
             a.setSaldo(total);
             asiento(a, operacion, ENTRADA, interes, "INTERES", null, a.getTasaAnual());
+            eventos.publishEvent(new ec.janery.common.ResultadoGenerado("PERDIDA", interes, "Interés del plazo fijo " + a.getNombre(), actorId));
         }
         a.setSaldo(BigDecimal.ZERO.setScale(2));
         asiento(a, operacion, SALIDA, saldo.add(interes), "LIQUIDACION", null, null);
@@ -234,30 +254,110 @@ public class AhorroService {
         return operacion;
     }
 
-    /** Abona el interés del mes a un ahorro normal. Repetirlo para el mismo mes no tiene efecto. */
+    /** Lleva a la cuenta principal el interés ya liberado de un ahorro normal. Se contabiliza como gasto al pagarse. */
     @Transactional
-    public boolean abonarInteres(Long ahorroId, YearMonth periodo) {
-        CuentaAhorro a = ahorros.bloquear(ahorroId).orElseThrow();
-        String clave = periodo.toString();
-        if (!ACTIVA.equals(a.getEstado()) || !NORMAL.equals(a.getTipo())
-                || movimientos.existsByCuentaAhorroIdAndPeriodoInteres(a.getId(), clave)) {
-            return false;
+    public Long retirarInteres(Long usuarioId, Long ahorroId, String clave) {
+        Long personaId = personaDe(usuarioId);
+        CuentaPrincipal cuenta = cuentas.cuentaActivaBloqueada(personaId);
+        Optional<Long> previa = cuentas.operacionPrevia(clave, "INTERES_AHORRO", null, usuarioId);
+        if (previa.isPresent()) {
+            return previa.get();
         }
-        BigDecimal tasa = parametros.valorVigente("AHORRO_NORMAL_TASA");
-        BigDecimal interes = a.getSaldo().multiply(tasa).divide(CIEN.multiply(DOCE), 2, RoundingMode.HALF_UP);
+        CuentaAhorro a = propia(personaId, ahorroId);
+        exigirActiva(a);
+        if (!NORMAL.equals(a.getTipo())) {
+            throw NegocioException.conflicto("INTERES_NO_DISPONIBLE", "El interés del plazo fijo se paga al terminar el contrato");
+        }
+        devengar(a);
+        BigDecimal interes = a.getInteresDisponible().setScale(2, RoundingMode.DOWN);
         if (interes.signum() <= 0) {
-            return false;
+            throw NegocioException.conflicto("INTERES_NO_DISPONIBLE", "Aún no hay interés liberado: se libera cada día 1");
         }
-        Long operacion = cuentas.crearOperacionInterna("INTERES_AHORRO", interes, null, null);
-        a.setSaldo(a.getSaldo().add(interes));
-        asiento(a, operacion, ENTRADA, interes, "INTERES", clave, tasa);
-        auditoria.registrar(null, "AHORRO_INTERES", MODULO, "ahorro", a.getId(), null, interes.toPlainString(), clave);
-        return true;
+        Long operacion = cuentas.crearOperacionInterna("INTERES_AHORRO", interes, clave, usuarioId);
+        a.setInteresDisponible(a.getInteresDisponible().subtract(interes));
+        // Entra y sale en la misma operación: el saldo no cambia, y el libro registra el gasto y el pago.
+        BigDecimal saldo = a.getSaldo();
+        a.setSaldo(saldo.add(interes));
+        asiento(a, operacion, ENTRADA, interes, "INTERES", null, parametros.valorVigente("AHORRO_NORMAL_TASA"));
+        a.setSaldo(saldo);
+        asiento(a, operacion, SALIDA, interes, "RETIRO_INTERES", null, null);
+        cuentas.mover(cuenta, operacion, ENTRADA, interes, "INTERES_AHORRO");
+        eventos.publishEvent(new ec.janery.common.ResultadoGenerado("PERDIDA", interes, "Interés del ahorro " + a.getNombre(), usuarioId));
+        auditoria.registrar(usuarioId, "AHORRO_INTERES", MODULO, "ahorro", a.getId(), null, interes.toPlainString(), null);
+        return operacion;
+    }
+
+    /** Valida al solicitar el crédito que el encaje pueda salir de ese ahorro. */
+    @Transactional(readOnly = true)
+    public void exigirAhorroNormal(Long personaId, Long ahorroId) {
+        if (ahorroId == null) {
+            throw NegocioException.conflicto("AHORRO_REQUERIDO", "Indique de qué ahorro se descontará el encaje");
+        }
+        CuentaAhorro a = ahorros.findById(ahorroId).filter(x -> x.getPersonaId().equals(personaId))
+                .orElseThrow(() -> NegocioException.noEncontrado("Ahorro no encontrado"));
+        exigirActiva(a);
+        if (!NORMAL.equals(a.getTipo())) {
+            throw NegocioException.conflicto("AHORRO_NO_DISPONIBLE", "El encaje solo puede salir de un ahorro normal");
+        }
+    }
+
+    /** El encaje de un crédito pagado con un ahorro normal. El dinero sigue siendo de la persona: pasa a ser encaje. */
+    @Transactional
+    public void descontarEncaje(Long personaId, Long ahorroId, BigDecimal importe, Long operacion) {
+        exigirAhorroNormal(personaId, ahorroId);
+        CuentaAhorro a = propia(personaId, ahorroId);
+        exigirActiva(a);
+        if (importe.compareTo(a.getSaldo()) > 0) {
+            throw NegocioException.conflicto("SALDO_INSUFICIENTE", "El ahorro elegido no cubre el encaje");
+        }
+        devengar(a);
+        a.setSaldo(a.getSaldo().subtract(importe));
+        asiento(a, operacion, SALIDA, importe, "ENCAJE", null, null);
     }
 
     @Transactional(readOnly = true)
-    public List<Long> normalesConSaldo() {
-        return ahorros.normalesConSaldo();
+    public Productos productos() {
+        Map<Integer, String> codigos = new LinkedHashMap<>();
+        PLAZOS.forEach(p -> codigos.put(p, parametroPlazo(p)));
+        Map<String, BigDecimal> tasas = parametros.valoresVigentes(codigos.values());
+        return new Productos(parametros.valorVigente("AHORRO_NORMAL_TASA"),
+                PLAZOS.stream().map(p -> new PlazoVista(p, tasas.get(codigos.get(p)))).toList());
+    }
+
+    private static String parametroPlazo(int meses) {
+        return "PLAZO_FIJO_TASA_%d_MESES".formatted(meses);
+    }
+
+    /** Guarda el interés corrido hasta hoy. Debe llamarse antes de cambiar el saldo: corrió sobre el saldo anterior. */
+    private void devengar(CuentaAhorro a) {
+        Interes i = interesAHoy(a);
+        a.setInteresAcumulado(i.acumulado());
+        a.setInteresDisponible(i.disponible());
+        a.setUltimoDevengo(LocalDate.now(reloj));
+    }
+
+    /** Definido por el propietario: 5 % anual dividido para 365 cada día, sin capitalizar; se libera cada día 1. */
+    private Interes interesAHoy(CuentaAhorro a) {
+        LocalDate hoy = LocalDate.now(reloj);
+        BigDecimal acumulado = a.getInteresAcumulado();
+        BigDecimal disponible = a.getInteresDisponible();
+        LocalDate desde = a.getUltimoDevengo();
+        if (!NORMAL.equals(a.getTipo()) || desde == null || !desde.isBefore(hoy)) {
+            return new Interes(acumulado, disponible);
+        }
+        BigDecimal diario = a.getSaldo().multiply(parametros.valorVigente("AHORRO_NORMAL_TASA"));
+        LocalDate primero = hoy.withDayOfMonth(1);
+        if (desde.isBefore(primero)) {
+            disponible = disponible.add(acumulado).add(interesDe(diario, desde, primero));
+            acumulado = CERO;
+            desde = primero;
+        }
+        return new Interes(acumulado.add(interesDe(diario, desde, hoy)), disponible);
+    }
+
+    private static BigDecimal interesDe(BigDecimal saldoPorTasa, LocalDate desde, LocalDate hasta) {
+        return saldoPorTasa.multiply(BigDecimal.valueOf(ChronoUnit.DAYS.between(desde, hasta)))
+                .divide(CIEN.multiply(DIAS_ANIO), 6, RoundingMode.HALF_UP);
     }
 
     @Transactional(readOnly = true)
@@ -276,8 +376,11 @@ public class AhorroService {
         boolean plazo = PLAZO_FIJO.equals(a.getTipo());
         BigDecimal tasa = plazo ? a.getTasaAnual() : parametros.valorVigente("AHORRO_NORMAL_TASA");
         boolean retirable = ACTIVA.equals(a.getEstado()) && (!plazo || !LocalDate.now(reloj).isBefore(a.getVenceEn()));
+        Interes interes = interesAHoy(a);
         return new AhorroVista(a.getId(), a.getTipo(), a.getNombre(), a.getEstado(), a.getSaldo(), tasa, a.getPlazoMeses(),
-                a.getVenceEn(), plazo && ACTIVA.equals(a.getEstado()) ? interesPlazoFijo(a) : null, retirable);
+                a.getVenceEn(), plazo && ACTIVA.equals(a.getEstado()) ? interesPlazoFijo(a) : null, retirable,
+                interes.acumulado().setScale(2, RoundingMode.DOWN), interes.disponible().setScale(2, RoundingMode.DOWN),
+                plazo ? null : LocalDate.now(reloj).withDayOfMonth(1).plusMonths(1));
     }
 
     private static BigDecimal interesPlazoFijo(CuentaAhorro a) {
@@ -317,29 +420,6 @@ public class AhorroService {
         public void verificar(Long personaId) {
             if (ahorros.tieneSaldo(personaId)) {
                 throw NegocioException.conflicto("AHORROS_CON_SALDO", "Retire primero el saldo de sus ahorros");
-            }
-        }
-    }
-
-    /** Cada día 1 abona el mes anterior. Cada ahorro va en su propia transacción: un fallo no frena a los demás. */
-    @Component
-    @RequiredArgsConstructor
-    public static class InteresMensual {
-
-        private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(InteresMensual.class);
-
-        private final AhorroService service;
-        private final Clock reloj;
-
-        @Scheduled(cron = "0 0 1 1 * *", zone = "${janery.zona-horaria}")
-        public void ejecutar() {
-            YearMonth periodo = YearMonth.now(reloj).minusMonths(1);
-            for (Long id : service.normalesConSaldo()) {
-                try {
-                    service.abonarInteres(id, periodo);
-                } catch (RuntimeException e) {
-                    log.error("No se pudo abonar el interés del ahorro {} en {}", id, periodo, e);
-                }
             }
         }
     }

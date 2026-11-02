@@ -93,6 +93,14 @@ public class ParticipacionService {
 
         @Query("select coalesce(sum(r.reserva), 0) from Resultado r where r.fecha >= :desde and r.fecha <= :hasta")
         BigDecimal reserva(@Param("desde") LocalDate desde, @Param("hasta") LocalDate hasta);
+
+        /** Lo registrado de ese tipo, sin la reserva, menos lo que ya llegó a los fondos de los socios. */
+        @Query(value = """
+                SELECT (SELECT COALESCE(SUM(importe - reserva), 0) FROM resultados WHERE tipo = :tipo)
+                     - (SELECT COALESCE(ABS(SUM(v.importe)), 0) FROM variaciones_participacion v
+                        JOIN resultados r ON r.id = v.resultado_id WHERE r.tipo = :tipo)
+                """, nativeQuery = true)
+        BigDecimal enEspera(@Param("tipo") String tipo);
     }
 
     interface CierreRepository extends JpaRepository<CierreAnual, Long> {
@@ -104,6 +112,25 @@ public class ParticipacionService {
 
         @Query("select coalesce(sum(v.importe), 0) from VariacionParticipacion v where v.socioId = :socioId")
         BigDecimal valor(@Param("socioId") Long socioId);
+
+        /** Por socio: todo menos las ganancias y pérdidas del mes en curso, que aún no se han cerrado. */
+        @Query("""
+                select v.socioId, coalesce(sum(v.importe), 0) from VariacionParticipacion v
+                where v.tipo not in ('GANANCIA', 'PERDIDA') or v.fecha < :inicioDeMes group by v.socioId
+                """)
+        List<Object[]> basesDeReparto(@Param("inicioDeMes") LocalDate inicioDeMes);
+
+        @Query("""
+                select coalesce(sum(v.importe), 0) from VariacionParticipacion v
+                where v.socioId = :socioId and v.tipo not in ('GANANCIA', 'PERDIDA') or v.socioId = :socioId and v.fecha < :inicioDeMes
+                """)
+        BigDecimal baseDeReparto(@Param("socioId") Long socioId, @Param("inicioDeMes") LocalDate inicioDeMes);
+
+        @Query("""
+                select coalesce(sum(v.importe), 0) from VariacionParticipacion v
+                where v.socioId = :socioId and v.tipo in ('GANANCIA', 'PERDIDA') and v.fecha >= :inicioDeMes
+                """)
+        BigDecimal resultadosDelMes(@Param("socioId") Long socioId, @Param("inicioDeMes") LocalDate inicioDeMes);
 
         /** Lo que no es aporte: ganancias menos pérdidas. */
         @Query("""
@@ -156,18 +183,21 @@ public class ParticipacionService {
             BigDecimal totalCajaChica,
             BigDecimal valorActual, BigDecimal porcentaje,
             BigDecimal aporteObligatorio, BigDecimal aporteCajaChica, String periodoActual,
-            boolean obligatorioDelMesPagado, boolean cajaChicaDelMesPagado) {
+            boolean obligatorioDelMesPagado, boolean cajaChicaDelMesPagado, BigDecimal rendimientoMes, BigDecimal variacionMes) {
     }
 
     public record VariacionVista(String tipo, BigDecimal importe, LocalDate fecha) {
     }
 
     public record PeriodoVista(String periodo, BigDecimal valorInicial, List<VariacionVista> variaciones,
-            BigDecimal valorFinal) {
+            BigDecimal valorFinal, BigDecimal rendimiento) {
     }
 
     public record ResultadoVista(Long id, String tipo, BigDecimal importe, BigDecimal reserva, String concepto,
             LocalDate fecha) {
+    }
+
+    public record EnEsperaVista(BigDecimal ganancia, BigDecimal perdida) {
     }
 
     public record CierreVista(Integer anio, BigDecimal resultadoNeto, BigDecimal porcentajeReserva, BigDecimal reserva,
@@ -182,6 +212,10 @@ public class ParticipacionService {
     private static final String SALIDA = "SALIDA";
     private static final String MODULO = "SOCIO";
     private static final BigDecimal CIEN = BigDecimal.valueOf(100);
+
+    /** Solo las pruebas lo apagan, para calcular sus cifras sin depender de los demás socios del esquema. */
+    @org.springframework.beans.factory.annotation.Value("${janery.reparto-automatico:true}")
+    private boolean repartoAutomatico;
 
     private final AporteRepository aportes;
     private final AporteCajaChicaRepository aportesCajaChica;
@@ -341,7 +375,10 @@ public class ParticipacionService {
                     .map(v -> new VariacionVista(v.getTipo(), v.getImporte(), v.getFecha())).toList();
             BigDecimal inicial = acumulado;
             acumulado = delMes.stream().map(VariacionVista::importe).reduce(inicial, BigDecimal::add);
-            periodos.add(0, new PeriodoVista(mes.toString(), inicial, delMes, acumulado));
+            BigDecimal resultado = delMes.stream().filter(v -> v.tipo().equals("GANANCIA") || v.tipo().equals("PERDIDA"))
+                    .map(VariacionVista::importe).reduce(BigDecimal.ZERO, BigDecimal::add);
+            periodos.add(0, new PeriodoVista(mes.toString(), inicial, delMes, acumulado,
+                    rendimiento(resultado, acumulado.subtract(resultado))));
         }
         return periodos;
     }
@@ -349,8 +386,8 @@ public class ParticipacionService {
     // --- Resultados
 
     /**
-     * Una ganancia separa al momento su reserva y reparte el resto entre los fondos personales, según el valor de cada
-     * uno. Una pérdida se reparte igual, sin tocar la reserva.
+     * Registro a mano de lo extraordinario. Una ganancia separa al momento su reserva y reparte el resto entre los fondos
+     * personales. Una pérdida se reparte igual, sin tocar la reserva.
      */
     @Transactional
     public void registrarResultado(Long actorId, String tipo, BigDecimal importe, String concepto, LocalDate fechaPedida) {
@@ -361,7 +398,7 @@ public class ParticipacionService {
         if (cierres.existsByAnio(fecha.getYear())) {
             throw NegocioException.conflicto("ANIO_CERRADO", "El año " + fecha.getYear() + " ya está cerrado");
         }
-        Map<Long, BigDecimal> valores = valoresPositivos();
+        Map<Long, BigDecimal> valores = baseDeReparto();
         BigDecimal total = valores.values().stream().reduce(BigDecimal.ZERO, BigDecimal::add);
         if (total.signum() <= 0) {
             throw NegocioException.conflicto("SIN_CAPITAL", "No hay capital de socios sobre el que repartir el resultado");
@@ -370,9 +407,72 @@ public class ParticipacionService {
         if (!ganancia && importe.compareTo(total) > 0) {
             throw NegocioException.conflicto("PERDIDA_EXCEDE_CAPITAL", "La pérdida supera el capital de los socios");
         }
-        BigDecimal porcentaje = ganancia ? parametros.valorVigente("FONDO_RESERVA") : BigDecimal.ZERO;
+        repartir(tipo, importe, concepto, fecha, actorId, valores, ganancia);
+    }
+
+    /**
+     * Definido por el propietario: cada ingreso real separa su reserva y reparte el resto al momento; cada gasto baja los
+     * fondos. Nunca bloquea la operación que lo origina: sin capital de socios el importe queda en el balance sin repartir.
+     * Devuelve lo separado a la reserva.
+     */
+    @Transactional
+    public BigDecimal repartirAutomatico(String tipo, BigDecimal importe, String concepto, Long actorId) {
+        if (!repartoAutomatico || importe.signum() <= 0) {
+            return BigDecimal.ZERO.setScale(2);
+        }
+        Map<Long, BigDecimal> valores = baseDeReparto();
+        BigDecimal total = valores.values().stream().reduce(BigDecimal.ZERO, BigDecimal::add);
+        if (total.signum() <= 0) {
+            return BigDecimal.ZERO.setScale(2);
+        }
+        boolean ganancia = GANANCIA.equals(tipo);
+        BigDecimal aplicable = ganancia ? importe : importe.min(total);
+        return repartir(tipo, aplicable, concepto, hoy(), actorId, valores, ganancia);
+    }
+
+    /** El reverso de un ingreso: devuelve a la caja la reserva que separó y quita a los fondos el resto. */
+    @Transactional
+    public void revertirGanancia(BigDecimal importe, BigDecimal reserva, String concepto, Long actorId) {
+        if (!repartoAutomatico) {
+            return;
+        }
+        if (reserva.signum() > 0) {
+            Long op = cuentas.crearOperacionInterna("RESERVA", reserva, null, actorId);
+            cajas.registrar(CajaService.FONDO_RESERVA, op, SALIDA, reserva, "REVERSO_DE_RESERVA", concepto);
+            cajas.registrar(CajaService.PRINCIPAL, op, ENTRADA, reserva, "REVERSO_DE_RESERVA", concepto);
+        }
+        repartirAutomatico("PERDIDA", importe.subtract(reserva), concepto, actorId);
+    }
+
+    /** El reverso de un gasto: devuelve a los fondos lo que les quitó, sin separar reserva. */
+    @Transactional
+    public void revertirGasto(BigDecimal importe, String concepto, Long actorId) {
+        if (!repartoAutomatico || importe.signum() <= 0) {
+            return;
+        }
+        Map<Long, BigDecimal> valores = baseDeReparto();
+        if (valores.values().stream().anyMatch(v -> v.signum() > 0)) {
+            repartir(GANANCIA, importe, concepto, hoy(), actorId, valores, false);
+        }
+    }
+
+    /** Corre dentro de la transacción de quien lo origina: si la operación se deshace, el reparto también. */
+    @org.springframework.context.event.EventListener
+    public void alGenerarResultado(ec.janery.common.ResultadoGenerado evento) {
+        repartirAutomatico(evento.tipo(), evento.importe(), evento.concepto(), evento.actorId());
+    }
+
+    private BigDecimal repartir(String tipo, BigDecimal importe, String concepto, LocalDate fecha, Long actorId,
+            Map<Long, BigDecimal> valores, boolean separarReserva) {
+        boolean ganancia = GANANCIA.equals(tipo);
+        BigDecimal porcentaje = separarReserva ? parametros.valorVigente("FONDO_RESERVA") : BigDecimal.ZERO;
         BigDecimal reserva = importe.multiply(porcentaje).divide(CIEN, 2, RoundingMode.HALF_UP);
-        BigDecimal aRepartir = importe.subtract(reserva);
+        // Un reparto a la vez: dos simultáneos repartirían los mismos centavos en espera.
+        cajas.saldoBloqueado(CajaService.FONDO_RESERVA);
+        BigDecimal aRepartir = importe.subtract(reserva).add(resultados.enEspera(tipo));
+        if (!ganancia) {
+            aRepartir = aRepartir.min(valores.values().stream().reduce(BigDecimal.ZERO, BigDecimal::add));
+        }
         Instant ahora = Instant.now(reloj);
         Resultado resultado = resultados.save(new Resultado(null, tipo, importe, concepto, fecha, reserva, porcentaje,
                 actorId, ahora));
@@ -389,6 +489,13 @@ public class ParticipacionService {
         });
         auditoria.registrar(actorId, "RESULTADO_" + tipo, MODULO, "resultado", resultado.getId(), null,
                 importe.toPlainString(), concepto);
+        return reserva;
+    }
+
+    /** Centavos de resultados registrados que aún no se pudieron repartir entre los socios. */
+    @Transactional(readOnly = true)
+    public EnEsperaVista enEspera() {
+        return new EnEsperaVista(resultados.enEspera(GANANCIA), resultados.enEspera("PERDIDA"));
     }
 
     @Transactional(readOnly = true)
@@ -680,11 +787,36 @@ public class ParticipacionService {
                 aportesCajaChica.total(s.getId()), valor, porcentaje,
                 parametros.valorVigente("APORTE_OBLIGATORIO"), parametros.valorVigente("APORTE_CAJA_CHICA"), periodo,
                 aportes.existsBySocioIdAndTipoAndPeriodo(s.getId(), OBLIGATORIO, periodo),
-                aportesCajaChica.existsBySocioIdAndPeriodo(s.getId(), periodo));
+                aportesCajaChica.existsBySocioIdAndPeriodo(s.getId(), periodo),
+                rendimiento(variaciones.resultadosDelMes(s.getId(), YearMonth.now(reloj).atDay(1)),
+                        variaciones.baseDeReparto(s.getId(), YearMonth.now(reloj).atDay(1))),
+                variaciones.resultadosDelMes(s.getId(), YearMonth.now(reloj).atDay(1)));
     }
 
     private BigDecimal valorTotal() {
         return valoresPositivos().values().stream().reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    /**
+     * Definido por el propietario: el fondo personal completo, con cierre mensual. Las ganancias y pérdidas de este mes
+     * se ven al momento, pero solo cuentan para repartir desde el mes siguiente.
+     */
+    private Map<Long, BigDecimal> baseDeReparto() {
+        Map<Long, BigDecimal> sumas = new java.util.HashMap<>();
+        variaciones.basesDeReparto(YearMonth.now(reloj).atDay(1)).forEach(f -> sumas.put((Long) f[0], (BigDecimal) f[1]));
+        Map<Long, BigDecimal> valores = new LinkedHashMap<>();
+        socios.activos().forEach(s -> {
+            BigDecimal valor = sumas.getOrDefault(s.getId(), BigDecimal.ZERO);
+            if (valor.signum() > 0) {
+                valores.put(s.getId(), valor);
+            }
+        });
+        return valores;
+    }
+
+    /** Ganancias menos pérdidas del periodo sobre el fondo con que lo empezó, más sus aportes. Null si no hay base. */
+    private static BigDecimal rendimiento(BigDecimal resultado, BigDecimal base) {
+        return base.signum() <= 0 ? null : resultado.multiply(CIEN).divide(base, 2, RoundingMode.HALF_UP);
     }
 
     private Map<Long, BigDecimal> valoresPositivos() {

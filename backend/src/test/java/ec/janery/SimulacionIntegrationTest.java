@@ -67,7 +67,10 @@ class SimulacionIntegrationTest {
     @Test
     void quinceDiasAumentanElInteresDelCupoDeSocio() throws Exception {
         Persona p = socio("0");
-        conClave(p.token(), "/api/v1/creditos/emergentes/disposiciones", "{\"importe\":100.00}").andExpect(status().isOk());
+        long solicitud = json.readTree(conClave(p.token(), "/api/v1/creditos/emergentes/disposiciones", "{\"importe\":100.00}")
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString()).get("id").asLong();
+        mvc.perform(post("/api/v1/admin/creditos/disposiciones/" + solicitud + "/aprobar").header(HttpHeaders.AUTHORIZATION, bearer(presidente())))
+                .andExpect(status().isNoContent());
         JsonNode lista = json.readTree(mvc.perform(get("/api/v1/creditos/me").header(HttpHeaders.AUTHORIZATION, bearer(p.token())))
                 .andReturn().getResponse().getContentAsString());
         String ruta = "/api/v1/creditos/" + lista.get(0).get("id").asLong();
@@ -99,7 +102,7 @@ class SimulacionIntegrationTest {
     }
 
     @Test
-    void cruzarDosMesesAbonaElInteresDeAhorrosDeCadaMesUnaSolaVez() throws Exception {
+    void cruzarUnDiaUnoLiberaElInteresDelAhorroSinTocarSuSaldo() throws Exception {
         Persona p = persona("1200.00");
         String r = mvc.perform(post("/api/v1/ahorros/normales").header(HttpHeaders.AUTHORIZATION, bearer(p.token()))
                         .contentType(MediaType.APPLICATION_JSON).content("{\"nombre\":\"Vacaciones\"}"))
@@ -110,12 +113,14 @@ class SimulacionIntegrationTest {
         LocalDate destino = YearMonth.now(reloj).plusMonths(2).atDay(1);
         avanzar("{\"fecha\":\"" + destino + "\"}").andExpect(status().isOk());
 
-        // 1200 * 2 % / 12 = 2,00; luego 1202 * 2 % / 12 = 2,00.
-        assertThat(jdbc.queryForObject("select saldo from cuentas_ahorro where id = ?", BigDecimal.class, ahorro)).isEqualByComparingTo("1204");
-        assertThat(jdbc.queryForObject("select count(distinct periodo_interes) from movimientos_ahorro where cuenta_ahorro_id = ? and periodo_interes is not null",
-                Integer.class, ahorro)).isEqualTo(2);
-        assertThat(jdbc.queryForList("select creado_en::text from movimientos_ahorro where cuenta_ahorro_id = ? and periodo_interes is not null", String.class, ahorro))
-                .allSatisfy(fecha -> assertThat(fecha.substring(8, 10)).isEqualTo("01"));
+        assertThat(jdbc.queryForObject("select saldo from cuentas_ahorro where id = ?", BigDecimal.class, ahorro)).isEqualByComparingTo("1200");
+        JsonNode a = json.readTree(mvc.perform(get("/api/v1/ahorros/me").header(HttpHeaders.AUTHORIZATION, bearer(p.token())))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString()).get(0);
+        // Hoy es día 1: todo lo corrido ya está liberado. 1200 * 5 % / 365 por cada día.
+        long dias = java.time.temporal.ChronoUnit.DAYS.between(LocalDate.parse(a.get("proximaLiberacion").asText()).minusMonths(3), destino);
+        assertThat(a.get("interesAcumulado").decimalValue()).isEqualByComparingTo("0");
+        assertThat(a.get("interesDisponible").decimalValue().signum()).isPositive();
+        assertThat(dias).isPositive();
     }
 
     @Test

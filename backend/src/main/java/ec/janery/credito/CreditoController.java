@@ -36,7 +36,8 @@ public class CreditoController {
 
     public record LetrasRequest(@NotNull @Pattern(regexp = "NORMAL|INVERSION|ESTUDIO|PERSONALIZADO") String modalidad,
             @NotNull @Positive @Digits(integer = 12, fraction = 2) BigDecimal importe,
-            @Min(1) @Max(600) int plazoMeses) {
+            @Min(1) @Max(600) int plazoMeses, @Pattern(regexp = "EFECTIVO|CUENTA|AHORROS|CREDITO") String origenEncaje,
+            Long ahorroEncajeId) {
     }
 
     public record EmergenteRequest(@NotNull @Positive @Digits(integer = 12, fraction = 2) BigDecimal importe) {
@@ -74,19 +75,44 @@ public class CreditoController {
     @PostMapping("/creditos/letras/solicitudes")
     @ResponseStatus(HttpStatus.CREATED)
     public CreadoResponse solicitar(@AuthenticationPrincipal Jwt jwt, @Valid @RequestBody LetrasRequest r) {
-        return new CreadoResponse(service.solicitarLetras(id(jwt), r.modalidad(), r.importe(), r.plazoMeses()));
+        return new CreadoResponse(service.solicitarLetras(id(jwt), r.modalidad(), r.importe(), r.plazoMeses(), r.origenEncaje(), r.ahorroEncajeId()));
     }
 
     @PostMapping("/creditos/emergentes/solicitudes")
-    public OperacionResponse emergente(@AuthenticationPrincipal Jwt jwt, @RequestHeader("Idempotency-Key") String clave,
+    public CreadoResponse emergente(@AuthenticationPrincipal Jwt jwt, @RequestHeader("Idempotency-Key") String clave,
             @Valid @RequestBody EmergenteRequest r) {
-        return new OperacionResponse(service.solicitarEmergenteCliente(id(jwt), r.importe(), clave));
+        return new CreadoResponse(service.solicitarEmergenteCliente(id(jwt), r.importe(), clave));
     }
 
     @PostMapping("/creditos/emergentes/disposiciones")
-    public OperacionResponse disponer(@AuthenticationPrincipal Jwt jwt, @RequestHeader("Idempotency-Key") String clave,
+    public CreadoResponse disponer(@AuthenticationPrincipal Jwt jwt, @RequestHeader("Idempotency-Key") String clave,
             @Valid @RequestBody DisposicionRequest r) {
-        return new OperacionResponse(service.disponerCupo(id(jwt), r.importe(), r.promocion(), clave));
+        return new CreadoResponse(service.solicitarCupo(id(jwt), r.importe(), r.promocion(), clave));
+    }
+
+    @GetMapping("/creditos/emergentes/disposiciones/me")
+    public List<CreditoService.SolicitudCupoVista> misSolicitudesCupo(@AuthenticationPrincipal Jwt jwt) {
+        return service.misSolicitudesCupo(id(jwt));
+    }
+
+    @GetMapping("/admin/creditos/disposiciones")
+    @PreAuthorize("hasAuthority('SCOPE_APROBAR_CREDITOS')")
+    public List<CreditoService.SolicitudCupoVista> solicitudesCupo() {
+        return service.solicitudesCupoPendientes();
+    }
+
+    @PostMapping("/admin/creditos/disposiciones/{solicitudId}/aprobar")
+    @PreAuthorize("hasAuthority('SCOPE_APROBAR_CREDITOS')")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void aprobarCupo(@AuthenticationPrincipal Jwt jwt, @PathVariable Long solicitudId) {
+        service.aprobarCupo(id(jwt), solicitudId);
+    }
+
+    @PostMapping("/admin/creditos/disposiciones/{solicitudId}/rechazar")
+    @PreAuthorize("hasAuthority('SCOPE_APROBAR_CREDITOS')")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void rechazarCupo(@AuthenticationPrincipal Jwt jwt, @PathVariable Long solicitudId, @Valid @RequestBody MotivoRequest r) {
+        service.rechazarCupo(id(jwt), solicitudId, r.motivo().trim());
     }
 
     @GetMapping("/creditos/me")
@@ -103,6 +129,12 @@ public class CreditoController {
     public OperacionResponse pagar(@AuthenticationPrincipal Jwt jwt, @PathVariable Long creditoId,
             @RequestHeader("Idempotency-Key") String clave, @Valid @RequestBody PagoRequest r) {
         return new OperacionResponse(service.pagar(id(jwt), creditoId, r.importe(), r.usarAhorroLetras(), r.usarEncaje(), clave));
+    }
+
+    @PostMapping("/creditos/{creditoId}/precancelacion")
+    public OperacionResponse precancelar(@AuthenticationPrincipal Jwt jwt, @PathVariable Long creditoId,
+            @RequestHeader("Idempotency-Key") String clave) {
+        return new OperacionResponse(service.precancelar(id(jwt), creditoId, clave));
     }
 
     @GetMapping("/admin/creditos")

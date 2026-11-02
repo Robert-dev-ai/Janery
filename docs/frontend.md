@@ -18,18 +18,29 @@
 - `/iniciar-sesion` login.
 - `/informacion` información institucional y productos.
 
+Usa `LayoutPublico`: barra superior, sin menú lateral.
+
 ### Usuario autenticado sin cuenta operativa
 - `/activar-cuenta` completar datos personales y proceso de apertura.
 - Puede seguir consultando información, pero no realizar operaciones financieras hasta cumplir requisitos.
 
-### Panel personal
-- `/app/inicio`
+### Panel personal (Panel del socio o Panel del cliente)
+Usa `LayoutPanel` con lateral claro. El menú está en `layout/navegacion.ts`.
+- `/app/inicio` resumen de cuenta, créditos y cuotas, ahorros, fondo y movimientos.
 - `/app/cuenta`
 - `/app/movimientos`
 - `/app/creditos`
 - `/app/ahorros`
-- `/app/inversiones` (solo cuando el alcance esté definido)
-- `/app/perfil`
+- `/app/inversiones` (solo socios)
+- `/app/depositos` avisar un depósito en efectivo o por transferencia
+- `/app/retiros` pedir dinero en efectivo o al banco
+- `/app/socios/general` estado general, exclusivo de socios
+- `/mis-cargos` solo para quien tiene cargo
+
+### Configuración (menú de perfil del header)
+- `/configuracion/perfil`
+- `/configuracion/contrasena`
+- `/configuracion/sesiones`
 
 ### Áreas de trabajo
 - `/areas/administracion`
@@ -37,54 +48,39 @@
 - `/areas/vicepresidencia`
 - `/areas/secretaria`
 - `/areas/tesoreria`
+- `/areas/estado-caja`: estado y resultado de la caja, con gráficos.
 - `/areas/caja-chica`
 - `/areas/comite-credito`
 - `/areas/asuntos-sociales`
 
 Las rutas de áreas son conceptuales; mostrar solo las áreas autorizadas.
 
-### Administración
+### Panel administrativo
+Usa `LayoutPanel` con lateral oscuro. El menú agrupa por módulos, muestra solo lo que autoriza cada permiso y solo enlaza pantallas que existen. Quien tiene algún permiso entra aquí al iniciar sesión.
+- `/admin/panel` indicadores, resumen financiero, gráficos y actividad reciente, según permisos.
+- `/admin/personas`, `/admin/solicitudes-deposito`, `/admin/solicitudes-retiro`, `/admin/historial-crediticio`
+- `/admin/contabilidad/balance`, `/diario`, `/mayor`, `/registro`
 - `/admin/parametros` CMS de tasas, importes, límites y vigencias.
 - `/admin/usuarios`
 - `/admin/roles-permisos`
 - `/admin/auditoria`
 - `/admin/reportes`
 
-## 3. Estructura sugerida
+## 3. Estructura
 
 ```text
 src/app/
-├── core/
-│   ├── auth/
-│   ├── guards/
-│   ├── interceptors/
-│   └── services/
-├── shared/
-│   ├── components/
-│   ├── pipes/
-│   └── utils/
-├── layout/
-│   ├── public-layout/
-│   ├── app-layout/
-│   └── admin-layout/
-└── features/
-    ├── auth/
-    ├── public/
-    ├── cuenta/
-    ├── creditos/
-    ├── ahorros/
-    ├── socios/
-    ├── areas/
-    ├── parametros/
-    ├── auditoria/
-    └── reportes/
+├── core/        autenticación, guards y servicios HTTP
+├── layout/      layout-publico, layout-panel y menús (navegacion.ts)
+├── shared/      components (estado, indicador, gráfico, paginador, diálogo) y utils
+└── features/    admin, ahorros, areas, auth, configuracion, creditos, cuenta, public, socios
 ```
 
-Adaptar al crecimiento real. No crear capas vacías sin necesidad.
+Cada pantalla se carga bajo demanda. Adaptar al crecimiento real; no crear capas vacías sin necesidad. El sistema visual y la cobertura del menú están en `diseno.md`.
 
 ## 4. Reglas de presentación
 
-- Mostrar saldo disponible y depósito reembolsable de USD 5 por separado.
+- Mostrar el saldo disponible sin incluir el depósito reembolsable de USD 5. Ese depósito solo se muestra al solicitar el cierre de la cuenta (decisión del propietario, 01/11/2026).
 - Mostrar desglose de cuotas: capital, ahorro letras, fondo de desgravamen e interés.
 - Mostrar ahorro letras y encaje asociados a su crédito.
 - Mostrar cupo emergente utilizado y disponible para socios.
@@ -104,15 +100,15 @@ Toda pantalla nueva o modificada sigue estas reglas.
 - Tras una operación, la pantalla pide de nuevo los datos al backend y muestra saldos y estados actualizados.
 - El aviso en tiempo real (`GET /api/v1/eventos`) solo indica el módulo que cambió, nunca datos: cada pantalla los pide a la API, que valida permisos. Toda acción que cambie datos debe pasar por `AuditoriaService.registrar`, que es quien avisa.
 - El estado de cada pantalla se guarda en signals de Angular.
-- Cada acción muestra su resultado en la misma pantalla: cargando, éxito o error.
+- Cada acción muestra su resultado en la misma pantalla: cargando, éxito o error. Las confirmaciones usan `DialogoService`, no `confirm()` ni `prompt()`.
 - Los importes oficiales siempre vienen del backend; la pantalla no los calcula por su cuenta.
 
 ### Estilos con Tailwind
 - Los estilos se escriben con clases de Tailwind en la plantilla.
-- No se usan atributos `style` ni archivos CSS por componente.
+- No se usan atributos `style` ni archivos CSS por componente. Los gráficos son SVG con atributos.
 - Lo que se repite en muchas pantallas (tarjeta, botón, tabla) se define una sola vez en `src/styles.css`, en `@layer components`, o como componente en `shared`.
-- Colores (decisión del propietario): todo el sitio va del blanco al verde, también errores y acciones peligrosas, que se distinguen con símbolo, borde y verde oscuro. Se definen en el bloque `@theme` de `src/styles.css`, no como valores sueltos.
-- Interacciones: enlaces, botones, tarjetas y filas reaccionan al pasar el cursor, con transiciones cortas. El menú cambia de color y crece. Quien tenga activada la opción de reducir movimiento en su sistema no las ve.
+- Colores (decisión del propietario, 01/11/2026; reemplaza a «todo del blanco al verde»): el verde es la identidad y se usa en navegación, acciones principales y estados positivos. Las superficies son blancas y grises, y los colores de apoyo (azul, naranja, rojo) comunican información, avisos y errores, siempre con texto o símbolo. Se definen en el bloque `@theme` de `src/styles.css`, no como valores sueltos.
+- Interacciones: enlaces, botones, indicadores y filas reaccionan al pasar el cursor, con transiciones cortas. Quien tenga activada la opción de reducir movimiento en su sistema no las ve.
 - Diseño adaptable: primero móvil, con los prefijos `sm:`, `md:` y `lg:`.
 
 ## 6. Accesibilidad y calidad

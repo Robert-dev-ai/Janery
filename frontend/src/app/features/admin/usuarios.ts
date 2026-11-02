@@ -1,25 +1,35 @@
-import { Component, inject, OnInit, signal } from '@angular/core';
+import { Component, computed, inject, OnInit, signal } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import { Observable } from 'rxjs';
 
 import { ApiService, Pagina, UsuarioResumen } from '../../core/services/api';
 import { alCambiar } from '../../core/services/tiempo-real';
+import { Estado } from '../../shared/components/estado';
+import { Paginador } from '../../shared/components/paginador';
+import { DialogoService } from '../../shared/components/dialogo';
 import { mensajeDeError } from '../../shared/utils/errores';
 
 @Component({
   selector: 'app-admin-usuarios',
+  imports: [Estado, FormsModule, Paginador],
   template: `
     <h1>Usuarios</h1>
     <p class="suave">Lo que puede hacer cada cargo se define en Permisos.</p>
     @if (error()) { <p class="error" role="alert">{{ error() }}</p> }
+    <div class="herramientas">
+      <label>Buscar en esta página
+        <input type="search" placeholder="Correo o cargo" [ngModel]="busqueda()" (ngModelChange)="busqueda.set($event)" />
+      </label>
+    </div>
     @if (datos(); as d) {
       <div class="tabla">
         <table>
           <thead><tr><th>Correo</th><th>Estado</th><th>Socio</th><th>Cargos</th><th>Asignar</th></tr></thead>
           <tbody>
-            @for (u of d.contenido; track u.id) {
+            @for (u of filas(); track u.id) {
               <tr>
                 <td>{{ u.correo }}</td>
-                <td>{{ u.estado }}</td>
+                <td><app-estado [valor]="u.estado" /></td>
                 <td>
                   @if (u.socio) {
                     Sí
@@ -47,20 +57,22 @@ import { mensajeDeError } from '../../shared/utils/errores';
           </tbody>
         </table>
       </div>
-      <div class="paginador">
-        <button type="button" class="secundario" [disabled]="d.pagina === 0" (click)="cargar(d.pagina - 1)">Anterior</button>
-        <span>Página {{ d.pagina + 1 }}</span>
-        <button type="button" class="secundario" [disabled]="(d.pagina + 1) * d.tamano >= d.total" (click)="cargar(d.pagina + 1)">Siguiente</button>
-      </div>
+      <app-paginador [pagina]="d.pagina" [tamano]="d.tamano" [total]="d.total" (cambiar)="cargar($event)" />
     }
   `,
 })
 export class AdminUsuarios implements OnInit {
   private readonly api = inject(ApiService);
+  private readonly dialogo = inject(DialogoService);
 
   protected readonly cargos = ['ADMINISTRACION', 'PRESIDENCIA', 'VICEPRESIDENCIA', 'SECRETARIA', 'TESORERIA',
     'CAJA_CHICA', 'COMITE_CREDITO', 'ASUNTOS_SOCIALES'];
   protected readonly datos = signal<Pagina<UsuarioResumen> | null>(null);
+  protected readonly busqueda = signal('');
+  protected readonly filas = computed(() => {
+    const texto = this.busqueda().trim().toLowerCase();
+    return (this.datos()?.contenido ?? []).filter((x) => !texto || (x.correo + ' ' + x.cargos.join(' ')).toLowerCase().includes(texto));
+  });
   protected readonly error = signal<string | null>(null);
 
   constructor() {
@@ -78,20 +90,20 @@ export class AdminUsuarios implements OnInit {
     });
   }
 
-  protected asignar(u: UsuarioResumen, cargo: string): void {
-    if (cargo && confirm(`¿Asignar ${cargo} a ${u.correo}?`)) {
+  protected async asignar(u: UsuarioResumen, cargo: string): Promise<void> {
+    if (cargo && await this.dialogo.confirmar(`¿Asignar ${cargo} a ${u.correo}?`, 'Asignar')) {
       this.ejecutar(this.api.asignarCargo(u.id, cargo));
     }
   }
 
-  protected hacerSocio(u: UsuarioResumen): void {
-    if (confirm(`¿Registrar a ${u.correo} como socio? Sus créditos nuevos usarán las condiciones de socio.`)) {
+  protected async hacerSocio(u: UsuarioResumen): Promise<void> {
+    if (await this.dialogo.confirmar(`¿Registrar a ${u.correo} como socio? Sus créditos nuevos usarán las condiciones de socio.`, 'Registrar socio')) {
       this.ejecutar(this.api.registrarSocio(u.id));
     }
   }
 
-  protected revocar(u: UsuarioResumen, cargo: string): void {
-    if (confirm(`¿Revocar ${cargo} a ${u.correo}?`)) {
+  protected async revocar(u: UsuarioResumen, cargo: string): Promise<void> {
+    if (await this.dialogo.confirmar(`¿Revocar ${cargo} a ${u.correo}?`, 'Revocar', true)) {
       this.ejecutar(this.api.revocarCargo(u.id, cargo));
     }
   }

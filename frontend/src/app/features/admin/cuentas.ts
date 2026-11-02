@@ -1,10 +1,13 @@
 import { CurrencyPipe } from '@angular/common';
-import { Component, inject, OnInit, signal } from '@angular/core';
+import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Observable } from 'rxjs';
 
 import { ApiService, Cuenta, Pagina } from '../../core/services/api';
 import { alCambiar } from '../../core/services/tiempo-real';
+import { Estado } from '../../shared/components/estado';
+import { Paginador } from '../../shared/components/paginador';
+import { DialogoService } from '../../shared/components/dialogo';
 import { mensajeDeError } from '../../shared/utils/errores';
 
 interface Formulario {
@@ -19,17 +22,22 @@ interface Formulario {
 
 @Component({
   selector: 'app-admin-cuentas',
-  imports: [CurrencyPipe, FormsModule],
+  imports: [CurrencyPipe, Estado, FormsModule, Paginador],
   template: `
     <h1>Cuentas</h1>
-    <label class="estrecho">Estado
-      <select [ngModel]="estado()" (ngModelChange)="filtrar($event)">
-        <option value="PENDIENTE_PAGO">Aperturas pendientes</option>
-        <option value="PENDIENTE_CIERRE">Cierres pendientes</option>
-        <option value="ACTIVA">Activas</option>
-        <option value="">Todas</option>
-      </select>
-    </label>
+    <div class="herramientas">
+      <label>Estado
+        <select [ngModel]="estado()" (ngModelChange)="filtrar($event)">
+          <option value="PENDIENTE_PAGO">Aperturas pendientes</option>
+          <option value="PENDIENTE_CIERRE">Cierres pendientes</option>
+          <option value="ACTIVA">Activas</option>
+          <option value="">Todas</option>
+        </select>
+      </label>
+      <label>Buscar en esta página
+        <input type="search" placeholder="Número o titular" [ngModel]="busqueda()" (ngModelChange)="busqueda.set($event)" />
+      </label>
+    </div>
 
     @if (error()) { <p class="error" role="alert">{{ error() }}</p> }
     @if (aviso()) { <p class="exito" role="status">{{ aviso() }}</p> }
@@ -38,7 +46,7 @@ interface Formulario {
       <form class="tarjeta estrecho" (ngSubmit)="registrar(f)">
         <h2>{{ f.tipo === 'depositos' ? 'Depósito' : 'Retiro' }} · {{ f.cuenta.numero }}</h2>
         <p class="suave">{{ f.cuenta.titular }}. Saldo: {{ f.cuenta.saldoDisponible | currency: 'USD' }}</p>
-        <label>Importe (USD) <input type="number" min="0.01" step="0.01" name="importe" [(ngModel)]="f.importe" required /></label>
+        <label>Importe (USD) <input type="number" min="0" step="1" name="importe" [(ngModel)]="f.importe" required /></label>
         <label>Forma de pago
           <select name="metodo" [(ngModel)]="f.metodoPago">
             <option value="EFECTIVO">Efectivo</option>
@@ -55,17 +63,17 @@ interface Formulario {
 
     @if (datos(); as d) {
       @if (d.total === 0) {
-        <p>No hay cuentas en este estado.</p>
+        <p class="vacio">No hay cuentas en este estado.</p>
       } @else {
         <div class="tabla">
           <table>
             <thead><tr><th>Cuenta</th><th>Titular</th><th>Estado</th><th>Pago</th><th class="num">Saldo</th><th>Acciones</th></tr></thead>
             <tbody>
-              @for (c of d.contenido; track c.id) {
+              @for (c of filas(); track c.id) {
                 <tr>
                   <td>{{ c.numero }}</td>
                   <td>{{ c.titular }}</td>
-                  <td>{{ c.estado }}</td>
+                  <td><app-estado [valor]="c.estado" /></td>
                   <td>{{ c.metodoPago }} {{ c.referenciaPago }}</td>
                   <td class="num">{{ c.saldoDisponible | currency: 'USD' }}</td>
                   <td class="acciones">
@@ -88,20 +96,22 @@ interface Formulario {
             </tbody>
           </table>
         </div>
-        <div class="paginador">
-          <button type="button" class="secundario" [disabled]="d.pagina === 0" (click)="cargar(d.pagina - 1)">Anterior</button>
-          <span>Página {{ d.pagina + 1 }}</span>
-          <button type="button" class="secundario" [disabled]="(d.pagina + 1) * d.tamano >= d.total" (click)="cargar(d.pagina + 1)">Siguiente</button>
-        </div>
+        <app-paginador [pagina]="d.pagina" [tamano]="d.tamano" [total]="d.total" (cambiar)="cargar($event)" />
       }
     }
   `,
 })
 export class AdminCuentas implements OnInit {
   private readonly api = inject(ApiService);
+  private readonly dialogo = inject(DialogoService);
 
   protected readonly estado = signal('PENDIENTE_PAGO');
   protected readonly datos = signal<Pagina<Cuenta> | null>(null);
+  protected readonly busqueda = signal('');
+  protected readonly filas = computed(() => {
+    const texto = this.busqueda().trim().toLowerCase();
+    return (this.datos()?.contenido ?? []).filter((x) => !texto || (x.numero + ' ' + x.titular).toLowerCase().includes(texto));
+  });
   protected readonly formulario = signal<Formulario | null>(null);
   protected readonly error = signal<string | null>(null);
   protected readonly aviso = signal<string | null>(null);
@@ -126,21 +136,21 @@ export class AdminCuentas implements OnInit {
     });
   }
 
-  protected confirmarApertura(c: Cuenta): void {
-    if (confirm(`¿Confirma que recibió el pago de apertura de ${c.titular}?`)) {
+  protected async confirmarApertura(c: Cuenta): Promise<void> {
+    if (await this.dialogo.confirmar(`¿Confirma que recibió el pago de apertura de ${c.titular}?`, 'Confirmar pago')) {
       this.ejecutar(this.api.confirmarApertura(c.id), `Cuenta ${c.numero} activada.`);
     }
   }
 
-  protected rechazar(c: Cuenta): void {
-    const motivo = prompt(`Motivo del rechazo de ${c.numero}:`)?.trim();
+  protected async rechazar(c: Cuenta): Promise<void> {
+    const motivo = await this.dialogo.pedirTexto(`Motivo del rechazo de ${c.numero}:`, 'Rechazar');
     if (motivo) {
       this.ejecutar(this.api.rechazarApertura(c.id, motivo), `Solicitud ${c.numero} rechazada.`);
     }
   }
 
-  protected confirmarCierre(c: Cuenta): void {
-    if (confirm(`¿Confirma que devolvió el depósito a ${c.titular} y que cierra la cuenta?`)) {
+  protected async confirmarCierre(c: Cuenta): Promise<void> {
+    if (await this.dialogo.confirmar(`¿Confirma que devolvió el depósito a ${c.titular} y que cierra la cuenta?`, 'Confirmar cierre', true)) {
       this.ejecutar(this.api.confirmarCierre(c.id), `Cuenta ${c.numero} cerrada.`);
     }
   }

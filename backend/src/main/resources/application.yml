@@ -1,6 +1,11 @@
 spring:
   application:
     name: janery
+  servlet:
+    multipart:
+      # Hasta 10 documentos de 10 MB; el servicio vuelve a comprobar cada archivo.
+      max-file-size: 10MB
+      max-request-size: 100MB
   config:
     # .env local, ignorado por Git. Admite ejecutar desde backend/ o desde la raiz.
     import: "optional:file:.env[.properties],optional:file:../.env[.properties]"

@@ -91,6 +91,7 @@ public class ReporteService {
                            q.fondo_desgravamen AS "Desgravamen", q.ahorro_letras AS "Ahorro letras", q.total AS "Total",
                            q.capital_pagado + q.interes_pagado + q.desgravamen_pagado + q.ahorro_pagado AS "Pagado",
                            CASE WHEN q.pagada_en IS NOT NULL THEN 'PAGADA'
+                                WHEN c.precancelado_en IS NOT NULL THEN 'PRECANCELADA'
                                 WHEN q.capital_pagado > 0 THEN 'PARCIAL' ELSE 'PENDIENTE' END AS "Estado"
                     FROM cuotas_credito q
                     JOIN creditos c ON c.id = q.credito_id

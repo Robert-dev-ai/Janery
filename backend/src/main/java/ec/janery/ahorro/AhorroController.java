@@ -49,6 +49,11 @@ public class AhorroController {
 
     private final AhorroService service;
 
+    @GetMapping("/productos")
+    public AhorroService.Productos productos() {
+        return service.productos();
+    }
+
     @GetMapping("/me")
     public List<AhorroService.AhorroVista> misAhorros(@AuthenticationPrincipal Jwt jwt) {
         return service.misAhorros(id(jwt));
@@ -82,6 +87,12 @@ public class AhorroController {
     public OperacionResponse retirar(@AuthenticationPrincipal Jwt jwt, @PathVariable Long ahorroId,
             @RequestHeader("Idempotency-Key") String clave, @Valid @RequestBody RetiroRequest r) {
         return new OperacionResponse(service.retirar(id(jwt), ahorroId, r.importe(), clave));
+    }
+
+    @PostMapping("/{ahorroId}/interes")
+    public OperacionResponse retirarInteres(@AuthenticationPrincipal Jwt jwt, @PathVariable Long ahorroId,
+            @RequestHeader("Idempotency-Key") String clave) {
+        return new OperacionResponse(service.retirarInteres(id(jwt), ahorroId, clave));
     }
 
     private static Long id(Jwt jwt) {

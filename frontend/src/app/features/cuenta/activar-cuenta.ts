@@ -22,7 +22,6 @@ import { mensajeDeError } from '../../shared/utils/errores';
           <label>Apellidos <input formControlName="apellidos" autocomplete="family-name" /></label>
           <label>Cédula o identificación <input formControlName="identificacion" /></label>
           <label>Teléfono <input type="tel" formControlName="telefono" autocomplete="tel" /></label>
-          <label>Dirección <input formControlName="direccion" autocomplete="street-address" /></label>
           <button type="submit" [disabled]="perfil.invalid || enviando()">Continuar</button>
         </form>
       } @else if (cuenta()?.estado === 'PENDIENTE_PAGO') {
@@ -69,7 +68,6 @@ export class ActivarCuenta implements OnInit {
     apellidos: ['', Validators.required],
     identificacion: ['', Validators.required],
     telefono: ['', Validators.required],
-    direccion: ['', Validators.required],
   });
   protected readonly apertura = this.fb.group({
     metodoPago: ['EFECTIVO'],

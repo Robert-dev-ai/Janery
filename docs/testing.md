@@ -53,7 +53,8 @@ Para ver a mano intereses, vencimientos o el retiro de ganancias del 1 de enero 
 
 Reglas:
 - La fecha solo avanza. Para repetir una prueba, `.\simulacion.ps1 -Reiniciar` borra los datos simulados y vuelve a la fecha real.
-- Al cruzar cada día 1 se ejecuta el abono mensual de intereses de ahorros.
+- Interés de ahorros, atraso y mora se calculan con la fecha simulada al consultarlos: se ven al avanzar, sin procesos programados.
+- `.\simulacion.ps1 -SegundoPlano` arranca sin ventana, con la salida en `simulacion.log`, y `.\simulacion.ps1 -Detener` lo detiene. Úsese si el backend se cierra solo: arrancado en una ventana, muere si esa consola se cierra o recibe Ctrl+C, y lo único que queda en el log es `^C`.
 - La fecha simulada se conserva al reiniciar el backend.
 - Las columnas con `DEFAULT now()` que la aplicación no llena muestran la fecha real.
 - Un salto de más de 7 días vence la sesión de refresco: habrá que volver a iniciar sesión.

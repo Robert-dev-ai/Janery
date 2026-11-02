@@ -36,7 +36,18 @@ public class AuthController {
             @NotBlank @Size(min = 8, max = 72) String contrasena) {
     }
 
+    public record RegistroCompletoRequest(@NotBlank @Email @Size(max = 254) String correo,
+            @NotBlank @Size(min = 8, max = 72) String contrasena, @NotBlank @Size(max = 100) String nombres,
+            @NotBlank @Size(max = 100) String apellidos, @NotBlank @Size(max = 20) String identificacion,
+            @NotBlank @Size(max = 20) String telefono) {
+    }
+
+    /** El campo correo admite también la cédula o identificación. */
     public record LoginRequest(@NotBlank @Size(max = 254) String correo, @NotBlank @Size(max = 72) String contrasena) {
+    }
+
+    public record CambioContrasenaRequest(@NotBlank @Size(max = 72) String actual,
+            @NotBlank @Size(min = 8, max = 72) String nueva) {
     }
 
     public record TokenResponse(String accessToken, Instant expiraEn) {
@@ -73,6 +84,13 @@ public class AuthController {
         service.registrar(request.correo(), request.contrasena());
     }
 
+    @PostMapping("/registro")
+    @ResponseStatus(HttpStatus.CREATED)
+    public void registrarCompleto(@Valid @RequestBody RegistroCompletoRequest r) {
+        service.registrarConPerfil(r.correo(), r.contrasena(), new ec.janery.persona.PersonaController.PerfilRequest(
+                r.nombres(), r.apellidos(), r.identificacion(), r.telefono(), null));
+    }
+
     @PostMapping("/login")
     public ResponseEntity<TokenResponse> login(@Valid @RequestBody LoginRequest request) {
         return respuesta(service.iniciarSesion(request.correo(), request.contrasena()));
@@ -89,6 +107,21 @@ public class AuthController {
         return ResponseEntity.noContent()
                 .header(HttpHeaders.SET_COOKIE, cookie("", Duration.ZERO).toString())
                 .build();
+    }
+
+    @PostMapping("/contrasena")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void cambiarContrasena(@AuthenticationPrincipal Jwt jwt,
+            @CookieValue(name = COOKIE, required = false) String refresh,
+            @Valid @RequestBody CambioContrasenaRequest request) {
+        service.cambiarContrasena(Long.valueOf(jwt.getSubject()), request.actual(), request.nueva(), refresh);
+    }
+
+    @PostMapping("/sesiones/cerrar-otras")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void cerrarOtrasSesiones(@AuthenticationPrincipal Jwt jwt,
+            @CookieValue(name = COOKIE, required = false) String refresh) {
+        service.cerrarOtrasSesiones(Long.valueOf(jwt.getSubject()), refresh);
     }
 
     @GetMapping("/me")

@@ -15,25 +15,32 @@ import { mensajeDeError } from '../../shared/utils/errores';
     <h1>Mi cuenta</h1>
     @if (cuenta(); as c) {
       <p class="suave">Cuenta {{ c.numero }} · {{ c.titular }}</p>
-      <div class="importes">
-        <section class="tarjeta">
-          <h2>Saldo disponible</h2>
-          <p class="importe">{{ c.saldoDisponible | currency: 'USD' }}</p>
-          <a routerLink="/app/movimientos">Ver movimientos</a>
-        </section>
-        <section class="tarjeta">
-          <h2>Depósito reembolsable</h2>
-          <p class="importe">{{ c.depositoReembolsable | currency: 'USD' }}</p>
-          <p class="suave">No forma parte del saldo disponible. Se devuelve al cerrar la cuenta.</p>
-        </section>
-      </div>
       <section class="tarjeta">
-        <h2>Cerrar la cuenta</h2>
-        <p class="suave">Debe retirar antes su saldo disponible.</p>
-        <button type="button" class="peligro" (click)="cerrar()">Solicitar cierre</button>
+        <h2>Saldo disponible</h2>
+        <p class="importe">{{ c.saldoDisponible | currency: 'USD' }}</p>
+        <div class="enlaces-pequenos">
+          <a routerLink="/app/depositos">Depositar dinero</a>
+          <a routerLink="/app/retiros">Retirar dinero</a>
+          <a routerLink="/app/movimientos">Ver movimientos</a>
+        </div>
+      </section>
+
+      <section class="tarjeta cierre-cuenta">
+        @if (cerrando()) {
+          <h2>Cerrar la cuenta</h2>
+          <p class="suave">Depósito reembolsable</p>
+          <p class="importe">{{ c.depositoReembolsable | currency: 'USD' }}</p>
+          <p class="suave">Se le devuelve al cerrar la cuenta. No forma parte de su saldo disponible. Antes debe retirar su saldo y no tener depósitos ni retiros pendientes.</p>
+          <div class="acciones">
+            <button type="button" class="peligro" (click)="cerrar()">Confirmar cierre</button>
+            <button type="button" class="secundario" (click)="cerrando.set(false)">Volver</button>
+          </div>
+        } @else {
+          <button type="button" class="enlace-discreto" (click)="cerrando.set(true)">Solicitar cierre de cuenta</button>
+        }
       </section>
     } @else if (!error()) {
-      <p role="status">Cargando…</p>
+      <p class="cargando" role="status">Cargando…</p>
     }
     @if (error()) { <p class="error" role="alert">{{ error() }}</p> }
   `,
@@ -45,6 +52,7 @@ export class MiCuenta implements OnInit {
 
   protected readonly cuenta = signal<Cuenta | null>(null);
   protected readonly error = signal<string | null>(null);
+  protected readonly cerrando = signal(false);
 
   constructor() {
     alCambiar(() => this.ngOnInit());
@@ -58,9 +66,6 @@ export class MiCuenta implements OnInit {
   }
 
   protected cerrar(): void {
-    if (!confirm('¿Solicitar el cierre de su cuenta principal?')) {
-      return;
-    }
     this.error.set(null);
     this.api.solicitarCierre().pipe(switchMap(() => this.auth.cargarYo())).subscribe({
       next: () => this.router.navigateByUrl('/activar-cuenta'),

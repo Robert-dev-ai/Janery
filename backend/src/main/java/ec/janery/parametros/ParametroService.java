@@ -38,6 +38,12 @@ public class ParametroService {
                 """)
         Optional<ParametroValor> vigente(@Param("parametroId") Long parametroId, @Param("ahora") Instant ahora);
 
+        @Query("""
+                select p.codigo, v.valor from ParametroValor v, ParametroSistema p where v.parametroId = p.id
+                and p.codigo in :codigos and v.vigenteDesde <= :ahora and (v.vigenteHasta is null or v.vigenteHasta > :ahora)
+                """)
+        List<Object[]> vigentes(@Param("codigos") java.util.Collection<String> codigos, @Param("ahora") Instant ahora);
+
         Optional<ParametroValor> findByParametroIdAndVigenteHastaIsNull(Long parametroId);
     }
 
@@ -56,6 +62,19 @@ public class ParametroService {
     private final AuditoriaService auditoria;
     private final Clock reloj;
 
+    /** Varios valores vigentes en una sola consulta. Falla si falta alguno: nunca se usa uno supuesto. */
+    @Transactional(readOnly = true)
+    public java.util.Map<String, BigDecimal> valoresVigentes(java.util.Collection<String> codigos) {
+        java.util.Map<String, BigDecimal> resultado = new java.util.HashMap<>();
+        valores.vigentes(codigos, Instant.now(reloj)).forEach(f -> resultado.put((String) f[0], (BigDecimal) f[1]));
+        for (String codigo : codigos) {
+            if (!resultado.containsKey(codigo)) {
+                throw NegocioException.conflicto("PARAMETRO_SIN_VALOR", "El parámetro " + codigo + " no tiene un valor vigente");
+            }
+        }
+        return resultado;
+    }
+
     /** Valor oficial vigente ahora. Falla si el parámetro no tiene valor: nunca se usa uno supuesto. */
     @Transactional(readOnly = true)
     public BigDecimal valorVigente(String codigo) {
@@ -71,6 +90,7 @@ public class ParametroService {
     public List<ParametroVista> listar() {
         Instant ahora = Instant.now(reloj);
         return parametros.findAll().stream()
+                .filter(ParametroSistema::isActivo)
                 .sorted(java.util.Comparator.comparing(ParametroSistema::getCodigo))
                 .map(p -> {
                     ParametroValor vigente = valores.vigente(p.getId(), ahora).orElse(null);

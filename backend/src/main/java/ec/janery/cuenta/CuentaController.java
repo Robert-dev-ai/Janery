@@ -56,7 +56,7 @@ public class CuentaController {
         }
     }
 
-    public record MovimientoResponse(Long id, String sentido, BigDecimal importe, String concepto,
+    public record MovimientoResponse(Long id, String sentido, BigDecimal importe, String concepto, String detalle,
             BigDecimal saldoResultante, Instant fecha) {
     }
 
@@ -85,9 +85,10 @@ public class CuentaController {
     @GetMapping("/cuentas-principales/me/movimientos")
     public Pagina<MovimientoResponse> misMovimientos(@AuthenticationPrincipal Jwt jwt,
             @RequestParam(defaultValue = "0") int pagina, @RequestParam(defaultValue = "20") int tamano) {
-        return Pagina.de(service.misMovimientos(id(jwt), Math.max(pagina, 0), Pagina.limitar(tamano)),
-                m -> new MovimientoResponse(m.getId(), m.getSentido(), m.getImporte(), m.getConcepto(),
-                        m.getSaldoResultante(), m.getCreadoEn()));
+        var movimientos = service.misMovimientos(id(jwt), Math.max(pagina, 0), Pagina.limitar(tamano));
+        var detalles = service.detalles(movimientos.getContent().stream().map(Entidades.MovimientoCuenta::getOperacionId).distinct().toList());
+        return Pagina.de(movimientos, m -> new MovimientoResponse(m.getId(), m.getSentido(), m.getImporte(), m.getConcepto(),
+                detalles.get(m.getOperacionId()), m.getSaldoResultante(), m.getCreadoEn()));
     }
 
     @PostMapping("/cuentas-principales/me/cierre")

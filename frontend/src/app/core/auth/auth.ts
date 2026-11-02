@@ -36,13 +36,26 @@ export class AuthService {
 
   /** Ruta donde debe continuar la persona según su avance en el alta. */
   rutaInicial(): string {
+    return this.yo()?.permisos.length ? '/admin/panel' : this.rutaPortal();
+  }
+
+  rutaPortal(): string {
     return this.yo()?.estadoCuenta === 'ACTIVA' ? '/app/inicio' : '/activar-cuenta';
   }
 
-  registrar(correo: string, contrasena: string): Observable<void> {
-    return this.http.post<void>(`${this.api}/register`, { correo, contrasena });
+  /** Entrada a la gestión: un cargo sin permisos solo tiene sus áreas. Null si la persona no forma parte del personal. */
+  rutaPanel(): string | null {
+    if (this.yo()?.permisos.length) {
+      return '/admin/panel';
+    }
+    return this.yo()?.cargos.length ? '/areas' : null;
   }
 
+  registrar(datos: { correo: string; contrasena: string; nombres: string; apellidos: string; identificacion: string; telefono: string }): Observable<void> {
+    return this.http.post<void>(`${this.api}/registro`, datos);
+  }
+
+  /** El primer dato puede ser el correo o la cédula: el backend distingue cuál es. */
   iniciarSesion(correo: string, contrasena: string): Observable<Yo> {
     return this.http.post<TokenResponse>(`${this.api}/login`, { correo, contrasena }, { withCredentials: true }).pipe(
       tap((r) => this.token.set(r.accessToken)),
@@ -89,6 +102,15 @@ export class AuthService {
       catchError(() => of(undefined)),
       tap(() => this.limpiar()),
     );
+  }
+
+  /** Con la cookie, el servidor sabe qué sesión conservar al cerrar las demás. */
+  cambiarContrasena(actual: string, nueva: string): Observable<void> {
+    return this.http.post<void>(`${this.api}/contrasena`, { actual, nueva }, { withCredentials: true });
+  }
+
+  cerrarOtrasSesiones(): Observable<void> {
+    return this.http.post<void>(`${this.api}/sesiones/cerrar-otras`, null, { withCredentials: true });
   }
 
   private limpiar(): void {

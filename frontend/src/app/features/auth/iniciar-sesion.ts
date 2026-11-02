@@ -9,11 +9,11 @@ import { mensajeDeError } from '../../shared/utils/errores';
   selector: 'app-iniciar-sesion',
   imports: [ReactiveFormsModule, RouterLink],
   template: `
-    <div class="estrecho">
+    <div class="caja-acceso">
       <h1>Iniciar sesión</h1>
       <form class="tarjeta" [formGroup]="form" (ngSubmit)="enviar()">
-        <label>Correo
-          <input type="email" formControlName="correo" autocomplete="username" />
+        <label>Correo o cédula
+          <input formControlName="correo" autocomplete="username" />
         </label>
         <label>Contraseña
           <input type="password" formControlName="contrasena" autocomplete="current-password" />
@@ -30,7 +30,7 @@ export class IniciarSesion {
   private readonly router = inject(Router);
 
   protected readonly form = inject(NonNullableFormBuilder).group({
-    correo: ['', [Validators.required, Validators.email]],
+    correo: ['', Validators.required],
     contrasena: ['', Validators.required],
   });
   protected readonly error = signal<string | null>(null);
