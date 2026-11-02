@@ -73,10 +73,21 @@ public class UsuarioAdminService implements ApplicationRunner {
     @Transactional(readOnly = true)
     public Pagina<UsuarioResumen> listar(int pagina, int tamano) {
         java.util.Set<Long> piden = restablecimientos.usuariosPendientes();
-        return Pagina.de(usuarios.findAll(PageRequest.of(pagina, tamano, Sort.by("id"))), u -> {
-            var persona = personas.dePorUsuario(u.getId());
+        var page = usuarios.findAll(PageRequest.of(pagina, tamano, Sort.by("id")));
+        // Cargos, personas y socios de toda la página de una vez: una consulta por tipo, no por usuario.
+        List<Long> ids = page.getContent().stream().map(Usuario::getId).toList();
+        java.util.Map<Long, List<String>> cargos = new java.util.HashMap<>();
+        if (!ids.isEmpty()) {
+            usuarios.cargosVigentesDe(ids).forEach(f -> cargos.computeIfAbsent(((Number) f[0]).longValue(),
+                    k -> new java.util.ArrayList<>()).add((String) f[1]));
+        }
+        var porUsuario = personas.porUsuarios(ids);
+        java.util.Set<Long> sociosActivos = socios.personasActivas(porUsuario.values().stream()
+                .map(ec.janery.persona.Persona::getId).toList());
+        return Pagina.de(page, u -> {
+            var persona = java.util.Optional.ofNullable(porUsuario.get(u.getId()));
             return new UsuarioResumen(u.getId(), u.getCorreo(), u.getEstado(), u.getCreadoEn(),
-                    usuarios.cargosVigentes(u.getId()), socios.usuarioEsSocio(u.getId()),
+                    cargos.getOrDefault(u.getId(), List.of()), persona.map(p -> sociosActivos.contains(p.getId())).orElse(false),
                     persona.map(p -> p.getNombres() + " " + p.getApellidos()).orElse(null),
                     persona.map(ec.janery.persona.Persona::getIdentificacion).orElse(null), piden.contains(u.getId()));
         });

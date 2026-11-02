@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -63,6 +64,8 @@ public class ParticipacionService {
 
         @Query("select a.periodo from AporteSocio a where a.socioId = :socioId and a.tipo = 'OBLIGATORIO'")
         Set<String> periodosObligatorios(@Param("socioId") Long socioId);
+
+        List<AporteSocio> findBySocioIdIn(java.util.Collection<Long> socioIds);
     }
 
     interface CompraventaRepository extends JpaRepository<CompraventaCapital, Long> {
@@ -70,6 +73,9 @@ public class ParticipacionService {
 
     interface AutorizacionRepository extends JpaRepository<AutorizacionRetiro, Long> {
         Optional<AutorizacionRetiro> findBySocioIdAndAnio(Long socioId, Integer anio);
+
+        @Query("select a.socioId from AutorizacionRetiro a where a.anio = :anio and a.socioId in :socioIds")
+        Set<Long> autorizados(@Param("socioIds") java.util.Collection<Long> socioIds, @Param("anio") Integer anio);
     }
 
     interface AporteCajaChicaRepository extends JpaRepository<AporteCajaChica, Long> {
@@ -82,6 +88,8 @@ public class ParticipacionService {
 
         @Query("select a.periodo from AporteCajaChica a where a.socioId = :socioId")
         Set<String> periodos(@Param("socioId") Long socioId);
+
+        List<AporteCajaChica> findBySocioIdIn(java.util.Collection<Long> socioIds);
     }
 
     interface ResultadoRepository extends JpaRepository<Resultado, Long> {
@@ -112,6 +120,28 @@ public class ParticipacionService {
 
         @Query("select coalesce(sum(v.importe), 0) from VariacionParticipacion v where v.socioId = :socioId")
         BigDecimal valor(@Param("socioId") Long socioId);
+
+        @Query("select v.socioId, coalesce(sum(v.importe), 0) from VariacionParticipacion v group by v.socioId")
+        List<Object[]> valores();
+
+        /**
+         * Para cada socio, en este orden: valor, compraventas, resultados, ganancias liberadas, resultados del mes y base
+         * de reparto. Son las mismas sumas que valor(), compraventas(), resultados(), gananciasLiberadas(),
+         * resultadosDelMes() y baseDeReparto(), de todos los socios en una consulta.
+         */
+        @Query(value = """
+                SELECT socio_id,
+                       COALESCE(SUM(importe), 0),
+                       COALESCE(SUM(importe) FILTER (WHERE tipo IN ('APORTE_COMPRA', 'APORTE_VENTA')), 0),
+                       COALESCE(SUM(importe) FILTER (WHERE tipo NOT LIKE 'APORTE%'), 0),
+                       COALESCE(SUM(importe) FILTER (WHERE tipo NOT LIKE 'APORTE%'
+                           AND (tipo IN ('RETIRO_GANANCIA', 'DESCUENTO_OBLIGACION') OR fecha < :inicioDeAnio)), 0),
+                       COALESCE(SUM(importe) FILTER (WHERE tipo IN ('GANANCIA', 'PERDIDA') AND fecha >= :inicioDeMes), 0),
+                       COALESCE(SUM(importe) FILTER (WHERE tipo NOT IN ('GANANCIA', 'PERDIDA') OR fecha < :inicioDeMes), 0)
+                FROM variaciones_participacion WHERE socio_id IN (:socioIds) GROUP BY socio_id
+                """, nativeQuery = true)
+        List<Object[]> cifras(@Param("socioIds") java.util.Collection<Long> socioIds,
+                @Param("inicioDeAnio") LocalDate inicioDeAnio, @Param("inicioDeMes") LocalDate inicioDeMes);
 
         /** Por socio: todo menos las ganancias y pérdidas del mes en curso, que aún no se han cerrado. */
         @Query("""
@@ -333,8 +363,10 @@ public class ParticipacionService {
     /** Los doce meses del año con lo ya pagado: así se eligen los que faltan. */
     @Transactional(readOnly = true)
     public List<MesAporte> calendario(Long socioId) {
-        Set<String> obligatorios = aportes.periodosObligatorios(socioId);
-        Set<String> caja = aportesCajaChica.periodos(socioId);
+        return calendario(aportes.periodosObligatorios(socioId), aportesCajaChica.periodos(socioId));
+    }
+
+    private List<MesAporte> calendario(Set<String> obligatorios, Set<String> caja) {
         int anio = YearMonth.now(reloj).getYear();
         return java.util.stream.IntStream.rangeClosed(1, 12).mapToObj(m -> YearMonth.of(anio, m).toString())
                 .map(p -> new MesAporte(p, obligatorios.contains(p), caja.contains(p))).toList();
@@ -350,8 +382,18 @@ public class ParticipacionService {
 
     @Transactional(readOnly = true)
     public List<SocioCajaChica> sociosCajaChica() {
-        return socios.activos().stream()
-                .map(s -> new SocioCajaChica(s.getId(), personas.nombreCompleto(s.getPersonaId()), calendario(s.getId()))).toList();
+        List<SocioService.Socio> activos = socios.activos();
+        if (activos.isEmpty()) {
+            return List.of();
+        }
+        List<Long> ids = activos.stream().map(SocioService.Socio::getId).toList();
+        Map<Long, Set<String>> obligatorios = aportes.findBySocioIdIn(ids).stream().filter(a -> OBLIGATORIO.equals(a.getTipo()))
+                .collect(Collectors.groupingBy(AporteSocio::getSocioId, Collectors.mapping(AporteSocio::getPeriodo, Collectors.toSet())));
+        Map<Long, Set<String>> caja = aportesCajaChica.findBySocioIdIn(ids).stream()
+                .collect(Collectors.groupingBy(AporteCajaChica::getSocioId, Collectors.mapping(AporteCajaChica::getPeriodo, Collectors.toSet())));
+        personas.precargar(activos.stream().map(SocioService.Socio::getPersonaId).toList());
+        return activos.stream().map(s -> new SocioCajaChica(s.getId(), personas.nombreCompleto(s.getPersonaId()),
+                calendario(obligatorios.getOrDefault(s.getId(), Set.of()), caja.getOrDefault(s.getId(), Set.of())))).toList();
     }
 
     /**
@@ -392,9 +434,10 @@ public class ParticipacionService {
 
     @Transactional(readOnly = true)
     public Condiciones condiciones() {
-        return new Condiciones(dinero(parametros.valorVigente("APORTE_INICIAL_MINIMO")),
-                dinero(parametros.valorVigente("APORTE_OBLIGATORIO")), dinero(parametros.valorVigente("APORTE_CAJA_CHICA")),
-                dinero(parametros.valorVigente("EMERGENTE_SOCIO_CUPO")));
+        Map<String, BigDecimal> v = parametros.valoresVigentes(List.of("APORTE_INICIAL_MINIMO", "APORTE_OBLIGATORIO",
+                "APORTE_CAJA_CHICA", "EMERGENTE_SOCIO_CUPO"));
+        return new Condiciones(dinero(v.get("APORTE_INICIAL_MINIMO")), dinero(v.get("APORTE_OBLIGATORIO")),
+                dinero(v.get("APORTE_CAJA_CHICA")), dinero(v.get("EMERGENTE_SOCIO_CUPO")));
     }
 
     /**
@@ -456,13 +499,12 @@ public class ParticipacionService {
 
     @Transactional(readOnly = true)
     public ResumenSocio miResumen(Long usuarioId) {
-        return resumen(socios.deUsuario(usuarioId), valorTotal());
+        return resumenes(List.of(socios.deUsuario(usuarioId))).get(0);
     }
 
     @Transactional(readOnly = true)
     public List<ResumenSocio> listarSocios() {
-        BigDecimal total = valorTotal();
-        return socios.activos().stream().map(s -> resumen(s, total)).toList();
+        return resumenes(socios.activos());
     }
 
     @Transactional(readOnly = true)
@@ -774,14 +816,20 @@ public class ParticipacionService {
     }
 
     private List<Obligacion> obligaciones(SocioService.Socio socio) {
+        Map<String, BigDecimal> aportesDelMes = parametros.valoresVigentes(List.of("APORTE_OBLIGATORIO", "APORTE_CAJA_CHICA"));
+        return obligaciones(socio, dinero(aportesDelMes.get("APORTE_OBLIGATORIO")), dinero(aportesDelMes.get("APORTE_CAJA_CHICA")),
+                aportes.periodosObligatorios(socio.getId()), aportesCajaChica.periodos(socio.getId()),
+                creditos.cuotasVencidas(socio.getPersonaId()));
+    }
+
+    private List<Obligacion> obligaciones(SocioService.Socio socio, BigDecimal mensual, BigDecimal cajaChica,
+            Set<String> obligatoriosPagados, Set<String> cajaChicaPagados, List<CreditoService.CuotaVencida> cuotasVencidas) {
         List<Obligacion> lista = new ArrayList<>();
-        BigDecimal mensual = dinero(parametros.valorVigente("APORTE_OBLIGATORIO"));
-        mesesVencidos(socio, aportes.periodosObligatorios(socio.getId())).forEach(p ->
+        mesesVencidos(socio, obligatoriosPagados).forEach(p ->
                 lista.add(new Obligacion("APORTE_MENSUAL", p, null, "Aporte mensual de " + p, mensual)));
-        BigDecimal cajaChica = dinero(parametros.valorVigente("APORTE_CAJA_CHICA"));
-        mesesVencidos(socio, aportesCajaChica.periodos(socio.getId())).forEach(p ->
+        mesesVencidos(socio, cajaChicaPagados).forEach(p ->
                 lista.add(new Obligacion("CAJA_CHICA", p, null, "Caja chica de " + p, cajaChica)));
-        creditos.cuotasVencidas(socio.getPersonaId()).forEach(q -> lista.add(new Obligacion("CUOTA", null, q.cuotaId(),
+        cuotasVencidas.forEach(q -> lista.add(new Obligacion("CUOTA", null, q.cuotaId(),
                 "Letra " + q.numero() + " de " + (q.modalidad() == null ? q.familia() : q.modalidad()) + ", venció el " + q.vencimiento(),
                 q.total())));
         return lista;
@@ -892,22 +940,63 @@ public class ParticipacionService {
 
     // --- Apoyo
 
-    private ResumenSocio resumen(SocioService.Socio s, BigDecimal total) {
-        BigDecimal valor = variaciones.valor(s.getId());
-        BigDecimal porcentaje = total.signum() > 0 && valor.signum() > 0
-                ? valor.multiply(CIEN).divide(total, 4, RoundingMode.HALF_UP) : BigDecimal.ZERO;
-        String periodo = YearMonth.now(reloj).toString();
-        return new ResumenSocio(s.getId(), personas.nombreCompleto(s.getPersonaId()), s.getDesde(),
-                aportes.total(s.getId(), INICIAL), aportes.total(s.getId(), OBLIGATORIO),
-                aportes.total(s.getId(), PERSONAL), variaciones.compraventas(s.getId()), variaciones.resultados(s.getId()),
-                gananciasDisponibles(s.getId()), obligacionesPendientes(s), retiroAutorizado(s.getId()),
-                aportesCajaChica.total(s.getId()), valor, porcentaje,
-                parametros.valorVigente("APORTE_OBLIGATORIO"), parametros.valorVigente("APORTE_CAJA_CHICA"), periodo,
-                aportes.existsBySocioIdAndTipoAndPeriodo(s.getId(), OBLIGATORIO, periodo),
-                aportesCajaChica.existsBySocioIdAndPeriodo(s.getId(), periodo),
-                rendimiento(variaciones.resultadosDelMes(s.getId(), YearMonth.now(reloj).atDay(1)),
-                        variaciones.baseDeReparto(s.getId(), YearMonth.now(reloj).atDay(1))),
-                variaciones.resultadosDelMes(s.getId(), YearMonth.now(reloj).atDay(1)));
+    /** Sumas de las variaciones de un socio; ver VariacionRepository.cifras. */
+    private record Cifras(BigDecimal valor, BigDecimal compraventas, BigDecimal resultados, BigDecimal liberadas,
+            BigDecimal delMes, BigDecimal baseDelMes) {
+        static final Cifras CERO = new Cifras(BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
+                BigDecimal.ZERO, BigDecimal.ZERO);
+    }
+
+    /**
+     * Resumen de varios socios con un número fijo de consultas, sin importar cuántos sean: antes eran unas veinte por
+     * socio, y cada una es un viaje a la base de datos. Las cifras son las mismas que dan las consultas de un solo socio.
+     */
+    private List<ResumenSocio> resumenes(List<SocioService.Socio> lista) {
+        if (lista.isEmpty()) {
+            return List.of();
+        }
+        List<Long> ids = lista.stream().map(SocioService.Socio::getId).toList();
+        YearMonth mes = YearMonth.now(reloj);
+        String periodo = mes.toString();
+        Map<Long, Cifras> cifras = new java.util.HashMap<>();
+        variaciones.cifras(ids, hoy().withDayOfYear(1), mes.atDay(1)).forEach(f -> cifras.put(((Number) f[0]).longValue(),
+                new Cifras((BigDecimal) f[1], (BigDecimal) f[2], (BigDecimal) f[3], (BigDecimal) f[4], (BigDecimal) f[5],
+                        (BigDecimal) f[6])));
+        Map<Long, List<AporteSocio>> aportesDe = aportes.findBySocioIdIn(ids).stream()
+                .collect(Collectors.groupingBy(AporteSocio::getSocioId));
+        Map<Long, List<AporteCajaChica>> cajaChicaDe = aportesCajaChica.findBySocioIdIn(ids).stream()
+                .collect(Collectors.groupingBy(AporteCajaChica::getSocioId));
+        Set<Long> autorizados = autorizaciones.autorizados(ids, hoy().getYear());
+        Map<String, BigDecimal> aportesDelMes = parametros.valoresVigentes(List.of("APORTE_OBLIGATORIO", "APORTE_CAJA_CHICA"));
+        BigDecimal mensual = aportesDelMes.get("APORTE_OBLIGATORIO");
+        BigDecimal cajaChica = aportesDelMes.get("APORTE_CAJA_CHICA");
+        BigDecimal total = valorTotal();
+        List<Long> personaIds = lista.stream().map(SocioService.Socio::getPersonaId).toList();
+        Map<Long, List<CreditoService.CuotaVencida>> vencidas = creditos.cuotasVencidas(personaIds);
+        personas.precargar(personaIds);
+        return lista.stream().map(s -> {
+            Cifras c = cifras.getOrDefault(s.getId(), Cifras.CERO);
+            List<AporteSocio> propios = aportesDe.getOrDefault(s.getId(), List.of());
+            List<AporteCajaChica> caja = cajaChicaDe.getOrDefault(s.getId(), List.of());
+            Set<String> obligatoriosPagados = propios.stream().filter(a -> OBLIGATORIO.equals(a.getTipo()))
+                    .map(AporteSocio::getPeriodo).collect(Collectors.toSet());
+            Set<String> cajaChicaPagados = caja.stream().map(AporteCajaChica::getPeriodo).collect(Collectors.toSet());
+            BigDecimal porcentaje = total.signum() > 0 && c.valor().signum() > 0
+                    ? c.valor().multiply(CIEN).divide(total, 4, RoundingMode.HALF_UP) : BigDecimal.ZERO;
+            BigDecimal pendientes = obligaciones(s, dinero(mensual), dinero(cajaChica), obligatoriosPagados, cajaChicaPagados,
+                    vencidas.getOrDefault(s.getPersonaId(), List.of()))
+                    .stream().map(Obligacion::importe).reduce(BigDecimal.ZERO, BigDecimal::add);
+            return new ResumenSocio(s.getId(), personas.nombreCompleto(s.getPersonaId()), s.getDesde(),
+                    suma(propios, INICIAL), suma(propios, OBLIGATORIO), suma(propios, PERSONAL), c.compraventas(), c.resultados(),
+                    c.liberadas().min(c.resultados()).max(BigDecimal.ZERO), pendientes, autorizados.contains(s.getId()),
+                    caja.stream().map(AporteCajaChica::getImporte).reduce(BigDecimal.ZERO, BigDecimal::add), c.valor(), porcentaje,
+                    mensual, cajaChica, periodo, obligatoriosPagados.contains(periodo), cajaChicaPagados.contains(periodo),
+                    rendimiento(c.delMes(), c.baseDelMes()), c.delMes());
+        }).toList();
+    }
+
+    private static BigDecimal suma(List<AporteSocio> lista, String tipo) {
+        return lista.stream().filter(a -> tipo.equals(a.getTipo())).map(AporteSocio::getImporte).reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
     private BigDecimal valorTotal() {
@@ -937,9 +1026,11 @@ public class ParticipacionService {
     }
 
     private Map<Long, BigDecimal> valoresPositivos() {
+        Map<Long, BigDecimal> sumas = new java.util.HashMap<>();
+        variaciones.valores().forEach(f -> sumas.put((Long) f[0], (BigDecimal) f[1]));
         Map<Long, BigDecimal> valores = new LinkedHashMap<>();
         socios.activos().forEach(s -> {
-            BigDecimal valor = variaciones.valor(s.getId());
+            BigDecimal valor = sumas.getOrDefault(s.getId(), BigDecimal.ZERO);
             if (valor.signum() > 0) {
                 valores.put(s.getId(), valor);
             }

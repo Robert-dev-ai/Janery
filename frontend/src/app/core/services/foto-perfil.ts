@@ -13,8 +13,9 @@ export class FotoPerfilService {
   constructor() {
     effect(() => {
       const yo = this.auth.yo();
-      // Se vuelve a pedir si cambia la persona o si sube otra foto (cargarYo devuelve un objeto nuevo).
-      const clave = yo?.tieneFoto ? `${yo.id}-${Date.now()}` : '';
+      // Se vuelve a pedir solo si cambia la persona o si sube otra foto: los avisos en vivo recargan "yo" a menudo y no
+      // deben descargar la imagen cada vez.
+      const clave = yo?.tieneFoto ? `${yo.id}-${this.auth.versionFoto()}` : '';
       untracked(() => this.cargar(clave));
     });
   }

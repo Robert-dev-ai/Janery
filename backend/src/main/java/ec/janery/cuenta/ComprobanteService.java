@@ -94,6 +94,18 @@ public class ComprobanteService {
                 .param("tipo", tipo).param("ref", referenciaId).query(Long.class).single();
     }
 
+    /** Comprobantes de varios pagos en una consulta, para los listados. Los que no tienen no aparecen. */
+    @Transactional(readOnly = true)
+    public java.util.Map<Long, Long> cantidades(String tipo, java.util.Collection<Long> referenciaIds) {
+        java.util.Map<Long, Long> resultado = new java.util.HashMap<>();
+        if (!referenciaIds.isEmpty()) {
+            jdbc.sql("SELECT referencia_id, count(*) FROM comprobantes WHERE tipo = :tipo AND referencia_id IN (:refs) GROUP BY referencia_id")
+                    .param("tipo", tipo).param("refs", referenciaIds)
+                    .query((rs, n) -> resultado.put(rs.getLong(1), rs.getLong(2))).list();
+        }
+        return resultado;
+    }
+
     @Transactional(readOnly = true)
     public Descarga descargar(Long id) {
         return jdbc.sql("SELECT nombre, tipo_contenido, contenido FROM comprobantes WHERE id = :id").param("id", id)

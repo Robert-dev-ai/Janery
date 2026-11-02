@@ -32,6 +32,8 @@ export class AuthService {
   readonly token = signal<string | null>(null);
   readonly yo = signal<Yo | null>(null);
   readonly autenticado = computed(() => this.yo() !== null);
+  /** Sube al cambiar la foto, para que se vuelva a descargar. */
+  readonly versionFoto = signal(0);
 
   tienePermiso(permiso: string): boolean {
     return this.yo()?.permisos.includes(permiso) ?? false;
@@ -130,11 +132,17 @@ export class AuthService {
   guardarFoto(archivo: File): Observable<void> {
     const datos = new FormData();
     datos.append('archivo', archivo, archivo.name);
-    return this.http.put<void>(`${this.api}/foto`, datos).pipe(switchMap(() => this.cargarYo().pipe(map(() => undefined))));
+    return this.http.put<void>(`${this.api}/foto`, datos).pipe(
+      tap(() => this.versionFoto.update((v) => v + 1)),
+      switchMap(() => this.cargarYo().pipe(map(() => undefined))),
+    );
   }
 
   quitarFoto(): Observable<void> {
-    return this.http.delete<void>(`${this.api}/foto`).pipe(switchMap(() => this.cargarYo().pipe(map(() => undefined))));
+    return this.http.delete<void>(`${this.api}/foto`).pipe(
+      tap(() => this.versionFoto.update((v) => v + 1)),
+      switchMap(() => this.cargarYo().pipe(map(() => undefined))),
+    );
   }
 
   cerrarOtrasSesiones(): Observable<void> {

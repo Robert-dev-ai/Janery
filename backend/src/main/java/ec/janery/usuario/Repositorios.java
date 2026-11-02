@@ -32,6 +32,24 @@ final class Repositorios {
                 """, nativeQuery = true)
         List<String> permisosVigentes(@Param("usuarioId") Long usuarioId);
 
+        /** Los permisos de sus cargos, y SOCIO si lo es, en una sola consulta. */
+        @Query(value = """
+                SELECT DISTINCT p.codigo FROM usuario_cargos uc
+                JOIN cargo_permisos cp ON cp.cargo_id = uc.cargo_id
+                JOIN permisos p ON p.id = cp.permiso_id
+                WHERE uc.usuario_id = :usuarioId AND uc.hasta IS NULL
+                UNION ALL
+                SELECT 'SOCIO' WHERE EXISTS (SELECT 1 FROM socios s JOIN personas pe ON pe.id = s.persona_id
+                                             WHERE pe.usuario_id = :usuarioId AND s.estado = 'ACTIVO')
+                """, nativeQuery = true)
+        List<String> alcances(@Param("usuarioId") Long usuarioId);
+
+        @Query(value = """
+                SELECT uc.usuario_id, c.codigo FROM usuario_cargos uc JOIN cargos c ON c.id = uc.cargo_id
+                WHERE uc.usuario_id IN (:usuarioIds) AND uc.hasta IS NULL ORDER BY c.codigo
+                """, nativeQuery = true)
+        List<Object[]> cargosVigentesDe(@Param("usuarioIds") java.util.Collection<Long> usuarioIds);
+
         @Query(value = """
                 SELECT c.codigo FROM usuario_cargos uc JOIN cargos c ON c.id = uc.cargo_id
                 WHERE uc.usuario_id = :usuarioId AND uc.hasta IS NULL ORDER BY c.codigo

@@ -73,27 +73,33 @@ export class AvisosPendientes implements OnInit {
   }
 
   ngOnInit(): void {
+    // Una sola petición con los conteos: la campana se recarga con cada aviso en vivo.
     if (!this.gestion()) {
       if (this.auth.yo()?.estadoCuenta === 'ACTIVA') {
-        this.api.misRetiros().subscribe({ next: (s) => this.misRetiros.set(s.filter((x) => x.estado === 'PENDIENTE').length), error: () => undefined });
-        this.api.misDepositos().subscribe({ next: (s) => this.misDepositos.set(s.filter((x) => x.estado === 'PENDIENTE').length), error: () => undefined });
-        this.api.misCreditos().subscribe({
-          // Lo calcula el backend: en la simulación, su fecha no es la del navegador.
-          next: (c) => this.misVencidas.set(c.reduce((suma, x) => suma + x.letrasAtrasadas, 0)),
+        // Lo calcula el backend: en la simulación, su fecha no es la del navegador.
+        this.api.pendientesPersonales().subscribe({
+          next: (p) => {
+            this.misVencidas.set(p.letrasAtrasadas);
+            this.misRetiros.set(p.retiros);
+            this.misDepositos.set(p.depositos);
+          },
           error: () => undefined,
         });
       }
       return;
     }
-    if (this.auth.tienePermiso('GESTIONAR_CUENTAS')) {
-      this.api.cuentas('PENDIENTE_PAGO', 0).subscribe({ next: (d) => this.aperturas.set(d.total), error: () => undefined });
-      this.api.cuentas('PENDIENTE_CIERRE', 0).subscribe({ next: (d) => this.cierres.set(d.total), error: () => undefined });
-      this.api.solicitudesRetiro('PENDIENTE', 0).subscribe({ next: (d) => this.retiros.set(d.total), error: () => undefined });
-      this.api.solicitudesDeposito('PENDIENTE', 0).subscribe({ next: (d) => this.depositos.set(d.total), error: () => undefined });
-    }
-    if (this.auth.tienePermiso('APROBAR_CREDITOS')) {
-      this.api.creditosAdmin('SOLICITADO', 0).subscribe({ next: (d) => this.creditos.set(d.total), error: () => undefined });
-      this.api.solicitudesCupoAdmin().subscribe({ next: (d) => this.cupos.set(d.length), error: () => undefined });
+    if (this.auth.tienePermiso('GESTIONAR_CUENTAS') || this.auth.tienePermiso('APROBAR_CREDITOS')) {
+      this.api.pendientesGestion().subscribe({
+        next: (p) => {
+          this.aperturas.set(p.aperturas);
+          this.cierres.set(p.cierres);
+          this.retiros.set(p.retiros);
+          this.depositos.set(p.depositos);
+          this.creditos.set(p.creditos);
+          this.cupos.set(p.cupos);
+        },
+        error: () => undefined,
+      });
     }
   }
 

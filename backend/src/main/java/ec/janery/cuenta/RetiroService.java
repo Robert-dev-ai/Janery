@@ -179,13 +179,24 @@ public class RetiroService {
 
     @Transactional(readOnly = true)
     public List<Vista> misSolicitudes(Long usuarioId) {
-        return solicitudes.findByPersonaIdOrderByIdDesc(personaDe(usuarioId)).stream().map(this::vista).toList();
+        return precargar(solicitudes.findByPersonaIdOrderByIdDesc(personaDe(usuarioId))).stream().map(this::vista).toList();
     }
 
     @Transactional(readOnly = true)
     public Page<Vista> listar(String estado, int pagina, int tamano) {
         PageRequest orden = PageRequest.of(pagina, tamano, Sort.by(Sort.Direction.DESC, "id"));
-        return (estado == null ? solicitudes.findAll(orden) : solicitudes.findByEstado(estado, orden)).map(this::vista);
+        Page<SolicitudRetiro> page = estado == null ? solicitudes.findAll(orden) : solicitudes.findByEstado(estado, orden);
+        precargar(page.getContent());
+        return page.map(this::vista);
+    }
+
+    /** Cuentas y personas de todo el listado en dos consultas: luego vista() las toma de memoria. */
+    private List<SolicitudRetiro> precargar(List<SolicitudRetiro> lista) {
+        if (!lista.isEmpty()) {
+            cuentasRepo.findAllById(lista.stream().map(SolicitudRetiro::getCuentaId).collect(java.util.stream.Collectors.toSet()));
+            personas.precargar(lista.stream().map(SolicitudRetiro::getPersonaId).toList());
+        }
+        return lista;
     }
 
     private void liberar(CuentaPrincipal cuenta, SolicitudRetiro s, String estado, String motivo, Long actorId) {

@@ -22,6 +22,30 @@ export interface MesCaja {
   cerrado: boolean;
 }
 
+/** Números de la campana; lo que el cargo no puede atender llega en cero. */
+export interface PendientesGestion {
+  aperturas: number;
+  cierres: number;
+  retiros: number;
+  depositos: number;
+  creditos: number;
+  cupos: number;
+}
+
+/** Cantidad por estado; un estado sin registros no aparece. */
+export interface ConteosPanel {
+  creditos: Record<string, number>;
+  cuentas: Record<string, number>;
+  retiros: number;
+  depositos: number;
+}
+
+export interface PendientesPersonales {
+  letrasAtrasadas: number;
+  retiros: number;
+  depositos: number;
+}
+
 export interface InfoApp {
   version: string;
   telefono: string;
@@ -1226,6 +1250,18 @@ export class ApiService {
 
   anuncio(): Observable<Anuncio> {
     return this.http.get<Anuncio>(`${this.base}/anuncio`);
+  }
+
+  pendientesGestion(): Observable<PendientesGestion> {
+    return this.http.get<PendientesGestion>(`${this.base}/pendientes/gestion`);
+  }
+
+  conteosPanel(): Observable<ConteosPanel> {
+    return this.http.get<ConteosPanel>(`${this.base}/admin/panel/conteos`);
+  }
+
+  pendientesPersonales(): Observable<PendientesPersonales> {
+    return this.http.get<PendientesPersonales>(`${this.base}/pendientes/me`);
   }
 
   publicarAnuncio(texto: string): Observable<Anuncio> {

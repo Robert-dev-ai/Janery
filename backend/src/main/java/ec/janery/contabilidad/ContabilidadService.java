@@ -136,10 +136,19 @@ public class ContabilidadService {
     @Transactional(readOnly = true)
     public List<MesResultado> evolucion(int meses) {
         YearMonth actual = YearMonth.now(reloj.withZone(ZONA));
+        // Todos los meses en una consulta, agrupados por mes y línea.
+        Map<String, Map<String, BigDecimal>> porMes = new HashMap<>();
+        jdbc.sql("""
+                SELECT to_char(fecha AT TIME ZONE 'America/Guayaquil', 'YYYY-MM') AS mes, linea, SUM(importe) AS total
+                FROM libro_contable WHERE fecha >= :desde AND fecha < :hasta GROUP BY 1, 2
+                """).param("desde", inicio(actual.minusMonths(meses - 1L))).param("hasta", inicio(actual.plusMonths(1)))
+                .query(rs -> {
+                    porMes.computeIfAbsent(rs.getString("mes"), k -> new HashMap<>()).put(rs.getString("linea"), rs.getBigDecimal("total"));
+                });
         List<MesResultado> filas = new ArrayList<>();
         for (int i = meses - 1; i >= 0; i--) {
             YearMonth p = actual.minusMonths(i);
-            Map<String, BigDecimal> mes = sumas(inicio(p), inicio(p.plusMonths(1)));
+            Map<String, BigDecimal> mes = porMes.getOrDefault(p.toString(), Map.of());
             BigDecimal g = sumar(mes, GANANCIAS);
             BigDecimal c = sumar(mes, GASTOS);
             filas.add(new MesResultado(p.toString(), g, c, g.subtract(c)));

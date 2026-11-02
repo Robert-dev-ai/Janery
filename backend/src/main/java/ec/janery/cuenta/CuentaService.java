@@ -56,6 +56,8 @@ public class CuentaService {
 
     interface DepositoRepository extends JpaRepository<DepositoApertura, Long> {
         Optional<DepositoApertura> findByCuentaId(Long cuentaId);
+
+        List<DepositoApertura> findByCuentaIdIn(java.util.Collection<Long> cuentaIds);
     }
 
     interface MovimientoRepository extends JpaRepository<MovimientoCuenta, Long> {
@@ -350,7 +352,14 @@ public class CuentaService {
     public Page<CuentaVista> listar(String estado, int pagina, int tamano) {
         Pageable pageable = PageRequest.of(pagina, tamano, Sort.by(Sort.Direction.DESC, "id"));
         Page<CuentaPrincipal> page = estado == null ? cuentas.findAll(pageable) : cuentas.findByEstado(estado, pageable);
-        return page.map(this::vista);
+        if (page.isEmpty()) {
+            return page.map(this::vista);
+        }
+        // Personas y depósitos de la página en dos consultas, no dos por cuenta.
+        personas.precargar(page.getContent().stream().map(CuentaPrincipal::getPersonaId).toList());
+        Map<Long, DepositoApertura> porCuenta = depositos.findByCuentaIdIn(page.getContent().stream().map(CuentaPrincipal::getId).toList())
+                .stream().collect(java.util.stream.Collectors.toMap(DepositoApertura::getCuentaId, d -> d, (a, b) -> a));
+        return page.map(c -> vista(c, Optional.ofNullable(porCuenta.get(c.getId()))));
     }
 
     /** Saldo guardado y saldo según el libro, en ese orden. Deben coincidir siempre. */
@@ -362,7 +371,11 @@ public class CuentaService {
     }
 
     private CuentaVista vista(CuentaPrincipal cuenta) {
-        BigDecimal reembolsable = depositos.findByCuentaId(cuenta.getId())
+        return vista(cuenta, depositos.findByCuentaId(cuenta.getId()));
+    }
+
+    private CuentaVista vista(CuentaPrincipal cuenta, Optional<DepositoApertura> deposito) {
+        BigDecimal reembolsable = deposito
                 .filter(d -> d.getDevueltoEn() == null)
                 .map(DepositoApertura::getImporteReembolsable)
                 .orElse(null);

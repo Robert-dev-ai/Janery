@@ -40,9 +40,10 @@ describe('AdminPanel', () => {
 
   it('dibuja los créditos por estado con los totales del backend', () => {
     const fixture = abrir(['APROBAR_CREDITOS']);
-    for (const [estado, total] of [['SOLICITADO', 2], ['ACTIVO', 4], ['FINALIZADO', 0], ['RECHAZADO', 1]] as const) {
-      http.expectOne(`${api}/admin/creditos?pagina=0&estado=${estado}`).flush({ contenido: [], pagina: 0, tamano: 20, total });
-    }
+    // FINALIZADO no viene: el backend omite los estados sin créditos.
+    http.expectOne(`${api}/admin/panel/conteos`).flush({
+      creditos: { SOLICITADO: 2, ACTIVO: 4, RECHAZADO: 1 }, cuentas: {}, retiros: 0, depositos: 0,
+    });
     fixture.detectChanges();
 
     const filas = fixture.nativeElement.querySelectorAll('.grafico-fila');

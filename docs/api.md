@@ -69,6 +69,12 @@
 - `GET /ahorros/productos`: tasa normal y plazos fijos. `POST /ahorros/{id}/interes`: retira el interés liberado; requiere `Idempotency-Key`.
 - `GET /admin/resultados/en-espera` (`GESTIONAR_RESULTADOS`): ganancia y pérdida que aún no se pueden repartir entre los socios.
 
+### Conteos para la campana y el panel
+Solo números, en una consulta: lo que el cargo no puede atender llega en cero o vacío.
+- `GET /pendientes/gestion` (`GESTIONAR_CUENTAS` o `APROBAR_CREDITOS`): aperturas, cierres, retiros, depósitos, créditos y cupos por atender.
+- `GET /pendientes/me`: letras atrasadas, retiros y depósitos pendientes de la persona.
+- `GET /admin/panel/conteos`: créditos y cuentas por estado (un estado sin registros no aparece), retiros y depósitos pendientes.
+
 ### CMS y áreas
 - `GET /admin/parametros`
 - `POST /admin/parametros`

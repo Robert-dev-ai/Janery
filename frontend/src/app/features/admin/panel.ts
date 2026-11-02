@@ -2,7 +2,6 @@ import { CurrencyPipe, DatePipe } from '@angular/common';
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { HandCoins, Landmark, LucideAngularModule, Receipt, TriangleAlert, Users, Wallet } from 'lucide-angular';
-import { forkJoin } from 'rxjs';
 
 import { AuthService } from '../../core/auth/auth';
 import { ApiService, EstadoContable, EventoAuditoria, SeccionContable } from '../../core/services/api';
@@ -178,21 +177,25 @@ export class AdminPanel implements OnInit {
         this.sociosConObligaciones.set(s.filter((x) => x.obligacionesPendientes > 0).length);
       }, error: fallo });
     }
-    if (this.auth.tienePermiso('APROBAR_CREDITOS')) {
-      forkJoin(ESTADOS_CREDITO.map((e) => this.api.creditosAdmin(e.estado, 0))).subscribe({
-        next: (r) => this.creditos.set(r.map((d, i) => ({ etiqueta: ESTADOS_CREDITO[i].etiqueta, valor: d.total, texto: `${d.total}` }))),
+    const creditos = this.auth.tienePermiso('APROBAR_CREDITOS');
+    const cuentas = this.auth.tienePermiso('GESTIONAR_CUENTAS');
+    if (creditos || cuentas) {
+      // Todos los totales en una sola petición.
+      this.api.conteosPanel().subscribe({
+        next: (c) => {
+          const barras = (estados: { estado: string; etiqueta: string }[], totales: Record<string, number>) =>
+            estados.map((e) => ({ etiqueta: e.etiqueta, valor: totales[e.estado] ?? 0, texto: `${totales[e.estado] ?? 0}` }));
+          if (creditos) {
+            this.creditos.set(barras(ESTADOS_CREDITO, c.creditos));
+          }
+          if (cuentas) {
+            this.cuentas.set(barras(ESTADOS_CUENTA, c.cuentas));
+            this.retiros.set(c.retiros);
+            this.depositos.set(c.depositos);
+          }
+        },
         error: fallo,
       });
-    }
-    if (this.auth.tienePermiso('GESTIONAR_CUENTAS')) {
-      forkJoin(ESTADOS_CUENTA.map((e) => this.api.cuentas(e.estado, 0))).subscribe({
-        next: (r) => this.cuentas.set(r.map((d, i) => ({ etiqueta: ESTADOS_CUENTA[i].etiqueta, valor: d.total, texto: `${d.total}` }))),
-        error: fallo,
-      });
-    }
-    if (this.auth.tienePermiso('GESTIONAR_CUENTAS')) {
-      this.api.solicitudesRetiro('PENDIENTE', 0).subscribe({ next: (d) => this.retiros.set(d.total), error: fallo });
-      this.api.solicitudesDeposito('PENDIENTE', 0).subscribe({ next: (d) => this.depositos.set(d.total), error: fallo });
     }
     if (this.auth.tienePermiso('CONSULTAR_CONTABILIDAD')) {
       this.api.estadoContable(null).subscribe({ next: (e) => this.contable.set(e), error: fallo });

@@ -140,13 +140,26 @@ public class DepositoService {
 
     @Transactional(readOnly = true)
     public List<Vista> misSolicitudes(Long usuarioId) {
-        return solicitudes.findByPersonaIdOrderByIdDesc(personaDe(usuarioId)).stream().map(this::vista).toList();
+        return vistas(solicitudes.findByPersonaIdOrderByIdDesc(personaDe(usuarioId)));
     }
 
     @Transactional(readOnly = true)
     public Page<Vista> listar(String estado, int pagina, int tamano) {
         PageRequest orden = PageRequest.of(pagina, tamano, Sort.by(Sort.Direction.DESC, "id"));
-        return (estado == null ? solicitudes.findAll(orden) : solicitudes.findByEstado(estado, orden)).map(this::vista);
+        Page<SolicitudDeposito> page = estado == null ? solicitudes.findAll(orden) : solicitudes.findByEstado(estado, orden);
+        return new org.springframework.data.domain.PageImpl<>(vistas(page.getContent()), page.getPageable(), page.getTotalElements());
+    }
+
+    /** Cuentas, personas y comprobantes de todo el listado en tres consultas, no tres por fila. */
+    private List<Vista> vistas(List<SolicitudDeposito> lista) {
+        if (lista.isEmpty()) {
+            return List.of();
+        }
+        cuentasRepo.findAllById(lista.stream().map(SolicitudDeposito::getCuentaId).collect(java.util.stream.Collectors.toSet()));
+        personas.precargar(lista.stream().map(SolicitudDeposito::getPersonaId).toList());
+        java.util.Map<Long, Long> cantidades = comprobantes.cantidades(ComprobanteService.DEPOSITO,
+                lista.stream().map(SolicitudDeposito::getId).toList());
+        return lista.stream().map(s -> vista(s, cantidades.getOrDefault(s.getId(), 0L))).toList();
     }
 
     private SolicitudDeposito pendienteBloqueada(Long id) {
@@ -170,10 +183,14 @@ public class DepositoService {
     }
 
     private Vista vista(SolicitudDeposito s) {
+        return vista(s, comprobantes.cantidad(ComprobanteService.DEPOSITO, s.getId()));
+    }
+
+    private Vista vista(SolicitudDeposito s, long cantidadComprobantes) {
         String numero = cuentasRepo.findById(s.getCuentaId()).map(CuentaPrincipal::getNumero).orElse(null);
         return new Vista(s.getId(), numero, personas.nombreCompleto(s.getPersonaId()), s.getImporte(), s.getMedio(), s.getReferencia(),
                 s.getEstado(), s.getMotivo(), s.getCreadoEn(), s.getResueltaEn(), ec.janery.common.Codigos.deposito(s.getId()),
-                comprobantes.cantidad(ComprobanteService.DEPOSITO, s.getId()));
+                cantidadComprobantes);
     }
 
     /** Un depósito por confirmar acabaría en una cuenta ya cerrada: se resuelve antes. */

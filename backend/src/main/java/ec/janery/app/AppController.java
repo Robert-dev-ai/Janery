@@ -5,6 +5,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -82,8 +83,90 @@ public class AppController {
         return info;
     }
 
+    /** Lo que espera a alguien de la gestión. Lo que su cargo no puede atender sale en cero. */
+    public record PendientesGestion(long aperturas, long cierres, long retiros, long depositos, long creditos, long cupos) {
+    }
+
+    /** Lo que atañe a la persona en su panel. */
+    public record PendientesPersonales(long letrasAtrasadas, long retiros, long depositos) {
+    }
+
+    /**
+     * Los números de la campana en una sola consulta: se piden con cada aviso en vivo. Estas lecturas de una sola
+     * sentencia van sin transacción, que añadiría un viaje a la base para el COMMIT.
+     */
+    @GetMapping("/pendientes/gestion")
+    public PendientesGestion pendientesGestion(org.springframework.security.core.Authentication auth) {
+        boolean cuentas = tiene(auth, "GESTIONAR_CUENTAS");
+        boolean creditos = tiene(auth, "APROBAR_CREDITOS");
+        if (!cuentas && !creditos) {
+            return new PendientesGestion(0, 0, 0, 0, 0, 0);
+        }
+        return jdbc.sql("""
+                SELECT (SELECT count(*) FROM cuentas_principales WHERE estado = 'PENDIENTE_PAGO'),
+                       (SELECT count(*) FROM cuentas_principales WHERE estado = 'PENDIENTE_CIERRE'),
+                       (SELECT count(*) FROM solicitudes_retiro WHERE estado = 'PENDIENTE'),
+                       (SELECT count(*) FROM solicitudes_deposito WHERE estado = 'PENDIENTE'),
+                       (SELECT count(*) FROM creditos WHERE estado = 'SOLICITADO'),
+                       (SELECT count(*) FROM solicitudes_cupo WHERE estado = 'PENDIENTE')
+                """).query((rs, n) -> new PendientesGestion(cuentas ? rs.getLong(1) : 0, cuentas ? rs.getLong(2) : 0,
+                        cuentas ? rs.getLong(3) : 0, cuentas ? rs.getLong(4) : 0, creditos ? rs.getLong(5) : 0,
+                        creditos ? rs.getLong(6) : 0)).single();
+    }
+
+    /** Una letra está atrasada como en CuotaCredito.diasAtraso: sin pagar y con la mora corriendo desde su vencimiento. */
+    @GetMapping("/pendientes/me")
+    public PendientesPersonales pendientesPersonales(@AuthenticationPrincipal Jwt jwt) {
+        return jdbc.sql("""
+                SELECT (SELECT count(*) FROM cuotas_credito q JOIN creditos c ON c.id = q.credito_id
+                        WHERE c.persona_id = p.id AND c.estado = 'ACTIVO' AND q.pagada_en IS NULL
+                        AND COALESCE(q.mora_hasta, :hoy) > q.vencimiento),
+                       (SELECT count(*) FROM solicitudes_retiro r WHERE r.persona_id = p.id AND r.estado = 'PENDIENTE'),
+                       (SELECT count(*) FROM solicitudes_deposito d WHERE d.persona_id = p.id AND d.estado = 'PENDIENTE')
+                FROM personas p WHERE p.usuario_id = :usuario
+                """).param("hoy", LocalDate.now(reloj)).param("usuario", Long.valueOf(jwt.getSubject()))
+                .query((rs, n) -> new PendientesPersonales(rs.getLong(1), rs.getLong(2), rs.getLong(3))).optional()
+                .orElse(new PendientesPersonales(0, 0, 0));
+    }
+
+    /** Cuántos créditos y cuentas hay en cada estado, y los retiros y depósitos por atender. Lo no autorizado va vacío. */
+    public record ConteosPanel(Map<String, Long> creditos, Map<String, Long> cuentas, long retiros, long depositos) {
+    }
+
+    /** Los totales del panel en una consulta, en vez de pedir una página de cada listado solo para leer su total. */
+    @GetMapping("/admin/panel/conteos")
+    public ConteosPanel conteosPanel(org.springframework.security.core.Authentication auth) {
+        boolean creditos = tiene(auth, "APROBAR_CREDITOS");
+        boolean cuentas = tiene(auth, "GESTIONAR_CUENTAS");
+        Map<String, Long> porCredito = new java.util.HashMap<>();
+        Map<String, Long> porCuenta = new java.util.HashMap<>();
+        long[] solicitudes = new long[2];
+        if (creditos || cuentas) {
+            jdbc.sql("""
+                    SELECT 'CREDITO' AS tabla, estado, count(*) AS total FROM creditos GROUP BY estado
+                    UNION ALL SELECT 'CUENTA', estado, count(*) FROM cuentas_principales GROUP BY estado
+                    UNION ALL SELECT 'RETIRO', estado, count(*) FROM solicitudes_retiro WHERE estado = 'PENDIENTE' GROUP BY estado
+                    UNION ALL SELECT 'DEPOSITO', estado, count(*) FROM solicitudes_deposito WHERE estado = 'PENDIENTE' GROUP BY estado
+                    """).query(rs -> {
+                        long total = rs.getLong("total");
+                        switch (rs.getString("tabla")) {
+                            case "CREDITO" -> porCredito.put(rs.getString("estado"), total);
+                            case "CUENTA" -> porCuenta.put(rs.getString("estado"), total);
+                            case "RETIRO" -> solicitudes[0] = total;
+                            default -> solicitudes[1] = total;
+                        }
+                    });
+        }
+        return new ConteosPanel(creditos ? porCredito : Map.of(), cuentas ? porCuenta : Map.of(),
+                cuentas ? solicitudes[0] : 0, cuentas ? solicitudes[1] : 0);
+    }
+
+    private static boolean tiene(org.springframework.security.core.Authentication auth, String permiso) {
+        return auth.getAuthorities().stream().anyMatch(a -> ("SCOPE_" + permiso).equals(a.getAuthority()));
+    }
+
     @GetMapping("/anuncio")
-    @Transactional(readOnly = true)
+    // Una sola sentencia: sin transacción se ahorra el viaje del COMMIT.
     public AnuncioResponse anuncio() {
         return jdbc.sql("SELECT texto, creado_en FROM anuncios ORDER BY id DESC LIMIT 1")
                 .query((rs, n) -> new AnuncioResponse(rs.getString(1), rs.getTimestamp(2).toInstant())).optional()

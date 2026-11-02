@@ -130,6 +130,16 @@ La estructura es una guía inicial, no una obligación de crear carpetas vacías
 - Configurar conexión mediante variables de entorno.
 - No guardar claves reales en `application.yml`, repositorio ni documentación.
 
+### Rendimiento con Neon
+
+La base está en Neon (`us-east-2`): cada consulta es un viaje de unos 90 ms. Lo que hace lenta una pantalla es el número de consultas, no su tamaño. Reglas:
+
+- Un listado no consulta por fila. Se cargan los datos relacionados de toda la página de una vez: `PersonaService.precargar(ids)` deja las personas en memoria para que `nombreCompleto` no vuelva a la base, y los repositorios tienen variantes `...In(ids)` o consultas agrupadas (`ParticipacionService.resumenes`, `CreditoService.vistas`).
+- Varios parámetros se leen con `ParametroService.valoresVigentes(codigos)`, en una consulta.
+- Una pantalla que solo necesita totales los pide a un endpoint de conteos (`/admin/panel/conteos`, `/pendientes/gestion`, `/pendientes/me`), no descarga páginas de listados.
+- Una lectura de una sola sentencia va sin `@Transactional`: la transacción añade el viaje del `COMMIT`.
+- Al arrancar, `JaneryApplication` amplía a 30 s la ventana en que Hikari no revalida una conexión recién usada.
+
 ## 6. Construcción del proyecto
 
 Usar Spring Initializr o Maven para generar el backend con dependencias acordadas; usar Angular CLI para el frontend. Registrar los comandos y versiones efectivamente utilizados en `docs/setup.md` o README final.

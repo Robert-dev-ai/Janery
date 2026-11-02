@@ -12,6 +12,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.web.bind.annotation.CookieValue;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -25,8 +26,6 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import ec.janery.common.NegocioException;
-import ec.janery.cuenta.CuentaService;
-import ec.janery.persona.PersonaService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
@@ -73,22 +72,15 @@ public class AuthController {
     private static final String RUTA_COOKIE = "/api/v1/auth";
 
     private final AuthService service;
-    private final Repositorios.UsuarioRepository usuarios;
-    private final PersonaService personas;
-    private final CuentaService cuentas;
-    private final ec.janery.socio.SocioService socios;
     private final FotoService fotos;
+    private final JdbcClient jdbc;
     private final boolean cookieSegura;
 
-    AuthController(AuthService service, Repositorios.UsuarioRepository usuarios, PersonaService personas,
-            CuentaService cuentas, ec.janery.socio.SocioService socios, FotoService fotos,
+    AuthController(AuthService service, FotoService fotos, JdbcClient jdbc,
             @Value("${janery.cookie-segura}") boolean cookieSegura) {
-        this.socios = socios;
-        this.fotos = fotos;
         this.service = service;
-        this.usuarios = usuarios;
-        this.personas = personas;
-        this.cuentas = cuentas;
+        this.fotos = fotos;
+        this.jdbc = jdbc;
         this.cookieSegura = cookieSegura;
     }
 
@@ -147,15 +139,33 @@ public class AuthController {
     @GetMapping("/me")
     public YoResponse yo(@AuthenticationPrincipal Jwt jwt) {
         Long id = Long.valueOf(jwt.getSubject());
-        Usuario usuario = usuarios.findById(id)
-                .orElseThrow(() -> NegocioException.noEncontrado("Usuario no encontrado"));
-        // Primer nombre, con mayúscula inicial aunque se haya registrado todo en mayúsculas.
-        String nombre = personas.dePorUsuario(id).map(p -> p.getNombres().trim().split("\\s+")[0])
-                .map(n -> n.substring(0, 1).toUpperCase(java.util.Locale.ROOT) + n.substring(1).toLowerCase(java.util.Locale.ROOT))
-                .orElse(null);
-        return new YoResponse(id, usuario.getCorreo(), usuarios.cargosVigentes(id), usuarios.permisosVigentes(id),
-                personas.tienePerfil(id), cuentas.estadoCuentaVigente(id).orElse(null), socios.usuarioEsSocio(id),
-                nombre, fotos.tiene(id), usuario.isDebeCambiarContrasena());
+        // Una sola consulta: se pide al entrar y con cada aviso en vivo, y cada viaje a la base cuesta.
+        return jdbc.sql("""
+                SELECT u.correo, u.debe_cambiar_contrasena, u.foto IS NOT NULL AS tiene_foto, p.id AS persona_id, p.nombres,
+                       (SELECT c.estado FROM cuentas_principales c
+                        WHERE c.persona_id = p.id AND c.estado NOT IN ('CERRADA', 'RECHAZADA') LIMIT 1) AS estado_cuenta,
+                       EXISTS (SELECT 1 FROM socios s WHERE s.persona_id = p.id AND s.estado = 'ACTIVO') AS es_socio,
+                       ARRAY(SELECT c.codigo FROM usuario_cargos uc JOIN cargos c ON c.id = uc.cargo_id
+                             WHERE uc.usuario_id = u.id AND uc.hasta IS NULL ORDER BY c.codigo) AS cargos,
+                       ARRAY(SELECT DISTINCT pe.codigo FROM usuario_cargos uc
+                             JOIN cargo_permisos cp ON cp.cargo_id = uc.cargo_id JOIN permisos pe ON pe.id = cp.permiso_id
+                             WHERE uc.usuario_id = u.id AND uc.hasta IS NULL ORDER BY pe.codigo) AS permisos
+                FROM usuarios u LEFT JOIN personas p ON p.usuario_id = u.id WHERE u.id = :id
+                """).param("id", id).query((rs, n) -> new YoResponse(id, rs.getString("correo"),
+                        List.of((String[]) rs.getArray("cargos").getArray()),
+                        List.of((String[]) rs.getArray("permisos").getArray()),
+                        rs.getObject("persona_id") != null, rs.getString("estado_cuenta"), rs.getBoolean("es_socio"),
+                        primerNombre(rs.getString("nombres")), rs.getBoolean("tiene_foto"), rs.getBoolean("debe_cambiar_contrasena")))
+                .optional().orElseThrow(() -> NegocioException.noEncontrado("Usuario no encontrado"));
+    }
+
+    /** Primer nombre, con mayúscula inicial aunque se haya registrado todo en mayúsculas. */
+    private static String primerNombre(String nombres) {
+        if (nombres == null) {
+            return null;
+        }
+        String n = nombres.trim().split("\\s+")[0];
+        return n.substring(0, 1).toUpperCase(java.util.Locale.ROOT) + n.substring(1).toLowerCase(java.util.Locale.ROOT);
     }
 
     @GetMapping("/foto")

@@ -123,6 +123,14 @@ public class CreditoService {
                 order by q.vencimiento, q.numero
                 """)
         List<CuotaCredito> vencidas(@Param("personaId") Long personaId, @Param("hoy") LocalDate hoy);
+
+        /** Como vencidas(), de varias personas, con su crédito al lado. */
+        @Query("""
+                select q, c from CuotaCredito q, Credito c where c.id = q.creditoId and c.personaId in :personaIds
+                and c.estado = 'ACTIVO' and q.pagadaEn is null and q.vencimiento < :hoy
+                order by q.vencimiento, q.numero
+                """)
+        List<Object[]> vencidasDe(@Param("personaIds") java.util.Collection<Long> personaIds, @Param("hoy") LocalDate hoy);
     }
 
     interface DesembolsoRepository extends JpaRepository<DesembolsoCredito, Long> {
@@ -558,18 +566,25 @@ public class CreditoService {
 
     @Transactional(readOnly = true)
     public List<SolicitudCupoVista> misSolicitudesCupo(Long usuarioId) {
-        return solicitudesCupo.findByPersonaIdOrderByIdDesc(personaDe(usuarioId)).stream().map(this::vistaSolicitud).toList();
+        return vistasSolicitud(solicitudesCupo.findByPersonaIdOrderByIdDesc(personaDe(usuarioId)));
     }
 
     @Transactional(readOnly = true)
     public List<SolicitudCupoVista> solicitudesCupoPendientes() {
-        return solicitudesCupo.findByEstadoOrderById(PENDIENTE).stream().map(this::vistaSolicitud).toList();
+        return vistasSolicitud(solicitudesCupo.findByEstadoOrderById(PENDIENTE));
     }
 
-    private SolicitudCupoVista vistaSolicitud(SolicitudCupo s) {
-        return new SolicitudCupoVista(s.getId(), personas.nombreCompleto(s.getPersonaId()), s.getImporte(), s.getPromocion(),
-                s.getEstado(), s.getMotivo(), s.getCreadoEn(), ec.janery.common.Codigos.cupo(s.getId()),
-                aprobaciones.votos(AprobacionService.CUPO, List.of(s.getId())).getOrDefault(s.getId(), List.of()));
+    /** Personas y votos de todas las solicitudes de una vez. */
+    private List<SolicitudCupoVista> vistasSolicitud(List<SolicitudCupo> lista) {
+        if (lista.isEmpty()) {
+            return List.of();
+        }
+        personas.precargar(lista.stream().map(SolicitudCupo::getPersonaId).toList());
+        Map<Long, List<AprobacionService.Voto>> votos = aprobaciones.votos(AprobacionService.CUPO,
+                lista.stream().map(SolicitudCupo::getId).toList());
+        return lista.stream().map(s -> new SolicitudCupoVista(s.getId(), personas.nombreCompleto(s.getPersonaId()), s.getImporte(),
+                s.getPromocion(), s.getEstado(), s.getMotivo(), s.getCreadoEn(), ec.janery.common.Codigos.cupo(s.getId()),
+                votos.getOrDefault(s.getId(), List.of()))).toList();
     }
 
     private Credito lineaGeneral(Long personaId) {
@@ -901,6 +916,23 @@ public class CreditoService {
         }).toList();
     }
 
+    /** cuotasVencidas() de varias personas en una consulta, para los listados. Quien no tiene, no aparece. */
+    @Transactional(readOnly = true)
+    public Map<Long, List<CuotaVencida>> cuotasVencidas(java.util.Collection<Long> personaIds) {
+        Map<Long, List<CuotaVencida>> resultado = new java.util.HashMap<>();
+        if (personaIds.isEmpty()) {
+            return resultado;
+        }
+        LocalDate hoy = hoy();
+        for (Object[] f : cuotas.vencidasDe(personaIds, hoy)) {
+            CuotaCredito q = (CuotaCredito) f[0];
+            Credito c = (Credito) f[1];
+            resultado.computeIfAbsent(c.getPersonaId(), k -> new java.util.ArrayList<>()).add(new CuotaVencida(q.getCreditoId(),
+                    q.getId(), q.getNumero(), q.getVencimiento(), c.getFamilia(), c.getModalidad(), deudaDe(q, c, hoy)));
+        }
+        return resultado;
+    }
+
     @Transactional(readOnly = true)
     public List<CreditoVista> misCreditos(Long usuarioId) {
         return vistas(creditos.findByPersonaIdOrderByIdDesc(personaDe(usuarioId)));
@@ -916,7 +948,9 @@ public class CreditoService {
     @Transactional(readOnly = true)
     public Page<CreditoVista> listar(String estado, int pagina, int tamano) {
         Pageable pageable = PageRequest.of(pagina, tamano, Sort.by(Sort.Direction.DESC, "id"));
-        return (estado == null ? creditos.findAll(pageable) : creditos.findByEstado(estado, pageable)).map(this::vista);
+        Page<Credito> page = estado == null ? creditos.findAll(pageable) : creditos.findByEstado(estado, pageable);
+        // Toda la página de una vez: vista() de uno en uno repetiría cinco consultas por crédito.
+        return new org.springframework.data.domain.PageImpl<>(vistas(page.getContent()), pageable, page.getTotalElements());
     }
 
     private CreditoVista vista(Credito c) {
@@ -939,6 +973,7 @@ public class CreditoService {
         Map<Long, List<AprobacionService.Voto>> votos = aprobaciones.votos(AprobacionService.CREDITO, solicitados);
         Map<Long, Long> docs = documentos.contarPorCredito(ids).stream()
                 .collect(java.util.stream.Collectors.toMap(f -> (Long) f[0], f -> (Long) f[1]));
+        personas.precargar(lista.stream().map(Credito::getPersonaId).toList());
         return lista.stream().map(c -> vista(c, porCredito.getOrDefault(c.getId(), List.of()), encajesPorCredito.get(c.getId()),
                 ahorrosPorCredito.get(c.getId()), votos.getOrDefault(c.getId(), List.of()), docs.getOrDefault(c.getId(), 0L))).toList();
     }

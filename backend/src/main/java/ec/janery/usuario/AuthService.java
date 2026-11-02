@@ -40,7 +40,6 @@ public class AuthService {
     private final Repositorios.UsuarioRepository usuarios;
     private final Repositorios.TokenRefrescoRepository tokens;
     private final Repositorios.RestablecimientoRepository restablecimientos;
-    private final ec.janery.socio.SocioService socios;
     private final PasswordEncoder encoder;
     private final JwtEncoder jwtEncoder;
     private final AuditoriaService auditoria;
@@ -52,14 +51,13 @@ public class AuthService {
     private final SecureRandom aleatorio = new SecureRandom();
 
     AuthService(Repositorios.UsuarioRepository usuarios, Repositorios.TokenRefrescoRepository tokens,
-            Repositorios.RestablecimientoRepository restablecimientos, ec.janery.socio.SocioService socios,
+            Repositorios.RestablecimientoRepository restablecimientos,
             PasswordEncoder encoder, JwtEncoder jwtEncoder, AuditoriaService auditoria, PersonaService personas, Clock reloj,
             @Value("${janery.jwt.access-minutos}") long accessMinutos,
             @Value("${janery.jwt.refresh-dias}") long refreshDias) {
         this.usuarios = usuarios;
         this.tokens = tokens;
         this.restablecimientos = restablecimientos;
-        this.socios = socios;
         this.encoder = encoder;
         this.jwtEncoder = jwtEncoder;
         this.auditoria = auditoria;
@@ -245,11 +243,7 @@ public class AuthService {
 
     /** Los permisos de sus cargos, y SOCIO para consultar las finanzas: los socios ven, pero no registran. */
     private java.util.List<String> alcances(Long usuarioId) {
-        java.util.List<String> alcances = new java.util.ArrayList<>(usuarios.permisosVigentes(usuarioId));
-        if (socios.usuarioEsSocio(usuarioId)) {
-            alcances.add("SOCIO");
-        }
-        return alcances;
+        return usuarios.alcances(usuarioId);
     }
 
     private Sesion emitir(Usuario usuario) {

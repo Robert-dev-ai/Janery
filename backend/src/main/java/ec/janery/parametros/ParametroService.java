@@ -33,18 +33,16 @@ public class ParametroService {
 
     interface ValorRepository extends JpaRepository<ParametroValor, Long> {
         @Query("""
-                select v from ParametroValor v where v.parametroId = :parametroId and v.vigenteDesde <= :ahora
-                and (v.vigenteHasta is null or v.vigenteHasta > :ahora)
-                """)
-        Optional<ParametroValor> vigente(@Param("parametroId") Long parametroId, @Param("ahora") Instant ahora);
-
-        @Query("""
                 select p.codigo, v.valor from ParametroValor v, ParametroSistema p where v.parametroId = p.id
                 and p.codigo in :codigos and v.vigenteDesde <= :ahora and (v.vigenteHasta is null or v.vigenteHasta > :ahora)
                 """)
         List<Object[]> vigentes(@Param("codigos") java.util.Collection<String> codigos, @Param("ahora") Instant ahora);
 
         Optional<ParametroValor> findByParametroIdAndVigenteHastaIsNull(Long parametroId);
+
+        /** El valor vigente y el programado de todos los parámetros: los que aún no se han cerrado antes de ahora. */
+        @Query("select v from ParametroValor v where v.vigenteHasta is null or v.vigenteHasta > :ahora")
+        List<ParametroValor> noVencidos(@Param("ahora") Instant ahora);
     }
 
     interface HistorialRepository extends JpaRepository<HistorialParametro, Long> {
@@ -78,23 +76,24 @@ public class ParametroService {
     /** Valor oficial vigente ahora. Falla si el parámetro no tiene valor: nunca se usa uno supuesto. */
     @Transactional(readOnly = true)
     public BigDecimal valorVigente(String codigo) {
-        ParametroSistema parametro = parametros.findByCodigo(codigo)
-                .orElseThrow(() -> new IllegalStateException("Parámetro inexistente: " + codigo));
-        return valores.vigente(parametro.getId(), Instant.now(reloj))
-                .map(ParametroValor::getValor)
-                .orElseThrow(() -> NegocioException.conflicto("PARAMETRO_SIN_VALOR",
-                        "El parámetro " + codigo + " no tiene un valor vigente"));
+        // Una sola consulta: este método se llama en casi todas las operaciones.
+        return valoresVigentes(List.of(codigo)).get(codigo);
     }
 
     @Transactional(readOnly = true)
     public List<ParametroVista> listar() {
         Instant ahora = Instant.now(reloj);
+        java.util.Map<Long, List<ParametroValor>> porParametro = valores.noVencidos(ahora).stream()
+                .collect(java.util.stream.Collectors.groupingBy(ParametroValor::getParametroId));
         return parametros.findAll().stream()
                 .filter(ParametroSistema::isActivo)
                 .sorted(java.util.Comparator.comparing(ParametroSistema::getCodigo))
                 .map(p -> {
-                    ParametroValor vigente = valores.vigente(p.getId(), ahora).orElse(null);
-                    ParametroValor abierto = valores.findByParametroIdAndVigenteHastaIsNull(p.getId()).orElse(null);
+                    List<ParametroValor> propios = porParametro.getOrDefault(p.getId(), List.of());
+                    ParametroValor vigente = propios.stream().filter(v -> !v.getVigenteDesde().isAfter(ahora))
+                            .findFirst().orElse(null);
+                    ParametroValor abierto = propios.stream().filter(v -> v.getVigenteHasta() == null)
+                            .findFirst().orElse(null);
                     boolean programado = abierto != null && abierto.getVigenteDesde().isAfter(ahora);
                     return new ParametroVista(p, vigente, programado ? abierto : null);
                 })

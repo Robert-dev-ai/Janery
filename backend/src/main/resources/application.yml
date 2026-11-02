@@ -35,6 +35,10 @@ spring:
 
 server:
   port: ${JANERY_SERVER_PORT:8080}
+  # Comprime las respuestas JSON grandes (listados, informes). Los eventos en vivo no se comprimen.
+  compression:
+    enabled: true
+    min-response-size: 1KB
   error:
     include-message: never
     include-stacktrace: never

@@ -59,11 +59,24 @@ public class CajaService {
     private final MovimientoCajaRepository repository;
     private final org.springframework.jdbc.core.simple.JdbcClient jdbc;
     private final Clock reloj;
+    /** Las cajas se crean en las migraciones y no cambian: su id se pide una vez. */
+    private final Map<String, Long> ids = new java.util.concurrent.ConcurrentHashMap<>();
+
+    private Long idDe(String caja) {
+        Long id = ids.get(caja);
+        if (id == null) {
+            id = repository.idDe(caja);
+            if (id != null) {
+                ids.put(caja, id);
+            }
+        }
+        return id;
+    }
 
     @Transactional
     public void registrar(String caja, Long operacionId, String sentido, BigDecimal importe, String concepto,
             String detalle) {
-        repository.save(new MovimientoCaja(null, repository.idDe(caja), operacionId, sentido, importe, concepto, detalle,
+        repository.save(new MovimientoCaja(null, idDe(caja), operacionId, sentido, importe, concepto, detalle,
                 Instant.now(reloj)));
     }
 
@@ -80,7 +93,7 @@ public class CajaService {
 
     @Transactional(readOnly = true)
     public BigDecimal saldo(String caja) {
-        return repository.saldo(repository.idDe(caja));
+        return repository.saldo(idDe(caja));
     }
 
     @Transactional(readOnly = true)
@@ -90,7 +103,7 @@ public class CajaService {
 
     @Transactional(readOnly = true)
     public Page<MovimientoCaja> movimientos(String caja, int pagina, int tamano) {
-        return repository.findByCajaId(repository.idDe(caja),
+        return repository.findByCajaId(idDe(caja),
                 PageRequest.of(pagina, tamano, Sort.by(Sort.Direction.DESC, "id")));
     }
 
@@ -129,7 +142,7 @@ public class CajaService {
         Map<YearMonth, BigDecimal> netoPorMes = new HashMap<>();
         BigDecimal antes = BigDecimal.ZERO;
         YearMonth desde = actual.minusMonths(11);
-        for (Object[] fila : repository.netoPorMes(repository.idDe(PRINCIPAL))) {
+        for (Object[] fila : repository.netoPorMes(idDe(PRINCIPAL))) {
             YearMonth mes = YearMonth.parse((String) fila[0]);
             BigDecimal neto = (BigDecimal) fila[1];
             if (mes.isBefore(desde)) {

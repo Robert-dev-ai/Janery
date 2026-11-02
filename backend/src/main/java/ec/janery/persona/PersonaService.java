@@ -19,6 +19,8 @@ public class PersonaService {
     interface PersonaRepository extends JpaRepository<Persona, Long> {
         Optional<Persona> findByUsuarioId(Long usuarioId);
 
+        java.util.List<Persona> findByUsuarioIdIn(java.util.Collection<Long> usuarioIds);
+
         boolean existsByUsuarioId(Long usuarioId);
 
         boolean existsByIdentificacion(String identificacion);
@@ -74,6 +76,25 @@ public class PersonaService {
     @Transactional(readOnly = true)
     public Optional<Persona> dePorUsuario(Long usuarioId) {
         return repository.findByUsuarioId(usuarioId);
+    }
+
+    /**
+     * Trae varias personas en una consulta. Dentro de la misma transacción, nombreCompleto y usuarioDe las toman luego de
+     * memoria: así un listado no hace un viaje a la base por fila.
+     */
+    @Transactional(readOnly = true)
+    public void precargar(java.util.Collection<Long> personaIds) {
+        java.util.Set<Long> ids = new java.util.HashSet<>(personaIds);
+        ids.remove(null);
+        if (!ids.isEmpty()) {
+            repository.findAllById(ids);
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public java.util.Map<Long, Persona> porUsuarios(java.util.Collection<Long> usuarioIds) {
+        return usuarioIds.isEmpty() ? java.util.Map.of() : repository.findByUsuarioIdIn(usuarioIds).stream()
+                .collect(java.util.stream.Collectors.toMap(Persona::getUsuarioId, p -> p));
     }
 
     @Transactional(readOnly = true)

@@ -46,6 +46,11 @@ public class SocioService {
 
         java.util.List<Socio> findByEstadoOrderById(String estado);
 
+        @org.springframework.data.jpa.repository.Query(
+                "select s.personaId from Socio s where s.personaId in :personaIds and s.estado = 'ACTIVO'")
+        java.util.Set<Long> personasActivas(
+                @org.springframework.data.repository.query.Param("personaIds") java.util.Collection<Long> personaIds);
+
         @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
         @org.springframework.data.jpa.repository.Query("select s from Socio s where s.id = :id")
         java.util.Optional<Socio> bloquear(@org.springframework.data.repository.query.Param("id") Long id);
@@ -59,6 +64,12 @@ public class SocioService {
     @Transactional(readOnly = true)
     public boolean esSocio(Long personaId) {
         return repository.existsByPersonaIdAndEstado(personaId, "ACTIVO");
+    }
+
+    /** De esas personas, las que son socias activas. Una consulta para todo un listado. */
+    @Transactional(readOnly = true)
+    public java.util.Set<Long> personasActivas(java.util.Collection<Long> personaIds) {
+        return personaIds.isEmpty() ? java.util.Set.of() : repository.personasActivas(personaIds);
     }
 
     @Transactional(readOnly = true)
