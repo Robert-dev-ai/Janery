@@ -65,7 +65,7 @@ const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'O
 
           <form class="tarjeta" (ngSubmit)="registrar()">
             <h2>Registrar gasto</h2>
-            <label>Importe (USD) <input type="number" min="0" step="0.01" name="importe" [(ngModel)]="importe" /></label>
+            <label>Importe (USD) <input type="number" min="0" step="any" name="importe" [(ngModel)]="importe" /></label>
             <label>Detalle <input name="detalle" maxlength="200" [(ngModel)]="detalle" /></label>
             <button type="submit" [disabled]="!importe || importe <= 0 || !detalle.trim()">Registrar</button>
           </form>

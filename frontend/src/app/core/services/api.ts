@@ -224,6 +224,36 @@ export interface Credito {
   codigo: string;
   aprobaciones: VotoCredito[];
   documentos: number;
+  /** Ya existía antes de usar Janery: se registró con sus condiciones originales. */
+  existente: boolean;
+  /** Cobro de suministros al inicio; null si el crédito no lo lleva. */
+  suministros: number | null;
+}
+
+/** Tasas en % mensual sobre el importe; el encaje, en dólares; la fecha, AAAA-MM-DD. */
+export interface CreditoExistente {
+  modalidad: string;
+  importe: number;
+  plazoMeses: number;
+  tasaInteres: number;
+  tasaDesgravamen: number;
+  conAhorroLetras: boolean;
+  fechaInicio: string;
+  letrasPagadas: number;
+  encaje: number;
+  nota: string;
+}
+
+export interface VistaCreditoExistente {
+  perfil: string;
+  cuotas: Letra[];
+  letrasPagadas: number;
+  letrasAtrasadas: number;
+  capitalPendiente: number;
+  ahorroAcumulado: number;
+  encaje: number;
+  tasaMora: number;
+  totalPendiente: number;
 }
 
 export interface SolicitudCupo {
@@ -288,7 +318,7 @@ export interface ProductosAhorro {
 
 export interface ProductosCredito {
   perfil: string;
-  letras: { modalidad: string; tasaInteres: number; porcentajeEncaje: number }[];
+  letras: { modalidad: string; tasaInteres: number; porcentajeEncaje: number; porcentajeSuministros: number }[];
   tasaDesgravamen: number;
   importeMinimo: number;
   importeMaximo: number;
@@ -311,6 +341,8 @@ export interface Simulacion {
   tasaInteres: number;
   tasaDesgravamen: number;
   encaje: number;
+  /** Se paga al inicio, como el encaje, pero no se devuelve. */
+  suministros: number;
   cuotas: Letra[];
 }
 
@@ -526,8 +558,36 @@ export interface SolicitudDeposito {
   resueltaEn: string | null;
   codigo: string;
   comprobantes: number;
+  pago: boolean;
+  destinos: { descripcion: string; importe: number }[];
 }
 
+
+export interface PersonaPago {
+  usuarioId: number;
+  nombre: string;
+}
+
+export interface OpcionesPago {
+  usuarioId: number;
+  nombre: string;
+  socio: boolean;
+  creditos: { id: number; codigo: string; familia: string; modalidad: string | null; proximaLetra: number | null; totalPendiente: number }[];
+  ahorros: { id: number; codigo: string; nombre: string }[];
+  aporteMensual: number | null;
+  aporteCajaChica: number | null;
+  meses: MesAporte[];
+}
+
+export type TipoDestinoPago = 'CUENTA' | 'CUOTA_CREDITO' | 'AHORRO' | 'APORTE_OBLIGATORIO' | 'APORTE_PERSONAL' | 'CAJA_CHICA';
+
+export interface DestinoPago {
+  usuarioId: number;
+  tipo: TipoDestinoPago;
+  referenciaId?: number;
+  periodos?: string[];
+  importe?: number;
+}
 export interface ResumenGeneral {
   cajaPrincipal: number;
   fondoReserva: number;
@@ -1140,6 +1200,22 @@ export class ApiService {
     return this.http.post<void>(`${this.base}/admin/solicitudes-retiro/${id}/rechazar`, { motivo });
   }
 
+  buscarPersonasPago(texto: string): Observable<PersonaPago[]> {
+    return this.http.get<PersonaPago[]>(`${this.base}/pagos/personas`, { params: { buscar: texto } });
+  }
+
+  opcionesPago(usuarioId: number | null): Observable<OpcionesPago> {
+    return this.http.get<OpcionesPago>(`${this.base}/pagos/opciones/${usuarioId ?? 'me'}`);
+  }
+
+  /** El pago y su comprobante van juntos: sin comprobante no se registra. */
+  pagar(destinos: DestinoPago[], medio: string, referencia: string | null, archivos: File[], clave: string): Observable<{ id: number; codigo: string; importe: number }> {
+    const datos = new FormData();
+    datos.append('datos', new Blob([JSON.stringify({ destinos, medio, referencia })], { type: 'application/json' }));
+    archivos.forEach((a) => datos.append('archivos', a, a.name));
+    return this.http.post<{ id: number; codigo: string; importe: number }>(`${this.base}/pagos`, datos, conClave(clave));
+  }
+
   misDepositos(): Observable<SolicitudDeposito[]> {
     return this.http.get<SolicitudDeposito[]>(`${this.base}/cuentas-principales/me/depositos`);
   }
@@ -1302,6 +1378,18 @@ export class ApiService {
 
   emergenteTramite(usuarioId: number, importe: number, clave: string): Observable<{ id: number }> {
     return this.http.post<{ id: number }>(`${this.base}/admin/creditos/tramite/personas/${usuarioId}/emergente`, { importe }, conClave(clave));
+  }
+
+  buscarPersonasExistente(texto: string): Observable<PersonaTramite[]> {
+    return this.http.get<PersonaTramite[]>(`${this.base}/admin/creditos/existentes/personas`, { params: new HttpParams().set('buscar', texto) });
+  }
+
+  vistaCreditoExistente(usuarioId: number, datos: CreditoExistente): Observable<VistaCreditoExistente> {
+    return this.http.post<VistaCreditoExistente>(`${this.base}/admin/creditos/existentes/personas/${usuarioId}/vista-previa`, datos);
+  }
+
+  registrarCreditoExistente(usuarioId: number, datos: CreditoExistente, clave: string): Observable<{ id: number }> {
+    return this.http.post<{ id: number }>(`${this.base}/admin/creditos/existentes/personas/${usuarioId}`, datos, conClave(clave));
   }
 
   documentosTramite(creditoId: number, archivos: File[]): Observable<DocumentoCredito[]> {

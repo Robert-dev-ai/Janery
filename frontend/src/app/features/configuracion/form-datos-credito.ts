@@ -30,7 +30,7 @@ const conTexto = [Validators.required, Validators.pattern(/\S/)];
         <label>Lugar de trabajo <input formControlName="lugarTrabajo" maxlength="150" /></label>
         <label>Ocupación <input formControlName="ocupacion" maxlength="100" /></label>
         <label>Antigüedad en el trabajo <input formControlName="antiguedadTrabajo" maxlength="50" placeholder="Ejemplo: 2 años" /></label>
-        <label>Ingresos mensuales (USD) <input type="number" min="0" step="1" formControlName="ingresosMensuales" /></label>
+        <label>Ingresos mensuales (USD) <input type="number" min="0" step="1" formControlName="ingresosMensuales" placeholder="0" /></label>
       </fieldset>
       <fieldset class="grupo-campos">
         <legend>Datos personales</legend>
@@ -101,7 +101,8 @@ export class FormDatosCredito implements OnInit {
     lugarTrabajo: ['', conTexto],
     ocupacion: ['', conTexto],
     antiguedadTrabajo: ['', conTexto],
-    ingresosMensuales: [0, [Validators.required, Validators.min(0)]],
+    // Vacío y no 0: con un 0 escrito, al teclear quedaba «0500».
+    ingresosMensuales: [null as number | null, [Validators.required, Validators.min(0)]],
     fechaNacimiento: ['', [Validators.required, mayorDeEdad]],
     estadoCivil: ['SOLTERO', Validators.required],
     referenciaNombre: ['', conTexto],
@@ -119,7 +120,7 @@ export class FormDatosCredito implements OnInit {
     if (p) {
       this.form.patchValue({
         direccion: p.direccion ?? '', lugarTrabajo: p.lugarTrabajo ?? '', ocupacion: p.ocupacion ?? '',
-        antiguedadTrabajo: p.antiguedadTrabajo ?? '', ingresosMensuales: p.ingresosMensuales ?? 0,
+        antiguedadTrabajo: p.antiguedadTrabajo ?? '', ingresosMensuales: p.ingresosMensuales ?? null,
         fechaNacimiento: p.fechaNacimiento ?? '', estadoCivil: p.estadoCivil ?? 'SOLTERO',
         referenciaNombre: p.referenciaNombre ?? '', referenciaTelefono: p.referenciaTelefono ?? '', banco: p.banco ?? '',
         tipoCuentaBanco: p.tipoCuentaBanco ?? 'AHORROS', numeroCuentaBanco: p.numeroCuentaBanco ?? '',

@@ -52,6 +52,7 @@ export const routes: Routes = [
           { path: 'perfil', loadComponent: () => import('./features/configuracion/perfil').then((m) => m.PerfilPagina) },
           { path: 'contrasena', loadComponent: () => import('./features/configuracion/contrasena').then((m) => m.Contrasena) },
           { path: 'sesiones', loadComponent: () => import('./features/configuracion/sesiones').then((m) => m.Sesiones) },
+          { path: 'cuenta', loadComponent: () => import('./features/configuracion/cerrar-cuenta').then((m) => m.CerrarCuenta) },
         ],
       },
       {
@@ -60,7 +61,8 @@ export const routes: Routes = [
         children: [
           { path: '', pathMatch: 'full', redirectTo: 'inicio' },
           { path: 'inicio', loadComponent: () => import('./features/cuenta/resumen').then((m) => m.Resumen) },
-          { path: 'cuenta', loadComponent: () => import('./features/cuenta/mi-cuenta').then((m) => m.MiCuenta) },
+          { path: 'cuenta', redirectTo: 'inicio' },
+          { path: 'pagar', loadComponent: () => import('./features/pagos/pagar').then((m) => m.Pagar) },
           { path: 'movimientos', loadComponent: () => import('./features/cuenta/movimientos').then((m) => m.Movimientos) },
           { path: 'retiros', loadComponent: () => import('./features/cuenta/retiros').then((m) => m.Retiros) },
           { path: 'depositos', loadComponent: () => import('./features/cuenta/depositos').then((m) => m.Depositos) },

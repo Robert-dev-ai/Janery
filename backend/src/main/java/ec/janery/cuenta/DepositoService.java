@@ -60,6 +60,7 @@ public class DepositoService {
         private Long resueltaPor;
         private Instant creadoEn;
         private Instant resueltaEn;
+        private boolean esPago;
     }
 
     interface SolicitudRepository extends JpaRepository<SolicitudDeposito, Long> {
@@ -77,7 +78,11 @@ public class DepositoService {
     }
 
     public record Vista(Long id, String numeroCuenta, String titular, BigDecimal importe, String medio, String referencia,
-            String estado, String motivo, Instant fecha, Instant resueltaEn, String codigo, long comprobantes) {
+            String estado, String motivo, Instant fecha, Instant resueltaEn, String codigo, long comprobantes, boolean pago,
+            List<DestinoVista> destinos) {
+    }
+
+    public record DestinoVista(String descripcion, BigDecimal importe) {
     }
 
     private static final String MODULO = "CUENTA";
@@ -90,22 +95,30 @@ public class DepositoService {
     private final AuditoriaService auditoria;
     private final Clock reloj;
     private final ComprobanteService comprobantes;
+    private final org.springframework.jdbc.core.simple.JdbcClient jdbc;
+    private final Optional<EjecutorPagos> ejecutor;
 
     @Transactional
     public Vista solicitar(Long usuarioId, BigDecimal importe, String medio, String referencia, String clave) {
+        return solicitar(usuarioId, importe, medio, referencia, clave, false);
+    }
+
+    /** Un pago es un aviso con destinos; los destinos los guarda el módulo de pagos. */
+    @Transactional
+    public Vista solicitar(Long usuarioId, BigDecimal importe, String medio, String referencia, String clave, boolean esPago) {
         Long personaId = personaDe(usuarioId);
         CuentaPrincipal cuenta = cuentas.cuentaActivaBloqueada(personaId);
         Optional<SolicitudDeposito> previa = solicitudes.findByClaveIdempotencia(clave);
         if (previa.isPresent()) {
             SolicitudDeposito s = previa.get();
-            if (!s.getPersonaId().equals(personaId) || s.getImporte().compareTo(importe) != 0) {
+            if (!s.getPersonaId().equals(personaId) || s.getImporte().compareTo(importe) != 0 || s.isEsPago() != esPago) {
                 throw NegocioException.conflicto("CLAVE_REUTILIZADA", "La clave de idempotencia ya se usó en otra operación");
             }
             return vista(s);
         }
         SolicitudDeposito s = solicitudes.save(new SolicitudDeposito(null, cuenta.getId(), personaId, importe, medio, referencia,
-                PENDIENTE, null, clave, null, null, Instant.now(reloj), null));
-        auditoria.registrar(usuarioId, "DEPOSITO_SOLICITADO", MODULO, "solicitud_deposito", s.getId(), null, importe.toPlainString(), medio);
+                PENDIENTE, null, clave, null, null, Instant.now(reloj), null, esPago));
+        auditoria.registrar(usuarioId, esPago ? "PAGO_SOLICITADO" : "DEPOSITO_SOLICITADO", MODULO, "solicitud_deposito", s.getId(), null, importe.toPlainString(), medio);
         return vista(s);
     }
 
@@ -130,9 +143,19 @@ public class DepositoService {
     @Transactional
     public void confirmar(Long actorId, Long id) {
         SolicitudDeposito s = pendienteBloqueada(id);
-        comprobantes.exigirSiTransferencia(ComprobanteService.DEPOSITO, id, s.getMedio());
-        Long operacion = cuentas.depositar(actorId, s.getCuentaId(), s.getImporte(), s.getMedio(), s.getReferencia(),
-                "solicitud-deposito-" + id);
+        Long operacion;
+        if (s.isEsPago()) {
+            // Decisión del propietario: un pago siempre lleva comprobante, sea en efectivo o por transferencia.
+            if (comprobantes.cantidad(ComprobanteService.DEPOSITO, id) == 0) {
+                throw NegocioException.conflicto("COMPROBANTE_REQUERIDO", "Falta el comprobante del pago");
+            }
+            operacion = ejecutor.orElseThrow(() -> new IllegalStateException("Sin módulo de pagos"))
+                    .ejecutar(actorId, id, s.getMedio(), s.getReferencia());
+        } else {
+            comprobantes.exigirSiTransferencia(ComprobanteService.DEPOSITO, id, s.getMedio());
+            operacion = cuentas.depositar(actorId, s.getCuentaId(), s.getImporte(), s.getMedio(), s.getReferencia(),
+                    "solicitud-deposito-" + id);
+        }
         s.setOperacionId(operacion);
         resolver(s, "CONFIRMADA", null, actorId);
         auditoria.registrar(actorId, "DEPOSITO_CONFIRMADO", MODULO, "solicitud_deposito", id, PENDIENTE, "CONFIRMADA", null);
@@ -157,9 +180,25 @@ public class DepositoService {
         }
         cuentasRepo.findAllById(lista.stream().map(SolicitudDeposito::getCuentaId).collect(java.util.stream.Collectors.toSet()));
         personas.precargar(lista.stream().map(SolicitudDeposito::getPersonaId).toList());
-        java.util.Map<Long, Long> cantidades = comprobantes.cantidades(ComprobanteService.DEPOSITO,
-                lista.stream().map(SolicitudDeposito::getId).toList());
-        return lista.stream().map(s -> vista(s, cantidades.getOrDefault(s.getId(), 0L))).toList();
+        List<Long> ids = lista.stream().map(SolicitudDeposito::getId).toList();
+        java.util.Map<Long, Long> cantidades = comprobantes.cantidades(ComprobanteService.DEPOSITO, ids);
+        java.util.Map<Long, List<DestinoVista>> destinos = destinos(lista.stream().filter(SolicitudDeposito::isEsPago)
+                .map(SolicitudDeposito::getId).toList());
+        return lista.stream().map(s -> vista(s, cantidades.getOrDefault(s.getId(), 0L), destinos.getOrDefault(s.getId(), List.of())))
+                .toList();
+    }
+
+    /** Destinos de varios pagos en una consulta. */
+    private java.util.Map<Long, List<DestinoVista>> destinos(List<Long> ids) {
+        java.util.Map<Long, List<DestinoVista>> resultado = new java.util.HashMap<>();
+        if (!ids.isEmpty()) {
+            jdbc.sql("SELECT solicitud_id, descripcion, importe FROM destinos_pago WHERE solicitud_id IN (:ids) ORDER BY solicitud_id, orden")
+                    .param("ids", ids)
+                    .query((rs, n) -> resultado.computeIfAbsent(rs.getLong(1), k -> new java.util.ArrayList<>())
+                            .add(new DestinoVista(rs.getString(2), rs.getBigDecimal(3))))
+                    .list();
+        }
+        return resultado;
     }
 
     private SolicitudDeposito pendienteBloqueada(Long id) {
@@ -183,14 +222,15 @@ public class DepositoService {
     }
 
     private Vista vista(SolicitudDeposito s) {
-        return vista(s, comprobantes.cantidad(ComprobanteService.DEPOSITO, s.getId()));
+        return vista(s, comprobantes.cantidad(ComprobanteService.DEPOSITO, s.getId()),
+                s.isEsPago() ? destinos(List.of(s.getId())).getOrDefault(s.getId(), List.of()) : List.of());
     }
 
-    private Vista vista(SolicitudDeposito s, long cantidadComprobantes) {
+    private Vista vista(SolicitudDeposito s, long cantidadComprobantes, List<DestinoVista> destinos) {
         String numero = cuentasRepo.findById(s.getCuentaId()).map(CuentaPrincipal::getNumero).orElse(null);
         return new Vista(s.getId(), numero, personas.nombreCompleto(s.getPersonaId()), s.getImporte(), s.getMedio(), s.getReferencia(),
                 s.getEstado(), s.getMotivo(), s.getCreadoEn(), s.getResueltaEn(), ec.janery.common.Codigos.deposito(s.getId()),
-                cantidadComprobantes);
+                cantidadComprobantes, s.isEsPago(), destinos);
     }
 
     /** Un depósito por confirmar acabaría en una cuenta ya cerrada: se resuelve antes. */

@@ -229,7 +229,7 @@ El propietario autorizó el 30/10/2026 usar valores provisionales de tasas, enca
 | 3.5 Reservas | Fondo de reserva |
 | 3.6 Resultado del mes | Ganancias menos gastos del mes |
 | 3.7 Resultado acumulado | Resultado de meses anteriores, menos reservas separadas y ganancias retiradas o descontadas |
-| 4.1 / 4.7 / 5.1 | Intereses cobrados / USD 15 de apertura / intereses de ahorros |
+| 4.1 / 4.7 / 4.8 / 5.1 | Intereses cobrados / USD 15 de apertura / suministros de créditos / intereses de ahorros |
 
 - **Caja chica:** queda fuera del balance; lleva sus cuentas aparte.
 - **Registro manual:** las demás líneas se llenan con un registro auditado, con quien tenga `REGISTRAR_ASIENTOS`. Nada se edita ni se borra: se corrige con un reverso.
@@ -263,7 +263,7 @@ El propietario autorizó el 30/10/2026 usar valores provisionales de tasas, enca
 
 **Definido por el propietario (01/11/2026):**
 
-- **Cada ingreso se reparte al momento:** intereses cobrados, aperturas de cuenta e ingresos del registro manual. El 10 % va a reservas (3.5) y el resto a los socios. El fondo de desgravamen no es ganancia.
+- **Cada ingreso se reparte al momento:** intereses cobrados, aperturas de cuenta, suministros de créditos e ingresos del registro manual. El 10 % va a reservas (3.5) y el resto a los socios. El fondo de desgravamen no es ganancia.
 - **Proporción:** según el fondo personal completo de cada socio.
 - **Cierre mensual:** las ganancias se ven al momento, pero solo cuentan como base del reparto desde el mes siguiente. Siguen separadas de los aportes, porque al final del año se decide si se pueden retirar.
 - **Retiro:** no se pueden retirar hasta el 1 de enero siguiente y con la autorización del presidente, si el socio está al día.
@@ -369,3 +369,33 @@ El propietario autorizó el 30/10/2026 usar valores provisionales de tasas, enca
 - **Simulador:** decisión del propietario (02/11/2026): «Iniciar simulación» copia toda la base real de ese momento, también clientes y sus datos; «Finalizar simulación» la descarta. La base del simulador está en el mismo servidor y con las mismas protecciones que la real. Copiar tarda unos segundos en un servidor junto a la base (un minuto desde una computadora remota): el proxy no debe cortar esa petición antes de 5 minutos.
 - **Trámite en ventanilla:** tesorería busca a la persona, confirma con ella sus datos para crédito, registra la solicitud (letras o emergente; a un socio, retiro de su cupo) y sube la solicitud firmada. Sigue necesitando los tres votos. El encaje en ventanilla puede ser en efectivo, de la cuenta o descontado del crédito.
 - **Versión:** sale del `pom.xml` (0.2.0) y se muestra en el pie.
+
+## 18. Créditos anteriores a Janery
+
+**Definido por el propietario (02/11/2026):** los créditos a letras dados antes de usar Janery tienen tasas y plazos distintos entre sí. Se registran uno por uno, con `REGISTRAR_CREDITOS_EXISTENTES` (presidencia), en la pantalla de créditos.
+
+- **Datos:** persona (con cuenta principal activa), modalidad, importe, plazo, interés y desgravamen en % mensual sobre el importe, fecha en que recibió el dinero, letras ya pagadas completas, encaje retenido en dólares y si llevaba ahorro letras. Con ahorro letras, las letras se calculan como en la sección 10; sin él, la letra es capital, interés y desgravamen, con centavos.
+- **Lo ya ocurrido no se repite:** no entra dinero a la cuenta, no se cobra el encaje y lo cobrado antes no se reparte como ganancia. Las letras pagadas quedan pagadas en su fecha de vencimiento.
+- **Balance:** entran solo los saldos del día del registro: el capital pendiente en 1.4 y el encaje retenido y el ahorro letras acumulado en 2.3. Hasta registrar también el dinero y los aportes que ya existían, el balance mostrará esa diferencia.
+- **Desde el registro** se cobra como cualquier crédito: pagos, mora, precancelación y devolución de encaje y ahorro letras al terminar. Las letras ya vencidas que no estén entre las pagadas cuentan como atrasadas; a un cliente le corre la mora desde cada vencimiento, con la tasa vigente al registrarlo.
+- No se registra un crédito con todas sus letras pagadas: ya terminó. Los emergentes y cupos anteriores no se registran por esta vía. Tampoco se les cobra suministros (sección 19).
+
+## 19. Suministros de los créditos a letras
+
+**Definido por el propietario (02/11/2026):**
+
+- **Qué es:** al inicio de cada crédito a letras, de socios y de clientes, se cobra un porcentaje del importe para suministros: papelería y gastos de operación. Es 1,5 % en las modalidades normal y personalizado, y 0,75 % en inversión y estudio. Los porcentajes se cambian desde el CMS (`LETRAS_SUMINISTROS_<MODALIDAD>`) y quedan fijados en el crédito al solicitarlo, como el encaje.
+- **Cómo se paga:** al aprobarse, del mismo origen que el encaje: en efectivo, de la cuenta principal, de un ahorro o descontado del crédito.
+- **No se devuelve:** a diferencia del encaje, es ganancia. Va a la línea 4.8 «Suministros de créditos» y se reparte al momento como los intereses: 10 % a reservas y el resto a los socios.
+- No se cobra en los emergentes, en los cupos ni en los créditos anteriores a Janery (sección 18), que ya lo pagaron en su momento.
+
+## 20. Pagar
+
+**Definido por el propietario (02/11/2026):** desde «Pagar», al final del menú, quien tiene cuenta activa paga de una vez lo que quiera: letras de créditos, depósitos a ahorros normales, aporte mensual, aporte personal, caja chica o un depósito a la cuenta principal. Un **cliente** solo paga lo suyo. Un **socio** puede pagar también lo de otras personas en el mismo pago (por ejemplo, 30 a la letra de una persona, 50 a la de otra, un depósito al ahorro de la primera y el aporte de una tercera); a un cliente no se le muestra esa opción y el servidor la rechaza (`SOLO_SOCIOS`).
+
+- **Comprobante obligatorio:** sin al menos un comprobante (foto o PDF, hasta 5) no se registra el pago, sea en efectivo o por transferencia.
+- **Otras personas:** se buscan por nombre o cédula entre quienes tienen cuenta activa. Quien paga ve solo su nombre y lo que se le puede pagar (créditos con la letra que falta, ahorros normales y, si es socio, sus meses de aporte); no ve su cédula ni su número de cuenta.
+- **Nada cambia hasta confirmar:** el pago queda como un aviso de depósito (código DP) en «Depósitos y pagos por confirmar». Al confirmarlo, el dinero entra a la caja principal y a la cuenta principal de cada beneficiario, y de ahí se paga cada cosa como si la persona la hubiera pagado.
+- **Todo o nada:** si una cosa de la lista ya no se puede pagar al confirmar (por ejemplo, el mes ya se pagó), no se confirma nada y el mensaje dice cuál falló; el personal puede rechazar el pago con un motivo. Al registrarlo también se rechaza entero si algo no es válido.
+- Un pago a un crédito que supera la letra adelanta las siguientes, como en la sección de pagos de créditos. Quien paga puede cancelar el pago mientras esté pendiente.
+- «Mi cuenta» salió del menú: el saldo y los botones de depositar y retirar están en el resumen, y el cierre de cuenta en Configuración → Cuenta.

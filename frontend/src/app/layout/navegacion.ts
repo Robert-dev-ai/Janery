@@ -1,5 +1,5 @@
 import {
-  ArrowLeftRight, Banknote, BanknoteArrowDown, BookOpen, Briefcase, CalendarDays, ChartColumn, ChartPie, FlaskConical, ClipboardList, Coins, Contact, FilePenLine, FileText, HandCoins, History,
+  ArrowLeftRight, Banknote, BanknoteArrowDown, BookOpen, Briefcase, CreditCard, CalendarDays, ChartColumn, ChartPie, FlaskConical, ClipboardList, Coins, Contact, FilePenLine, FileText, HandCoins, History,
   Landmark, LayoutDashboard, Library, ListChecks, Lock, LucideIconData, PiggyBank, Receipt, Scale, ShieldCheck, SlidersHorizontal,
   TrendingUp, UserCog, UserPlus, Users, Vault, Wallet,
 } from 'lucide-angular';
@@ -49,7 +49,7 @@ const ADMIN: GrupoMenu[] = [
     titulo: 'Productos financieros',
     enlaces: [
       { titulo: 'Cuentas', ruta: '/admin/cuentas', icono: Wallet, visible: conPermiso('GESTIONAR_CUENTAS') },
-      { titulo: 'Depósitos por confirmar', ruta: '/admin/solicitudes-deposito', icono: BanknoteArrowDown, visible: conPermiso('GESTIONAR_CUENTAS') },
+      { titulo: 'Depósitos y pagos', ruta: '/admin/solicitudes-deposito', icono: BanknoteArrowDown, visible: conPermiso('GESTIONAR_CUENTAS') },
       { titulo: 'Retiros de dinero', ruta: '/admin/solicitudes-retiro', icono: Banknote, visible: conPermiso('GESTIONAR_CUENTAS') },
       informe('Ahorros', 'AHORROS', PiggyBank),
       { titulo: 'Créditos', ruta: '/admin/creditos', icono: HandCoins, visible: conPermiso('APROBAR_CREDITOS') },
@@ -106,7 +106,6 @@ const PORTAL: GrupoMenu[] = [
   {
     titulo: 'Mis productos',
     enlaces: [
-      { titulo: 'Mi cuenta', ruta: '/app/cuenta', icono: Wallet, visible: cuentaActiva },
       { titulo: 'Ahorros', ruta: '/app/ahorros', icono: PiggyBank, visible: cuentaActiva },
       { titulo: 'Créditos y cuotas', ruta: '/app/creditos', icono: HandCoins, visible: cuentaActiva },
       { titulo: 'Fondo y aportes', ruta: '/app/inversiones', icono: TrendingUp, visible: esSocio },
@@ -133,6 +132,10 @@ const PORTAL: GrupoMenu[] = [
     titulo: 'Mis cargos',
     enlaces: [{ titulo: 'Mis cargos', ruta: '/mis-cargos', icono: Briefcase, visible: (yo) => yo.cargos.length > 0 }],
   },
+  {
+    titulo: 'Pagos',
+    enlaces: [{ titulo: 'Pagar', ruta: '/app/pagar', icono: CreditCard, visible: cuentaActiva }],
+  },
 ];
 
 function filtrar(grupos: GrupoMenu[], yo: Yo | null): GrupoMenu[] {
@@ -156,6 +159,7 @@ const OTRAS: Record<string, string> = {
   '/configuracion/perfil': 'Perfil',
   '/configuracion/contrasena': 'Cambiar contraseña',
   '/configuracion/sesiones': 'Sesiones',
+  '/configuracion/cuenta': 'Cerrar cuenta',
   '/app/depositos': 'Depositar dinero',
   '/app/retiros': 'Retirar dinero',
   '/areas': 'Mis áreas y cargos',

@@ -21,7 +21,7 @@ import { mensajeDeError } from '../../shared/utils/errores';
     @if (aviso()) { <p class="exito" role="status">{{ aviso() }}</p> }
 
     <form class="tarjeta estrecho" (ngSubmit)="solicitar()">
-      <label>Importe (USD) <input type="number" min="0" step="0.01" name="importe" [(ngModel)]="importe" /></label>
+      <label>Importe (USD) <input type="number" min="0" step="any" name="importe" [(ngModel)]="importe" /></label>
       <label>¿Cómo lo entrega?
         <select name="medio" [(ngModel)]="medio">
           <option value="EFECTIVO">En efectivo</option>
@@ -102,7 +102,7 @@ export class Depositos implements OnInit {
   }
 
   ngOnInit(): void {
-    this.api.misDepositos().subscribe({ next: (s) => this.solicitudes.set(s), error: (e) => this.error.set(mensajeDeError(e)) });
+    this.api.misDepositos().subscribe({ next: (s) => this.solicitudes.set(s.filter((x) => !x.pago)), error: (e) => this.error.set(mensajeDeError(e)) });
   }
 
   protected elegir(evento: Event): void {

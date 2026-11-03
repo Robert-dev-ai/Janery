@@ -137,12 +137,12 @@ import { FormDatosCredito } from '../configuracion/form-datos-credito';
 
       <section #formLetras class="tarjeta seccion-accion">
         <h2>Crédito a letras</h2>
-        <p class="suave"><strong>Crédito a letras:</strong> letras mensuales. El encaje se paga al inicio y se devuelve al terminar. Cada letra incluye al menos 0,50 USD de ahorro letras, que vuelve a usted al final.</p>
+        <p class="suave"><strong>Crédito a letras:</strong> letras mensuales. El encaje se paga al inicio y se devuelve al terminar. Los suministros (papelería y gastos de operación) también se pagan al inicio, pero no se devuelven. Cada letra incluye al menos 0,50 USD de ahorro letras, que vuelve a usted al final.</p>
         <form (ngSubmit)="simular()">
           <label>Modalidad
             <select name="modalidad" [(ngModel)]="modalidad">
               @for (m of p.letras; track m.modalidad) {
-                <option [value]="m.modalidad">{{ m.modalidad }}: {{ m.tasaInteres | number: '1.0-4' }} % mensual, encaje {{ m.porcentajeEncaje | number: '1.0-4' }} %</option>
+                <option [value]="m.modalidad">{{ m.modalidad }}: {{ m.tasaInteres | number: '1.0-4' }} % mensual, encaje {{ m.porcentajeEncaje | number: '1.0-4' }} %, suministros {{ m.porcentajeSuministros | number: '1.0-4' }} %</option>
               }
             </select>
           </label>
@@ -155,7 +155,7 @@ import { FormDatosCredito } from '../configuracion/form-datos-credito';
           <button type="submit" class="secundario" [disabled]="!importe || !plazo">Simular</button>
         </form>
         @if (simulacion(); as s) {
-          <p class="mt-4">Encaje al inicio: <strong>{{ s.encaje | currency: 'USD' }}</strong></p>
+          <p class="mt-4">Al inicio: encaje <strong>{{ s.encaje | currency: 'USD' }}</strong> (se devuelve al terminar) y suministros <strong>{{ s.suministros | currency: 'USD' }}</strong> (no se devuelven).</p>
           <div class="tabla">
             <table>
               <thead><tr><th>N.º</th><th class="num">Capital</th><th class="num">Interés</th><th class="num">Desgravamen</th><th class="num">Ahorro letras</th><th class="num">Total</th></tr></thead>
@@ -181,8 +181,8 @@ import { FormDatosCredito } from '../configuracion/form-datos-credito';
                 <app-form-datos-credito [perfil]="pf" textoBoton="Mis datos son correctos, continuar" (guardado)="datosListos($event)" />
               }
             } @else {
-              <p><strong>Paso 2 de 2.</strong> Encaje y solicitud firmada. <button type="button" class="enlace-boton" (click)="datosConfirmados.set(false)">Volver a mis datos</button></p>
-              <label>¿De dónde pagará el encaje de {{ s.encaje | currency: 'USD' }}?
+              <p><strong>Paso 2 de 2.</strong> Encaje, suministros y solicitud firmada. <button type="button" class="enlace-boton" (click)="datosConfirmados.set(false)">Volver a mis datos</button></p>
+              <label>¿De dónde pagará el encaje y los suministros, {{ s.encaje + s.suministros | currency: 'USD' }} en total?
                 <select name="origenEncaje" [(ngModel)]="origenEncaje">
                   <option value="">Elija una opción</option>
                   <option value="EFECTIVO">En efectivo, al aprobarse</option>
@@ -199,7 +199,7 @@ import { FormDatosCredito } from '../configuracion/form-datos-credito';
                 </label>
               }
               @if (origenEncaje === 'CREDITO') {
-                <p class="suave"><strong>Descontado del crédito:</strong> recibirá {{ s.importe - s.encaje | currency: 'USD' }} en su cuenta.</p>
+                <p class="suave"><strong>Descontado del crédito:</strong> recibirá {{ s.importe - s.encaje - s.suministros | currency: 'USD' }} en su cuenta.</p>
               }
               <label>{{ p.perfil === 'CLIENTE' ? 'Solicitud firmada en PDF (obligatoria)' : 'Documentos en PDF (opcional)' }}, puede elegir varios
                 <input type="file" accept="application/pdf,.pdf" multiple (change)="elegirDocumentos($event)" />
@@ -272,6 +272,7 @@ import { FormDatosCredito } from '../configuracion/form-datos-credito';
           @if (c.tasaMora > 0) { <div>Mora ({{ c.tasaMora | currency: 'USD' }} por día)<p class="importe">{{ c.moraPendiente | currency: 'USD' }}</p></div> }
           @if (c.familia === 'LETRAS') {
             <div>Encaje<p class="importe">{{ c.encaje | currency: 'USD' }}</p></div>
+            @if (c.suministros !== null) { <div>Suministros (al inicio, no se devuelven)<p class="importe">{{ c.suministros | currency: 'USD' }}</p></div> }
             <div>Ahorro letras<p class="importe">{{ c.ahorroLetras | currency: 'USD' }}</p></div>
           }
         </div>
@@ -279,7 +280,7 @@ import { FormDatosCredito } from '../configuracion/form-datos-credito';
         @if (esCupo(c)) {
           <form class="acciones" (ngSubmit)="pagarCupo(c, importePago)">
             <label>Importe a pagar (USD)
-              <input type="number" min="0" step="0.01" name="pago{{ c.id }}" [(ngModel)]="importePago" />
+              <input type="number" min="0" step="any" name="pago{{ c.id }}" [(ngModel)]="importePago" />
             </label>
             <button type="submit" [disabled]="!importePago || importePago <= 0">Pagar</button>
           </form>
@@ -322,7 +323,7 @@ import { FormDatosCredito } from '../configuracion/form-datos-credito';
           @if (c.familia === 'LETRAS') { <p class="suave">Puede pagar más: lo que exceda pasa a las siguientes letras.</p> }
           <form class="acciones" (ngSubmit)="pagarCuota(c)">
             <label>Importe (USD; vacío, lo que falta de la letra)
-              <input type="number" min="0" step="0.01" name="letra{{ c.id }}" [(ngModel)]="importeLetra" />
+              <input type="number" min="0" step="any" name="letra{{ c.id }}" [(ngModel)]="importeLetra" />
             </label>
             <button type="submit">Pagar</button>
           </form>

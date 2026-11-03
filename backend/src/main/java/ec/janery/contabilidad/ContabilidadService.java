@@ -78,7 +78,8 @@ public class ContabilidadService {
     private static final String SALDO_LINEAS = "SELECT linea, SUM(importe) AS total FROM libro_contable WHERE fecha >= :desde AND fecha < :hasta GROUP BY linea";
 
     private static final Map<String, String> GANANCIAS = lineas("4.1", "Intereses ganados en créditos", "4.2", "Interés de mora cobradas",
-            "4.3", "Multas cobradas", "4.4", "Intereses bancarios", "4.5", "Ingresos por actividades", "4.6", "Venta de formularios", "4.7", "Otros ingresos");
+            "4.3", "Multas cobradas", "4.4", "Intereses bancarios", "4.5", "Ingresos por actividades", "4.6", "Venta de formularios", "4.7", "Otros ingresos",
+            "4.8", "Suministros de créditos");
     private static final Map<String, String> GASTOS = lineas("5.1", "Intereses de los ahorros captados", "5.2", "Intereses de préstamos externos",
             "5.3", "Gastos bancarios", "5.4", "Gastos de personal", "5.5", "Gastos de suministros", "5.6", "Gastos de transportes",
             "5.7", "Gastos de alimentación", "5.8", "Otros gastos operativos", "5.9", "Gastos de provisión");

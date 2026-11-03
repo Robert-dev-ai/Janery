@@ -14,7 +14,7 @@ const LINEAS = [
   ['2.3', 'Cuentas por pagar'], ['2.4', 'Créditos externos por pagar'], ['2.5', 'Fondo de desgravamen'], ['2.6', 'Fondo solidario'], ['3.1', 'Aportes iniciales'],
   ['3.2', 'Aportes mensuales y adicionales'], ['3.3', 'Capitalizaciones'], ['3.4', 'Donaciones'], ['3.5', 'Reservas'], ['3.7', 'Retiros y reservas del resultado'],
   ['4.1', 'Intereses ganados en créditos'], ['4.2', 'Interés de mora'], ['4.3', 'Multas'], ['4.4', 'Intereses bancarios'], ['4.5', 'Ingresos por actividades'],
-  ['4.6', 'Venta de formularios'], ['4.7', 'Otros ingresos'], ['5.1', 'Intereses de ahorros'], ['5.2', 'Intereses de préstamos externos'], ['5.3', 'Gastos bancarios'],
+  ['4.6', 'Venta de formularios'], ['4.7', 'Otros ingresos'], ['4.8', 'Suministros de créditos'], ['5.1', 'Intereses de ahorros'], ['5.2', 'Intereses de préstamos externos'], ['5.3', 'Gastos bancarios'],
   ['5.4', 'Gastos de personal'], ['5.5', 'Gastos de suministros'], ['5.6', 'Gastos de transportes'], ['5.7', 'Gastos de alimentación'], ['5.8', 'Otros gastos operativos'],
   ['5.9', 'Gastos de provisión'],
 ];

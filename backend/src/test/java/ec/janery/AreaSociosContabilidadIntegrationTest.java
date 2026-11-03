@@ -76,15 +76,18 @@ class AreaSociosContabilidadIntegrationTest {
         conClave(bearer(b.token()), "/api/v1/socios/me/aportes", "{\"tipo\":\"PERSONAL\",\"importe\":300.00}").andExpect(status().isOk());
         BigDecimal reservaAntes = reserva();
 
-        // Interés de una letra: el 10 % a reservas y el resto 1:3, según los fondos.
+        // Suministros al aprobar e interés de una letra: el 10 % a reservas y el resto 1:3, según los fondos.
         long credito = json.readTree(mvc.perform(post("/api/v1/creditos/letras/solicitudes").header(HttpHeaders.AUTHORIZATION, bearer(cliente.token()))
                 .contentType(MediaType.APPLICATION_JSON).content("{\"modalidad\":\"NORMAL\",\"importe\":3000.00,\"plazoMeses\":3,\"origenEncaje\":\"CREDITO\"}"))
                 .andReturn().getResponse().getContentAsString()).get("id").asLong();
         mvc.perform(post("/api/v1/admin/creditos/" + credito + "/aprobar").header(HttpHeaders.AUTHORIZATION, bearer(presidente()))).andExpect(status().is2xxSuccessful());
         conClave(bearer(cliente.token()), "/api/v1/creditos/" + credito + "/pagos", "{}").andExpect(status().isOk());
         BigDecimal interes = jdbc.queryForObject("select interes from cuotas_credito where credito_id = ? and numero = 1", BigDecimal.class, credito);
-        BigDecimal aReserva = interes.multiply(new BigDecimal("0.10")).setScale(2, java.math.RoundingMode.HALF_UP);
-        BigDecimal aSocios = interes.subtract(aReserva);
+        BigDecimal suministros = jdbc.queryForObject("select importe from suministros_credito where credito_id = ?", BigDecimal.class, credito);
+        assertThat(suministros).isEqualByComparingTo("45");
+        BigDecimal aReserva = interes.multiply(new BigDecimal("0.10")).setScale(2, java.math.RoundingMode.HALF_UP)
+                .add(suministros.multiply(new BigDecimal("0.10")).setScale(2, java.math.RoundingMode.HALF_UP));
+        BigDecimal aSocios = interes.add(suministros).subtract(aReserva);
 
         assertThat(reserva().subtract(reservaAntes)).isEqualByComparingTo(aReserva);
         JsonNode ra = resumen(a);

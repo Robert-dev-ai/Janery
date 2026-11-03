@@ -16,10 +16,19 @@ Proyecto de Neon: `janery`. El programa usa la base `neondb` y el esquema `janer
 
 | Rama de Neon | Uso |
 |---|---|
-| `development` | Trabajo diario con datos falsos. El `.env` apunta aquí |
-| `production` | Versión final. Sin tablas hasta el primer despliegue. No usarla para programar ni para pruebas |
+| `development` | **Datos reales desde el 02/11/2026.** El `.env` apunta aquí |
+| `production` | Sin tablas. No usarla para programar ni para pruebas |
 
-Las pruebas crean los esquemas `janery_test` y `janery_simulacion_test`, y la simulación usa la base `janery_simulacion`. En Neon pueden quedar bases `janery` que sobran: el programa no las usa.
+**`development` tiene datos reales: nunca reiniciarla (`neon branches reset`), borrarla ni cargarle datos falsos.**
+
+Bases de la rama `development` (decisión del propietario, 02/11/2026: solo estas dos):
+
+| Base | Uso |
+|---|---|
+| `neondb` | El programa, en el esquema `janery`. Las pruebas usan los esquemas `janery_test` y `janery_simulacion_test`, que recrean en cada ejecución; nunca tocan `janery` |
+| `janery_simulacion` | El simulador de fechas (`simulacion.ps1`) |
+
+La base `postgres` es interna de Neon.
 
 ## Preparar una computadora nueva
 
@@ -55,19 +64,15 @@ Opcional, para usar Claude Code con Neon: `neon plugins --global --agent claude-
 
 1. Al empezar: `git pull` en `main` y crear una rama, `git checkout -b feature/nombre`.
 2. Si la estructura de la base cambia, añadir una migración nueva en `backend/src/main/resources/db/migration/` (`V11__descripcion.sql`, y así en adelante).
-3. Probar en `development` con datos falsos.
+3. Probar con las pruebas automáticas o con el simulador (`janery_simulacion`), no con operaciones inventadas en la aplicación normal: sus datos son reales.
 4. Al terminar: `git add`, `git commit`, `git push`, y fusionar en `main`.
 5. En otra computadora: `git pull` antes de arrancar el backend.
 
-La estructura llega a `production` por las migraciones al desplegar; los datos falsos no viajan porque no están en esos archivos. Las ramas de Neon no se fusionan. Para limpiar `development` y dejarla igual que `production`, lo que borra sus datos falsos:
-
-```powershell
-neon branches reset development --parent
-```
+Una migración nueva se aplica sobre los datos reales al arrancar el backend: revisarla antes y hacer un respaldo si cambia o borra datos. Las ramas de Neon no se fusionan.
 
 ## Reglas
 
-- No crear ni cambiar tablas a mano desde la consola de Neon o DBeaver: esos cambios no llegan a otras bases y pueden impedir que el backend arranque. Mirar y cargar datos falsos sí está permitido.
+- No crear ni cambiar tablas a mano desde la consola de Neon o DBeaver: esos cambios no llegan a otras bases y pueden impedir que el backend arranque. Mirar los datos sí está permitido; cargar datos falsos en `neondb`, no.
 - No editar una migración ya aplicada: los cambios van en un archivo con versión nueva.
 - No trabajar con dos computadoras a la vez con migraciones distintas: todas comparten la misma base.
 - No apuntar el `.env` a `production` ni tocar esa rama sin autorización del propietario.

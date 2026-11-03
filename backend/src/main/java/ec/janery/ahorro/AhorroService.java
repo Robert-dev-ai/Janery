@@ -332,18 +332,21 @@ public class AhorroService {
         }
     }
 
-    /** El encaje de un crédito pagado con un ahorro normal. El dinero sigue siendo de la persona: pasa a ser encaje. */
+    /**
+     * El encaje o los suministros de un crédito, pagados con un ahorro normal. concepto: ENCAJE (sigue siendo de la persona)
+     * o SUMINISTROS (pasa a ser ganancia).
+     */
     @Transactional
-    public void descontarEncaje(Long personaId, Long ahorroId, BigDecimal importe, Long operacion) {
+    public void descontarAlInicioDeCredito(Long personaId, Long ahorroId, BigDecimal importe, Long operacion, String concepto) {
         exigirAhorroNormal(personaId, ahorroId);
         CuentaAhorro a = propia(personaId, ahorroId);
         exigirActiva(a);
         if (importe.compareTo(a.getSaldo()) > 0) {
-            throw NegocioException.conflicto("SALDO_INSUFICIENTE", "El ahorro elegido no cubre el encaje");
+            throw NegocioException.conflicto("SALDO_INSUFICIENTE", "El ahorro elegido no cubre el encaje y los suministros");
         }
         devengar(a);
         a.setSaldo(a.getSaldo().subtract(importe));
-        asiento(a, operacion, SALIDA, importe, "ENCAJE", null, null);
+        asiento(a, operacion, SALIDA, importe, concepto, null, null);
     }
 
     @Transactional(readOnly = true)

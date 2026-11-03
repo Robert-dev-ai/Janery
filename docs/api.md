@@ -45,6 +45,14 @@
 - `POST /creditos/emergentes/solicitudes`
 - `POST /creditos/emergentes/{id}/disposiciones` (para cupo de socio, sujeto a reglas)
 - `POST /creditos/{id}/pagos`
+- Créditos anteriores a Janery (`REGISTRAR_CREDITOS_EXISTENTES`, reglas en `reglas-negocio.md`, sección 18): `GET /admin/creditos/existentes/personas?buscar=`, `POST /admin/creditos/existentes/personas/{usuarioId}/vista-previa` (sin guardar) y `POST /admin/creditos/existentes/personas/{usuarioId}` (requiere `Idempotency-Key`).
+
+### Pagar
+- Reglas en `reglas-negocio.md`, sección 20. Requiere cuenta principal activa.
+- `GET /pagos/personas?buscar=` (mínimo 3 letras; devuelve solo `usuarioId` y `nombre`). Buscar y pagar lo de otras personas es solo para socios: a un cliente responde 403 `SOLO_SOCIOS`.
+- `GET /pagos/opciones/me` y `GET /pagos/opciones/{usuarioId}`: créditos activos, ahorros normales y, si es socio, meses de aporte
+- `POST /pagos` (multiparte, requiere `Idempotency-Key`): parte `datos` en JSON `{destinos: [{usuarioId, tipo, referenciaId?, periodos?, importe?}], medio, referencia}` y parte `archivos` con el comprobante, obligatorio. `tipo`: `CUENTA`, `CUOTA_CREDITO`, `AHORRO`, `APORTE_OBLIGATORIO`, `APORTE_PERSONAL` o `CAJA_CHICA`. Queda como aviso de depósito; se confirma o rechaza en `/admin/solicitudes-deposito`.
+
 
 ### Ahorros
 - `GET /ahorros/me`

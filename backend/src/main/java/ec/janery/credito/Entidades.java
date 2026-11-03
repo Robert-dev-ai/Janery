@@ -40,6 +40,8 @@ final class Entidades {
         private BigDecimal tasaDesgravamen;
         private String unidadTasa;
         private BigDecimal porcentajeEncaje;
+        /** Null en los créditos sin cobro de suministros: emergentes, cupos y los anteriores a Janery. */
+        private BigDecimal porcentajeSuministros;
         private BigDecimal capitalPendiente = BigDecimal.ZERO;
         private BigDecimal interesAcumulado = BigDecimal.ZERO;
         private BigDecimal desgravamenAcumulado = BigDecimal.ZERO;
@@ -53,6 +55,8 @@ final class Entidades {
         private Long ahorroEncajeId;
         private BigDecimal tasaMora = BigDecimal.ZERO;
         private String claveSolicitud;
+        /** Registrado con sus condiciones originales: ya existía antes de usar Janery. */
+        private boolean existente;
     }
 
     /** Un retiro del cupo de socio, en espera de aprobación. */
@@ -196,6 +200,22 @@ final class Entidades {
         private BigDecimal importe;
         private Instant pagadoEn;
         private Instant devueltoEn;
+    }
+
+    /** Lo cobrado por suministros al inicio de un crédito a letras: no se devuelve, es ganancia. */
+    @Entity(name = "SuministroCredito")
+    @Table(name = "suministros_credito")
+    @Getter
+    @NoArgsConstructor
+    @AllArgsConstructor
+    static class SuministroCredito {
+        @Id
+        @GeneratedValue(strategy = GenerationType.IDENTITY)
+        private Long id;
+        private Long creditoId;
+        private Long operacionId;
+        private BigDecimal importe;
+        private Instant creadoEn;
     }
 
     @Entity(name = "AhorroLetrasCredito")

@@ -61,8 +61,8 @@ class ProductosIntegrationTest {
         assertThat(saldo(p)).isEqualByComparingTo("200");
 
         aprobar(credito);
-        // Recibe 1000 y paga 10 % de encaje (cliente, normal).
-        assertThat(saldo(p)).isEqualByComparingTo("1100");
+        // Recibe 1000 y paga 10 % de encaje y 1,5 % de suministros (cliente, normal).
+        assertThat(saldo(p)).isEqualByComparingTo("1085");
         JsonNode c = credito(p, credito);
         assertThat(c.get("estado").asText()).isEqualTo("ACTIVO");
         assertThat(c.get("encaje").decimalValue()).isEqualByComparingTo("100");
@@ -81,8 +81,8 @@ class ProductosIntegrationTest {
         assertThat(fin.get("encajeDevuelto").asBoolean()).isTrue();
         assertThat(fin.get("ahorroLetras").decimalValue()).isEqualByComparingTo("0");
         assertThat(fin.get("capitalPendiente").decimalValue()).isEqualByComparingTo("0");
-        // Al final solo cuestan los cargos: encaje y ahorro letras regresaron.
-        assertThat(saldo(p)).isEqualByComparingTo(new BigDecimal("200").subtract(cargos));
+        // Al final solo cuestan los cargos y los suministros: encaje y ahorro letras regresaron.
+        assertThat(saldo(p)).isEqualByComparingTo(new BigDecimal("200").subtract(cargos).subtract(new BigDecimal("15")));
         assertThat(pagado).isEqualByComparingTo(new BigDecimal("1000").add(cargos).add(ahorro));
     }
 
@@ -333,6 +333,37 @@ class ProductosIntegrationTest {
                 .andExpect(status().isConflict()).andExpect(jsonPath("$.codigo").value("FRECUENCIA_EXCEDIDA"));
     }
 
+    @Test
+    void suministrosSeCobranAlInicioComoGananciaYNoSeDevuelven() throws Exception {
+        // Cliente, normal: 1,5 %, descontado del crédito junto con el encaje.
+        Persona p = persona();
+        long normal = solicitarLetras(p, "NORMAL", "1000.00", 3);
+        assertThat(credito(p, normal).get("suministros").decimalValue()).isEqualByComparingTo("15");
+        aprobar(normal);
+        assertThat(saldo(p)).isEqualByComparingTo("885");
+        assertThat(jdbc.queryForObject("""
+                SELECT SUM(l.importe) FROM libro_contable l JOIN suministros_credito s ON s.operacion_id = l.operacion_id
+                WHERE s.credito_id = ? AND l.linea = '4.8'""", BigDecimal.class, normal)).isEqualByComparingTo("15");
+
+        // Socio, inversión: 0,75 %, en efectivo: entra a la caja junto con el encaje.
+        Persona socio = persona();
+        hacerSocio(socio);
+        String r = mvc.perform(post("/api/v1/creditos/letras/solicitudes").header(HttpHeaders.AUTHORIZATION, bearer(socio.token()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"modalidad\":\"INVERSION\",\"importe\":1000.00,\"plazoMeses\":3,\"origenEncaje\":\"EFECTIVO\"}"))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        long inversion = json.readTree(r).get("id").asLong();
+        JsonNode antes = credito(socio, inversion);
+        assertThat(antes.get("suministros").decimalValue()).isEqualByComparingTo("7.50");
+        aprobar(inversion);
+        JsonNode c = credito(socio, inversion);
+        assertThat(saldo(socio)).isEqualByComparingTo("1000");
+        assertThat(jdbc.queryForObject("""
+                SELECT SUM(m.importe) FROM movimientos_caja m JOIN suministros_credito s ON s.operacion_id = m.operacion_id
+                WHERE s.credito_id = ? AND m.sentido = 'ENTRADA' AND m.concepto IN ('ENCAJE_EFECTIVO', 'SUMINISTROS_EFECTIVO')""",
+                BigDecimal.class, inversion)).isEqualByComparingTo(c.get("encaje").decimalValue().add(new BigDecimal("7.50")));
+    }
+
     // --- Cupo de socio
 
     @Test
@@ -524,16 +555,16 @@ class ProductosIntegrationTest {
         mvc.perform(post("/api/v1/admin/creditos/" + deCuenta + "/rechazar").header(HttpHeaders.AUTHORIZATION, bearer(presidente()))
                 .contentType(MediaType.APPLICATION_JSON).content("{\"motivo\":\"Sin saldo\"}")).andExpect(status().isNoContent());
 
-        // En efectivo: entra a la caja y el desembolso llega completo.
+        // En efectivo: encaje y suministros (1,5 % de 300) entran a la caja y el desembolso llega completo.
         BigDecimal cajaAntes = saldoCaja();
         long enEfectivo = solicitarLetrasCon(p, "\"origenEncaje\":\"EFECTIVO\"");
         aprobar(enEfectivo);
         BigDecimal encaje = credito(p, enEfectivo).get("encaje").decimalValue();
         assertThat(encaje.signum()).isPositive();
         assertThat(saldo(p)).isEqualByComparingTo("300");
-        assertThat(saldoCaja()).isEqualByComparingTo(cajaAntes.add(encaje));
+        assertThat(saldoCaja()).isEqualByComparingTo(cajaAntes.add(encaje).add(new BigDecimal("4.50")));
 
-        // De un ahorro: baja el ahorro, no la cuenta.
+        // De un ahorro: baja el ahorro, no la cuenta, también por los suministros.
         Persona otra = persona();
         depositar(otra, "100.00");
         long ahorro = crearNormal(otra, "Reserva");
@@ -541,7 +572,7 @@ class ProductosIntegrationTest {
         long deAhorro = solicitarLetrasCon(otra, "\"origenEncaje\":\"AHORROS\",\"ahorroEncajeId\":" + ahorro);
         aprobar(deAhorro);
         assertThat(saldo(otra)).isEqualByComparingTo("300");
-        assertThat(saldoAhorro(otra, ahorro)).isEqualByComparingTo(new BigDecimal("100").subtract(credito(otra, deAhorro).get("encaje").decimalValue()));
+        assertThat(saldoAhorro(otra, ahorro)).isEqualByComparingTo(new BigDecimal("100").subtract(credito(otra, deAhorro).get("encaje").decimalValue()).subtract(new BigDecimal("4.50")));
 
         // Sin origen no hay solicitud.
         Persona sinOrigen = persona();

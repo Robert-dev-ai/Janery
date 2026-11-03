@@ -32,7 +32,7 @@ const USD = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' 
 
     @if (cuenta(); as c) {
       <div class="rejilla-indicadores">
-        <app-indicador titulo="Saldo disponible" ruta="/app/cuenta" [icono]="iconos.Wallet" [valor]="c.saldoDisponible | currency: 'USD'" [nota]="'Cuenta ' + c.numero" />
+        <app-indicador titulo="Saldo disponible" ruta="/app/movimientos" [icono]="iconos.Wallet" [valor]="c.saldoDisponible | currency: 'USD'" [nota]="'Cuenta ' + c.numero" />
         <app-indicador titulo="Total en créditos" ruta="/app/creditos" tono="advertencia" [icono]="iconos.HandCoins" [valor]="totalDeuda() | currency: 'USD'" nota="Lo que debe en total" />
         <app-indicador titulo="Total en ahorros" ruta="/app/ahorros" [icono]="iconos.PiggyBank" [valor]="totalAhorros() | currency: 'USD'" nota="Sin contar ahorro letras" />
         @if (socio(); as s) {

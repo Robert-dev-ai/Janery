@@ -73,7 +73,7 @@ import { FormDatosCredito } from '../configuracion/form-datos-credito';
                 <label>Modalidad
                   <select name="modalidad" [(ngModel)]="modalidad">
                     @for (m of p.letras; track m.modalidad) {
-                      <option [value]="m.modalidad">{{ m.modalidad }}: {{ m.tasaInteres | number: '1.0-4' }} % mensual, encaje {{ m.porcentajeEncaje | number: '1.0-4' }} %</option>
+                      <option [value]="m.modalidad">{{ m.modalidad }}: {{ m.tasaInteres | number: '1.0-4' }} % mensual, encaje {{ m.porcentajeEncaje | number: '1.0-4' }} %, suministros {{ m.porcentajeSuministros | number: '1.0-4' }} %</option>
                     }
                   </select>
                 </label>
@@ -84,8 +84,8 @@ import { FormDatosCredito } from '../configuracion/form-datos-credito';
               <button type="submit" class="secundario" [disabled]="!importe || !plazo">Simular</button>
             </form>
             @if (simulacion(); as s) {
-              <p>Letra mensual: <strong>{{ s.cuotas[0]?.total | currency: 'USD' }}</strong> · Encaje: <strong>{{ s.encaje | currency: 'USD' }}</strong></p>
-              <label>¿De dónde paga el encaje?
+              <p>Letra mensual: <strong>{{ s.cuotas[0]?.total | currency: 'USD' }}</strong> · Encaje: <strong>{{ s.encaje | currency: 'USD' }}</strong> · Suministros (no se devuelven): <strong>{{ s.suministros | currency: 'USD' }}</strong></p>
+              <label>¿De dónde paga el encaje y los suministros?
                 <select name="origen" [(ngModel)]="origen">
                   <option value="">Elija una opción</option>
                   <option value="EFECTIVO">En efectivo, al aprobarse</option>

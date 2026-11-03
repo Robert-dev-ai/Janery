@@ -15,8 +15,8 @@ import { Comprobantes } from './comprobantes';
   selector: 'app-solicitudes-deposito',
   imports: [Comprobantes, CurrencyPipe, DatePipe, Estado, FormsModule, Paginador],
   template: `
-    <h1>Depósitos por confirmar</h1>
-    <p class="suave">Confirme solo cuando el dinero ya se recibió: en ese momento entra a la cuenta de la persona y a la caja principal.</p>
+    <h1>Depósitos y pagos por confirmar</h1>
+    <p class="suave">Confirme solo cuando el dinero ya se recibió: en ese momento entra a la cuenta de la persona y a la caja principal. En un pago, entra a la cuenta de cada beneficiario y se paga cada cosa de la lista; si una no se puede pagar, no se confirma nada.</p>
     <div class="herramientas">
       <label>Estado
         <select [ngModel]="estado()" (ngModelChange)="filtrar($event)">
@@ -32,7 +32,7 @@ import { Comprobantes } from './comprobantes';
     @if (aviso()) { <p class="exito" role="status">{{ aviso() }}</p> }
     @if (datos(); as d) {
       @if (d.total === 0) {
-        <p class="vacio">No hay depósitos en este estado.</p>
+        <p class="vacio">No hay depósitos ni pagos en este estado.</p>
       } @else {
         <div class="tabla">
           <table>
@@ -42,7 +42,14 @@ import { Comprobantes } from './comprobantes';
                 <tr>
                   <td class="codigo">{{ s.codigo }}</td>
                   <td>{{ s.fecha | date: 'short' : 'America/Guayaquil' }}</td>
-                  <td>{{ s.titular }}</td>
+                  <td>
+                    {{ s.titular }}
+                    @if (s.pago) {
+                      <ul class="suave m-0 pl-4 text-sm">
+                        @for (d of s.destinos; track $index) { <li>{{ d.descripcion }}: {{ d.importe | currency: 'USD' }}</li> }
+                      </ul>
+                    }
+                  </td>
                   <td>{{ s.numeroCuenta }}</td>
                   <td class="num">{{ s.importe | currency: 'USD' }}</td>
                   <td>{{ s.medio === 'EFECTIVO' ? 'Efectivo' : 'Transferencia ' + s.referencia }}</td>
@@ -98,8 +105,9 @@ export class SolicitudesDeposito implements OnInit {
   }
 
   protected async confirmar(s: SolicitudDeposito): Promise<void> {
-    if (await this.dialogo.confirmar(`¿Confirma que recibió ${s.importe} USD de ${s.titular}? Entrarán a su cuenta y a la caja principal.`, 'Confirmar recepción')) {
-      this.ejecutar(this.api.confirmarDeposito(s.id), 'Depósito confirmado.');
+    const destino = s.pago ? `Se pagarán las ${s.destinos.length} cosas de la lista.` : 'Entrarán a su cuenta y a la caja principal.';
+    if (await this.dialogo.confirmar(`¿Confirma que recibió ${s.importe} USD de ${s.titular}? ${destino}`, 'Confirmar recepción')) {
+      this.ejecutar(this.api.confirmarDeposito(s.id), s.pago ? 'Pago confirmado: se pagó cada cosa de la lista.' : 'Depósito confirmado.');
     }
   }
 

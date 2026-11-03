@@ -36,6 +36,7 @@ import ec.janery.credito.Entidades.EncajeCredito;
 import ec.janery.credito.Entidades.MovimientoAhorroLetras;
 import ec.janery.credito.Entidades.PagoCredito;
 import ec.janery.credito.Entidades.SolicitudCupo;
+import ec.janery.credito.Entidades.SuministroCredito;
 import ec.janery.cuenta.CuentaPrincipal;
 import ec.janery.cuenta.CuentaService;
 import ec.janery.parametros.ParametroService;
@@ -58,6 +59,8 @@ public class CreditoService {
         Optional<Credito> bloquear(@Param("id") Long id);
 
         List<Credito> findByPersonaIdOrderByIdDesc(Long personaId);
+
+        List<Credito> findByPersonaIdInAndEstadoOrderByIdDesc(java.util.Collection<Long> personaIds, String estado);
 
         Page<Credito> findByEstado(String estado, Pageable pageable);
 
@@ -150,6 +153,9 @@ public class CreditoService {
         List<EncajeCredito> findByCreditoIdIn(java.util.Collection<Long> creditoIds);
     }
 
+    interface SuministroRepository extends JpaRepository<SuministroCredito, Long> {
+    }
+
     interface AhorroLetrasRepository extends JpaRepository<AhorroLetrasCredito, Long> {
         Optional<AhorroLetrasCredito> findByCreditoId(Long creditoId);
 
@@ -167,7 +173,7 @@ public class CreditoService {
             String titular, String motivoRechazo, List<CuotaVista> cuotas, List<Integer> cuotasPagadas,
             int letrasParaPrecancelar, boolean precancelable, Instant precanceladoEn, Instant creadoEn, Instant finalizadoEn,
             String origenEncaje, BigDecimal tasaMora, BigDecimal moraPendiente, int letrasAtrasadas, String codigo,
-            List<AprobacionService.Voto> aprobaciones, long documentos) {
+            List<AprobacionService.Voto> aprobaciones, long documentos, boolean existente, BigDecimal suministros) {
     }
 
     public record CuotaVista(int numero, LocalDate vencimiento, BigDecimal capital, BigDecimal ahorroLetras,
@@ -184,7 +190,7 @@ public class CreditoService {
             String modalidad, BigDecimal total) {
     }
 
-    public record ProductoLetras(String modalidad, BigDecimal tasaInteres, BigDecimal porcentajeEncaje) {
+    public record ProductoLetras(String modalidad, BigDecimal tasaInteres, BigDecimal porcentajeEncaje, BigDecimal porcentajeSuministros) {
     }
 
     public record Productos(String perfil, List<ProductoLetras> letras, BigDecimal tasaDesgravamen,
@@ -195,7 +201,7 @@ public class CreditoService {
     }
 
     public record Simulacion(BigDecimal importe, int plazoMeses, BigDecimal tasaInteres, BigDecimal tasaDesgravamen,
-            BigDecimal encaje, List<Letra> cuotas) {
+            BigDecimal encaje, BigDecimal suministros, List<Letra> cuotas) {
     }
 
     private static final String LETRAS = "LETRAS";
@@ -223,6 +229,7 @@ public class CreditoService {
     private final DetalleRepository detalles;
     private final EncajeRepository encajes;
     private final AhorroLetrasRepository ahorros;
+    private final SuministroRepository suministros;
     private final MovimientoAhorroLetrasRepository movimientosAhorro;
     private final SolicitudCupoRepository solicitudesCupo;
     private final AhorroService ahorrosPersona;
@@ -257,10 +264,12 @@ public class CreditoService {
         modalidadesDe(perfil).forEach(m -> {
             codigos.add("LETRAS_INTERES_%s_%s".formatted(m, perfil));
             codigos.add("LETRAS_ENCAJE_%s_%s".formatted(m, perfil));
+            codigos.add(codigoSuministros(m));
         });
         Map<String, BigDecimal> v = parametros.valoresVigentes(codigos);
         List<ProductoLetras> letras = modalidadesDe(perfil).stream().map(m -> new ProductoLetras(m,
-                v.get("LETRAS_INTERES_%s_%s".formatted(m, perfil)), v.get("LETRAS_ENCAJE_%s_%s".formatted(m, perfil)))).toList();
+                v.get("LETRAS_INTERES_%s_%s".formatted(m, perfil)), v.get("LETRAS_ENCAJE_%s_%s".formatted(m, perfil)),
+                v.get(codigoSuministros(m)))).toList();
         BigDecimal limite = v.get(cupo);
         BigDecimal utilizado = socio ? creditos.cupoUtilizado(personaId) : BigDecimal.ZERO;
         return new Productos(perfil, letras, v.get("LETRAS_DESGRAVAMEN"), v.get("LETRAS_IMPORTE_MIN"), v.get("LETRAS_IMPORTE_MAX"),
@@ -280,6 +289,7 @@ public class CreditoService {
         BigDecimal desgravamen = parametros.valorVigente("LETRAS_DESGRAVAMEN");
         BigDecimal encaje = parametros.valorVigente("LETRAS_ENCAJE_%s_%s".formatted(modalidad, perfil));
         return new Simulacion(importe, plazo, interes, desgravamen, CalculadoraCredito.porcentaje(importe, encaje),
+                CalculadoraCredito.porcentaje(importe, parametros.valorVigente(codigoSuministros(modalidad))),
                 CalculadoraCredito.letras(importe, plazo, interes, desgravamen, hoy()));
     }
 
@@ -306,6 +316,7 @@ public class CreditoService {
         c.setImporte(importe);
         c.setPlazoMeses(plazo);
         c.setPorcentajeEncaje(parametros.valorVigente("LETRAS_ENCAJE_%s_%s".formatted(modalidad, perfil)));
+        c.setPorcentajeSuministros(parametros.valorVigente(codigoSuministros(modalidad)));
         c.setOrigenEncaje(origenEncaje);
         c.setAhorroEncajeId("AHORROS".equals(origenEncaje) ? ahorroEncajeId : null);
         creditos.save(c);
@@ -347,17 +358,24 @@ public class CreditoService {
         }
         Instant ahora = Instant.now(reloj);
         BigDecimal encaje = CalculadoraCredito.porcentaje(c.getImporte(), c.getPorcentajeEncaje());
+        BigDecimal suministro = suministroDe(c);
         // Solo "CREDITO" paga con el propio desembolso: los demás deben tener el dinero antes de recibirlo.
-        if ("CUENTA".equals(c.getOrigenEncaje()) && encaje.compareTo(cuenta.getSaldoDisponible()) > 0) {
-            throw NegocioException.conflicto("SALDO_INSUFICIENTE", "La cuenta del solicitante no cubre el encaje");
+        if ("CUENTA".equals(c.getOrigenEncaje()) && encaje.add(suministro).compareTo(cuenta.getSaldoDisponible()) > 0) {
+            throw NegocioException.conflicto("SALDO_INSUFICIENTE", "La cuenta del solicitante no cubre el encaje y los suministros");
         }
 
         Long desembolso = cuentas.crearOperacionInterna("DESEMBOLSO", c.getImporte(), null, actorId);
         cuentas.mover(cuenta, desembolso, ENTRADA, c.getImporte(), "DESEMBOLSO_CREDITO");
         desembolsos.save(new DesembolsoCredito(null, c.getId(), desembolso, c.getImporte(), ahora));
 
-        cobrarEncaje(c, cuenta, desembolso, encaje);
+        cobrarAlInicio(c, cuenta, desembolso, encaje, "ENCAJE");
         encajes.save(new EncajeCredito(null, c.getId(), desembolso, encaje, ahora, null));
+        // Decisión del propietario (02/11/2026): los suministros se pagan como el encaje, pero no se devuelven.
+        if (suministro.signum() > 0) {
+            cobrarAlInicio(c, cuenta, desembolso, suministro, "SUMINISTROS");
+            suministros.save(new SuministroCredito(null, c.getId(), desembolso, suministro, ahora));
+            ganancia(suministro, "Suministros del crédito #" + c.getId(), actorId);
+        }
         ahorros.save(new AhorroLetrasCredito(null, c.getId(), BigDecimal.ZERO.setScale(2), null));
 
         c.setFechaInicio(hoy());
@@ -369,16 +387,29 @@ public class CreditoService {
         auditoria.registrar(actorId, "CREDITO_APROBADO", MODULO, "credito", c.getId(), SOLICITADO, ACTIVO, c.getOrigenEncaje());
     }
 
-    /** Definido por el propietario: el encaje se paga en efectivo, de la cuenta, de un ahorro o del propio crédito. */
-    private void cobrarEncaje(Credito c, CuentaPrincipal cuenta, Long operacion, BigDecimal encaje) {
-        if (encaje.signum() <= 0) {
+    /**
+     * Definido por el propietario: el encaje se paga en efectivo, de la cuenta, de un ahorro o del propio crédito. Los
+     * suministros salen del mismo lugar. concepto: ENCAJE o SUMINISTROS.
+     */
+    private void cobrarAlInicio(Credito c, CuentaPrincipal cuenta, Long operacion, BigDecimal importe, String concepto) {
+        if (importe.signum() <= 0) {
             return;
         }
         switch (c.getOrigenEncaje() == null ? "CREDITO" : c.getOrigenEncaje()) {
-            case "EFECTIVO" -> caja.registrarEnPrincipal(operacion, ENTRADA, encaje, "ENCAJE_EFECTIVO");
-            case "AHORROS" -> ahorrosPersona.descontarEncaje(c.getPersonaId(), c.getAhorroEncajeId(), encaje, operacion);
-            default -> cuentas.mover(cuenta, operacion, SALIDA, encaje, "ENCAJE_CREDITO");
+            case "EFECTIVO" -> caja.registrarEnPrincipal(operacion, ENTRADA, importe, concepto + "_EFECTIVO");
+            case "AHORROS" -> ahorrosPersona.descontarAlInicioDeCredito(c.getPersonaId(), c.getAhorroEncajeId(), importe, operacion, concepto);
+            default -> cuentas.mover(cuenta, operacion, SALIDA, importe, concepto + "_CREDITO");
         }
+    }
+
+    /** Lo que se cobra por suministros al aprobar. Cero si el crédito no lleva ese cobro. */
+    private static BigDecimal suministroDe(Credito c) {
+        return c.getPorcentajeSuministros() == null ? BigDecimal.ZERO.setScale(2)
+                : CalculadoraCredito.porcentaje(c.getImporte(), c.getPorcentajeSuministros());
+    }
+
+    private static String codigoSuministros(String modalidad) {
+        return "LETRAS_SUMINISTROS_" + modalidad;
     }
 
     /** La mora solo aplica a clientes y queda fijada al aprobar, como las demás tasas del crédito. */
@@ -1007,7 +1038,45 @@ public class CreditoService {
                 LETRAS.equals(c.getFamilia()) && ACTIVO.equals(c.getEstado()) && !letras.isEmpty() && pagadas.size() >= requeridas
                         && c.getCapitalPendiente().signum() > 0,
                 c.getPrecanceladoEn(), c.getCreadoEn(), c.getFinalizadoEn(), c.getOrigenEncaje(), c.getTasaMora(), mora, atrasadas,
-                ec.janery.common.Codigos.credito(c.getFamilia(), c.getId()), votos, docs);
+                ec.janery.common.Codigos.credito(c.getFamilia(), c.getId()), votos, docs, c.isExistente(),
+                c.getPorcentajeSuministros() == null ? null : suministroDe(c));
+    }
+
+    /** Lo que se puede pagar de un crédito activo: lo que falta de la próxima letra (con su mora) y el total. */
+    public record Deuda(Long id, Long personaId, String codigo, String familia, String modalidad, BigDecimal proximaLetra,
+            BigDecimal totalPendiente) {
+    }
+
+    /**
+     * Versión ligera de la vista para «Pagar»: créditos activos de varias personas y sus letras en dos consultas, sin
+     * encajes, votos ni documentos. Calcula lo pendiente igual que la vista completa.
+     */
+    @Transactional(readOnly = true)
+    public List<Deuda> deudasActivas(java.util.Collection<Long> personaIds) {
+        List<Credito> activos = personaIds.isEmpty() ? List.of() : creditos.findByPersonaIdInAndEstadoOrderByIdDesc(personaIds, ACTIVO);
+        if (activos.isEmpty()) {
+            return List.of();
+        }
+        Map<Long, List<CuotaCredito>> porCredito = cuotas.findByCreditoIdInOrderByNumero(activos.stream().map(Credito::getId).toList())
+                .stream().collect(java.util.stream.Collectors.groupingBy(CuotaCredito::getCreditoId));
+        LocalDate hoy = hoy();
+        return activos.stream().map(c -> {
+            String codigo = ec.janery.common.Codigos.credito(c.getFamilia(), c.getId());
+            if (esLinea(c)) {
+                long dias = ChronoUnit.DAYS.between(c.getUltimoDevengo(), hoy);
+                BigDecimal interes = c.getInteresAcumulado().add(CalculadoraCredito.devengo(c.getCapitalPendiente(), c.getTasaInteres(), dias));
+                BigDecimal desgravamen = c.getDesgravamenAcumulado()
+                        .add(CalculadoraCredito.devengo(c.getCapitalPendiente(), c.getTasaDesgravamen(), dias));
+                BigDecimal total = interes.setScale(2, RoundingMode.HALF_UP).add(desgravamen.setScale(2, RoundingMode.HALF_UP))
+                        .add(c.getCapitalPendiente());
+                return new Deuda(c.getId(), c.getPersonaId(), codigo, c.getFamilia(), c.getModalidad(), null, total);
+            }
+            List<CuotaCredito> pendientes = porCredito.getOrDefault(c.getId(), List.of()).stream()
+                    .filter(q -> q.getPagadaEn() == null).toList();
+            BigDecimal total = pendientes.stream().map(q -> deudaDe(q, c, hoy)).reduce(BigDecimal.ZERO.setScale(2), BigDecimal::add);
+            BigDecimal proxima = pendientes.isEmpty() ? null : deudaDe(pendientes.get(0), c, hoy);
+            return new Deuda(c.getId(), c.getPersonaId(), codigo, c.getFamilia(), c.getModalidad(), proxima, total);
+        }).toList();
     }
 
     // --- Apoyo

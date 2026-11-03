@@ -42,6 +42,25 @@ final class CalculadoraCredito {
         return letras;
     }
 
+    /**
+     * Para créditos anteriores a Janery que no llevaban ahorro letras: la letra es capital, interés y desgravamen, con
+     * centavos. Interés y desgravamen son fijos sobre el capital sacado, como en {@link #letras}.
+     */
+    static List<Letra> letrasSinAhorro(BigDecimal importe, int meses, BigDecimal tasaInteres, BigDecimal tasaDesgravamen,
+            LocalDate inicio) {
+        BigDecimal capitalBase = importe.divide(BigDecimal.valueOf(meses), 2, RoundingMode.DOWN);
+        BigDecimal capitalUltima = importe.subtract(capitalBase.multiply(BigDecimal.valueOf(meses - 1)));
+        BigDecimal interes = porcentaje(importe, tasaInteres);
+        BigDecimal desgravamen = porcentaje(importe, tasaDesgravamen);
+        BigDecimal ahorro = BigDecimal.ZERO.setScale(2);
+        List<Letra> letras = new ArrayList<>(meses);
+        for (int n = 1; n <= meses; n++) {
+            BigDecimal capital = n == meses ? capitalUltima : capitalBase;
+            letras.add(new Letra(n, inicio.plusMonths(n), capital, ahorro, desgravamen, interes, capital.add(interes).add(desgravamen)));
+        }
+        return letras;
+    }
+
     static BigDecimal porcentaje(BigDecimal base, BigDecimal tasa) {
         return base.multiply(tasa).divide(CIEN, 2, RoundingMode.HALF_UP);
     }

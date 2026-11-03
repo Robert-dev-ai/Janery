@@ -46,11 +46,12 @@ const GRUPOS: Grupo[] = [
     ],
   },
   {
-    id: 'letras', titulo: 'Créditos a letras', detalle: 'Montos, plazos y desgravamen generales, y el interés y encaje de cada modalidad.',
+    id: 'letras', titulo: 'Créditos a letras', detalle: 'Montos, plazos y desgravamen generales, suministros, y el interés y encaje de cada modalidad.',
     incluye: empieza('LETRAS_'), matrizLetras: true,
     subgrupos: [
       { titulo: 'Montos y plazos', incluye: empieza('LETRAS_IMPORTE_', 'LETRAS_PLAZO_') },
       { titulo: 'Desgravamen', incluye: empieza('LETRAS_DESGRAVAMEN') },
+      { titulo: 'Suministros por modalidad (al inicio, no se devuelven)', incluye: empieza('LETRAS_SUMINISTROS_') },
     ],
   },
   {

@@ -61,7 +61,7 @@ import { llevarADepositarSiFaltaSaldo, mensajeDeError } from '../../shared/utils
             </button>
             <form class="acciones" (ngSubmit)="mover(a, 'deposito')">
               <label>Importe (USD)
-                <input type="number" min="0" step="0.01" name="i{{ a.id }}" [(ngModel)]="importes[a.id]" />
+                <input type="number" min="0" step="any" name="i{{ a.id }}" [(ngModel)]="importes[a.id]" />
               </label>
               <button type="submit" [disabled]="!importes[a.id]">Depositar</button>
               <button type="button" class="secundario" [disabled]="!importes[a.id]" (click)="mover(a, 'retiro')">Retirar</button>
@@ -149,7 +149,7 @@ import { llevarADepositarSiFaltaSaldo, mensajeDeError } from '../../shared/utils
         }
         <label>Nombre (puede cambiarlo) <input name="nombre" maxlength="100" [(ngModel)]="nombre" /></label>
         @if (tipo === 'PLAZO_FIJO') {
-          <label>Importe (USD) <input type="number" min="0" step="0.01" name="importe" [(ngModel)]="importe" /></label>
+          <label>Importe (USD) <input type="number" min="0" step="any" name="importe" [(ngModel)]="importe" /></label>
           <label>Plazo
             <select name="plazo" [(ngModel)]="plazo">
               @for (o of productos()?.plazos; track o.meses) {

@@ -22,6 +22,7 @@ const FUNCIONES: Record<string, Funcion> = {
   CONSULTAR_AUDITORIA: { ruta: '/admin/auditoria', titulo: 'Auditoría', detalle: 'Todo lo que hizo cada persona en el sistema.' },
   CONSULTAR_INFORMES: { ruta: '/admin/reportes', titulo: 'Informes', detalle: 'Consulta y descarga informes de toda la organización.' },
   CONSULTAR_CONTABILIDAD: { ruta: '/admin/contabilidad/balance', titulo: 'Balance general', detalle: 'Balance, libro diario y libro mayor.' },
+  REGISTRAR_CREDITOS_EXISTENTES: { ruta: '/admin/creditos', titulo: 'Créditos anteriores a Janery', detalle: 'Registra los créditos que ya existían, con sus condiciones y letras pagadas.' },
   REGISTRAR_ASIENTOS: { ruta: '/admin/contabilidad/registro', titulo: 'Registro manual', detalle: 'Registra ingresos, gastos y bienes a mano.' },
   VER_USO_APP: { ruta: '/admin/uso', titulo: 'Uso de la aplicación', detalle: 'Qué pantallas se usan más, para decidir qué mejorar.' },
   USAR_SIMULADOR: { ruta: '/admin/simulador', titulo: 'Simulador', detalle: 'Prueba créditos, ahorros y más sin tocar los datos reales.' },

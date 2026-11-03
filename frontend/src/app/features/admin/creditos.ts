@@ -3,6 +3,7 @@ import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Observable } from 'rxjs';
 
+import { AuthService } from '../../core/auth/auth';
 import { ApiService, Credito, DocumentoCredito, Pagina, Solicitante, SolicitudCupo, VotoCredito } from '../../core/services/api';
 import { alCambiar } from '../../core/services/tiempo-real';
 import { AREAS_APROBACION, nombreArea, nombreFamilia } from '../../shared/utils/etiquetas';
@@ -11,16 +12,23 @@ import { Paginador } from '../../shared/components/paginador';
 import { DialogoService } from '../../shared/components/dialogo';
 import { descargar } from '../../shared/utils/descarga';
 import { mensajeDeError } from '../../shared/utils/errores';
+import { CreditoExistenteForm } from './credito-existente';
 import { TramiteCredito } from './tramite-credito';
 
 @Component({
   selector: 'app-admin-creditos',
-  imports: [CurrencyPipe, DecimalPipe, Estado, FormsModule, NgTemplateOutlet, Paginador, TramiteCredito],
+  imports: [CreditoExistenteForm, CurrencyPipe, DecimalPipe, Estado, FormsModule, NgTemplateOutlet, Paginador, TramiteCredito],
   template: `
     <div class="encabezado-pagina">
       <h1>Créditos</h1>
-      <button type="button" (click)="tramitando.set(!tramitando())">{{ tramitando() ? 'Cerrar trámite' : '+ Tramitar un crédito en ventanilla' }}</button>
+      <div class="acciones">
+        @if (puedeRegistrarExistentes) {
+          <button type="button" class="secundario" (click)="registrandoExistente.set(!registrandoExistente())">{{ registrandoExistente() ? 'Cerrar registro' : '+ Registrar crédito que ya existía' }}</button>
+        }
+        <button type="button" (click)="tramitando.set(!tramitando())">{{ tramitando() ? 'Cerrar trámite' : '+ Tramitar un crédito en ventanilla' }}</button>
+      </div>
     </div>
+    @if (registrandoExistente()) { <app-credito-existente (registrado)="filtrar('ACTIVO')" /> }
     @if (tramitando()) { <app-tramite-credito (registrado)="cargar(0)" /> }
     <p class="suave">Cada crédito se decide con tres votos: presidencia o vicepresidencia, tesorería y comité de crédito. Se aprueba y desembolsa solo si los tres aprueban; si alguno rechaza, queda rechazado al completarse los votos. Cada persona vota una vez.</p>
     <div class="herramientas">
@@ -99,6 +107,7 @@ import { TramiteCredito } from './tramite-credito';
                   <td class="codigo">{{ c.codigo }}</td>
                   <td>{{ c.titular }}</td>
                   <td>{{ familia(c.familia) }} {{ c.modalidad ?? '' }}
+                    @if (c.existente) { <br /><small class="suave">Anterior a Janery</small> }
                     @if (c.origenEncaje && c.estado === 'SOLICITADO') { <br /><small class="suave">Encaje: {{ origen(c.origenEncaje) }}</small> }
                     @if (c.letrasAtrasadas > 0) { <br /><small class="negativo">{{ c.letrasAtrasadas }} atrasada{{ c.letrasAtrasadas === 1 ? '' : 's' }}@if (c.moraPendiente > 0) { · mora {{ c.moraPendiente | currency: 'USD' }} }</small> }
                   </td>
@@ -150,6 +159,8 @@ export class AdminCreditos implements OnInit {
 
   protected readonly familia = nombreFamilia;
   protected readonly tramitando = signal(false);
+  protected readonly registrandoExistente = signal(false);
+  protected readonly puedeRegistrarExistentes = inject(AuthService).tienePermiso('REGISTRAR_CREDITOS_EXISTENTES');
   protected readonly areas = AREAS_APROBACION;
   protected readonly area = nombreArea;
 
@@ -221,7 +232,8 @@ export class AdminCreditos implements OnInit {
   }
 
   protected async aprobar(c: Credito): Promise<void> {
-    const efectivo = c.origenEncaje === 'EFECTIVO' ? ` Confirme que recibió ${c.encaje ?? 'el'} en efectivo del encaje.` : '';
+    const suministros = c.suministros ? ` y ${c.suministros} USD de suministros` : '';
+    const efectivo = c.origenEncaje === 'EFECTIVO' ? ` Confirme que recibió en efectivo el encaje${suministros}.` : '';
     if (await this.dialogo.confirmar(`¿Dar su voto de aprobación al crédito de ${c.importe} USD de ${c.titular}? Se desembolsa cuando las tres áreas aprueban.${efectivo}`, 'Aprobar')) {
       this.ejecutar(this.api.aprobarCredito(c.id));
     }
