@@ -62,6 +62,11 @@ public class Persona {
                 && fechaNacimiento != null && banco != null;
     }
 
+    public void corregirNombre(String nombres, String apellidos) {
+        this.nombres = formatearNombre(nombres);
+        this.apellidos = formatearNombre(apellidos);
+    }
+
     public void actualizarContacto(String telefono, String direccion) {
         this.telefono = telefono;
         this.direccion = direccion;

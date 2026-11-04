@@ -32,6 +32,7 @@ public final class HistorialSql {
         ACCIONES.put("CONTRASENA_FALLIDA", "Falló al cambiar su contraseña");
         ACCIONES.put("SESIONES_CERRADAS", "Cerró sus otras sesiones");
         ACCIONES.put("CORREO_CAMBIADO", "Corrigió el correo de");
+        ACCIONES.put("NOMBRE_CAMBIADO", "Corrigió el nombre de");
         ACCIONES.put("PRESIDENTE_INICIAL", "Se creó el usuario de la presidencia");
         ACCIONES.put("CARGO_ASIGNADO", "Asignó un cargo a");
         ACCIONES.put("CARGO_REVOCADO", "Quitó un cargo a");

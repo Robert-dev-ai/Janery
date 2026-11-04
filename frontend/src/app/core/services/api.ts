@@ -178,6 +178,8 @@ export interface UsuarioResumen {
   nombre: string | null;
   identificacion: string | null;
   pideRestablecer: boolean;
+  nombres: string | null;
+  apellidos: string | null;
 }
 
 export interface Letra {
@@ -1080,6 +1082,10 @@ export class ApiService {
 
   cambiarCorreo(usuarioId: number, correo: string): Observable<void> {
     return this.http.put<void>(`${this.base}/admin/usuarios/${usuarioId}/correo`, { correo });
+  }
+
+  corregirNombre(usuarioId: number, nombres: string, apellidos: string): Observable<void> {
+    return this.http.put<void>(`${this.base}/admin/usuarios/${usuarioId}/nombre`, { nombres, apellidos });
   }
 
   misDocumentosCredito(creditoId: number): Observable<DocumentoCredito[]> {

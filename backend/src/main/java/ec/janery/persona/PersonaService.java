@@ -46,7 +46,7 @@ public class PersonaService {
         return persona;
     }
 
-    /** Nombres e identificación quedan fijos: todo lo de la persona está vinculado a ellos. */
+    /** La persona no cambia sus nombres ni su identificación: los nombres los corrige la presidencia (corregirNombre). */
     @Transactional
     public Persona actualizarContacto(Long usuarioId, PersonaController.ContactoRequest r) {
         Persona persona = repository.findByUsuarioId(usuarioId)
@@ -54,6 +54,19 @@ public class PersonaService {
         persona.actualizarContacto(r.telefono().trim(), r.direccion().trim());
         auditoria.registrar(usuarioId, "PERFIL_ACTUALIZADO", "PERSONA", "persona", persona.getId(), null, null, null);
         return persona;
+    }
+
+    /** Para quien se cambió de nombre o lo escribió mal al registrarse. La identificación no cambia. */
+    @Transactional
+    public void corregirNombre(Long actorId, Long usuarioId, String nombres, String apellidos) {
+        Persona persona = repository.findByUsuarioId(usuarioId)
+                .orElseThrow(() -> NegocioException.noEncontrado("La persona aún no tiene datos personales"));
+        String antes = persona.getNombres() + " " + persona.getApellidos();
+        persona.corregirNombre(nombres, apellidos);
+        String despues = persona.getNombres() + " " + persona.getApellidos();
+        if (!antes.equals(despues)) {
+            auditoria.registrar(actorId, "NOMBRE_CAMBIADO", "PERSONA", "persona", persona.getId(), antes, despues, null);
+        }
     }
 
     @Transactional

@@ -22,7 +22,7 @@ import ec.janery.common.Pagina;
 public class UsuarioAdminService implements ApplicationRunner {
 
     public record UsuarioResumen(Long id, String correo, String estado, Instant creadoEn, List<String> cargos,
-            boolean socio, String nombre, String identificacion, boolean pideRestablecer) {
+            boolean socio, String nombre, String identificacion, boolean pideRestablecer, String nombres, String apellidos) {
     }
 
     private static final String MODULO = "USUARIO";
@@ -89,7 +89,9 @@ public class UsuarioAdminService implements ApplicationRunner {
             return new UsuarioResumen(u.getId(), u.getCorreo(), u.getEstado(), u.getCreadoEn(),
                     cargos.getOrDefault(u.getId(), List.of()), persona.map(p -> sociosActivos.contains(p.getId())).orElse(false),
                     persona.map(p -> p.getNombres() + " " + p.getApellidos()).orElse(null),
-                    persona.map(ec.janery.persona.Persona::getIdentificacion).orElse(null), piden.contains(u.getId()));
+                    persona.map(ec.janery.persona.Persona::getIdentificacion).orElse(null), piden.contains(u.getId()),
+                    persona.map(ec.janery.persona.Persona::getNombres).orElse(null),
+                    persona.map(ec.janery.persona.Persona::getApellidos).orElse(null));
         });
     }
 

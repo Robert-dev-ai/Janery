@@ -31,10 +31,15 @@ public class UsuarioAdminController {
             @jakarta.validation.constraints.Size(max = 254) String correo) {
     }
 
+    public record NombreRequest(@jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Size(max = 100) String nombres,
+            @jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Size(max = 100) String apellidos) {
+    }
+
     public record TemporalResponse(String contrasenaTemporal) {
     }
 
     private final AuthService auth;
+    private final ec.janery.persona.PersonaService personas;
 
     /** La contraseña temporal se muestra una sola vez: quien la genera se la entrega a la persona. */
     @PostMapping("/{id}/restablecer-contrasena")
@@ -47,6 +52,13 @@ public class UsuarioAdminController {
     public void cambiarCorreo(@AuthenticationPrincipal Jwt jwt, @PathVariable Long id,
             @jakarta.validation.Valid @RequestBody CorreoRequest r) {
         auth.cambiarCorreo(Long.valueOf(jwt.getSubject()), id, r.correo());
+    }
+
+    @PutMapping("/{id}/nombre")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void corregirNombre(@AuthenticationPrincipal Jwt jwt, @PathVariable Long id,
+            @jakarta.validation.Valid @RequestBody NombreRequest r) {
+        personas.corregirNombre(Long.valueOf(jwt.getSubject()), id, r.nombres(), r.apellidos());
     }
 
     @PostMapping("/{id}/socio")

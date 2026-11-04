@@ -181,6 +181,33 @@ class ConfiguracionIntegrationTest {
     }
 
     @Test
+    void laPresidenciaCorrigeNombresYApellidos() throws Exception {
+        String correo = registrar();
+        String persona = token(login(correo, CLAVE));
+        String cedula = String.format("%010d", (long) (Math.random() * 1e10));
+        mvc.perform(post("/api/v1/personas/perfil").header(HttpHeaders.AUTHORIZATION, "Bearer " + persona)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"nombres\":\"Ana\",\"apellidos\":\"Ruiz\",\"identificacion\":\"" + cedula + "\",\"telefono\":\"099\"}"))
+                .andExpect(status().isCreated());
+        Long id = jdbc.queryForObject("select id from usuarios where correo = ?", Long.class, correo);
+        String cuerpo = "{\"nombres\":\"  maría  JOSÉ \",\"apellidos\":\"ruiz-pérez\"}";
+
+        mvc.perform(put("/api/v1/admin/usuarios/" + id + "/nombre").header(HttpHeaders.AUTHORIZATION, "Bearer " + persona)
+                .contentType(MediaType.APPLICATION_JSON).content(cuerpo)).andExpect(status().isForbidden());
+        String presidente = token(login("presidente@janery.test", "Clave-Presidente-1"));
+        mvc.perform(put("/api/v1/admin/usuarios/" + id + "/nombre").header(HttpHeaders.AUTHORIZATION, "Bearer " + presidente)
+                .contentType(MediaType.APPLICATION_JSON).content(cuerpo)).andExpect(status().isNoContent());
+
+        assertThat(jdbc.queryForObject("select nombres || ' ' || apellidos from personas where usuario_id = ?", String.class, id))
+                .isEqualTo("María José Ruiz-Pérez");
+        assertThat(jdbc.queryForObject("select identificacion from personas where usuario_id = ?", String.class, id)).isEqualTo(cedula);
+        assertThat(jdbc.queryForObject("""
+                select count(*) from auditoria_eventos a join personas p on a.entidad_id = p.id::text
+                where p.usuario_id = ? and a.accion = 'NOMBRE_CAMBIADO' and a.antes = 'Ana Ruiz'""", Integer.class, id))
+                .isEqualTo(1);
+    }
+
+    @Test
     void sinPerfilNoHayContactoQueEditar() throws Exception {
         contacto(token(login(registrar(), CLAVE)), "{\"telefono\":\"099\",\"direccion\":\"Quito\"}")
                 .andExpect(status().isNotFound());

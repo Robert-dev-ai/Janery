@@ -18,14 +18,6 @@ import { mensajeDeError } from '../../shared/utils/errores';
     <p class="suave">Lo que puede hacer cada cargo se define en Roles y permisos.</p>
     @if (error()) { <p class="error" role="alert">{{ error() }}</p> }
     @if (aviso()) { <p class="exito" role="status">{{ aviso() }}</p> }
-    @if (temporal(); as t) {
-      <section class="tarjeta seccion-accion" role="status">
-        <h2>Contraseña temporal de {{ t.para }}</h2>
-        <p class="m-0 font-mono text-2xl font-bold tracking-wider select-all">{{ t.clave }}</p>
-        <p class="suave mt-2">Entréguesela en persona o por mensaje. Solo se muestra esta vez: al entrar con ella, deberá elegir una nueva.</p>
-        <button type="button" class="secundario" (click)="temporal.set(null)">Listo, ya la entregué</button>
-      </section>
-    }
     @if (pendientes().length) {
       <p class="alerta-atraso" role="alert">
         {{ pendientes().length === 1 ? 'Una persona pide' : pendientes().length + ' personas piden' }} restablecer su contraseña o tiene el acceso bloqueado:
@@ -44,7 +36,24 @@ import { mensajeDeError } from '../../shared/utils/errores';
           <tbody>
             @for (u of filas(); track u.id) {
               <tr>
-                <td>{{ u.nombre ?? 'Sin datos personales' }}@if (u.identificacion) { <br /><small class="suave">{{ u.identificacion }}</small> }</td>
+                <td>
+                  @if (editando() === u.id) {
+                    <form class="flex flex-col gap-1" (ngSubmit)="guardarNombre(u)">
+                      <input name="nombres" maxlength="100" aria-label="Nombres" placeholder="Nombres" [(ngModel)]="nombres" required />
+                      <input name="apellidos" maxlength="100" aria-label="Apellidos" placeholder="Apellidos" [(ngModel)]="apellidos" required />
+                      <span class="acciones">
+                        <button type="submit" [disabled]="!nombres.trim() || !apellidos.trim()">Guardar</button>
+                        <button type="button" class="secundario" (click)="editando.set(null)">Cancelar</button>
+                      </span>
+                    </form>
+                  } @else {
+                    {{ u.nombre ?? 'Sin datos personales' }}
+                  }
+                  @if (u.identificacion) { <br /><small class="suave">{{ u.identificacion }}</small> }
+                  @if (u.nombres && editando() !== u.id) {
+                    <br /><button type="button" class="enlace-boton" (click)="editarNombre(u)">Corregir nombre</button>
+                  }
+                </td>
                 <td>
                   {{ u.correo }}<br />
                   <button type="button" class="enlace-boton" (click)="corregirCorreo(u)">Corregir correo</button>
@@ -55,6 +64,19 @@ import { mensajeDeError } from '../../shared/utils/errores';
                   <br /><button type="button" class="enlace-boton" (click)="restablecer(u)">
                     {{ u.estado === 'BLOQUEADO' ? 'Desbloquear y dar contraseña' : 'Restablecer contraseña' }}
                   </button>
+                  @if (temporal(); as t) {
+                    @if (t.usuarioId === u.id) {
+                      <div class="tarjeta mt-2" role="status">
+                        <small class="suave">Contraseña temporal (solo se muestra esta vez):</small>
+                        <p class="m-0 font-mono text-xl font-bold tracking-wider select-all">{{ t.clave }}</p>
+                        <span class="acciones">
+                          <button type="button" (click)="copiar(t.clave)">{{ copiada() ? 'Copiada ✓' : 'Copiar' }}</button>
+                          <button type="button" class="secundario" (click)="temporal.set(null)">Listo, ya la envié</button>
+                        </span>
+                        <small class="suave block mt-1">Al entrar con ella, deberá elegir una nueva.</small>
+                      </div>
+                    }
+                  }
                 </td>
                 <td>
                   @if (u.socio) {
@@ -105,7 +127,11 @@ export class AdminUsuarios implements OnInit {
   protected readonly nombresPendientes = computed(() => this.pendientes().map((u) => this.quien(u)).join(', '));
   protected readonly error = signal<string | null>(null);
   protected readonly aviso = signal<string | null>(null);
-  protected readonly temporal = signal<{ para: string; clave: string } | null>(null);
+  protected readonly temporal = signal<{ usuarioId: number; clave: string } | null>(null);
+  protected readonly copiada = signal(false);
+  protected readonly editando = signal<number | null>(null);
+  protected nombres = '';
+  protected apellidos = '';
 
   constructor() {
     alCambiar(() => this.cargar(this.datos()?.pagina ?? 0));
@@ -153,11 +179,34 @@ export class AdminUsuarios implements OnInit {
     this.aviso.set(null);
     this.api.restablecerContrasena(u.id).subscribe({
       next: (r) => {
-        this.temporal.set({ para: this.quien(u), clave: r.contrasenaTemporal });
+        this.copiada.set(false);
+        this.temporal.set({ usuarioId: u.id, clave: r.contrasenaTemporal });
         this.cargar(this.datos()?.pagina ?? 0);
       },
       error: (e) => this.error.set(mensajeDeError(e)),
     });
+  }
+
+  protected copiar(clave: string): void {
+    navigator.clipboard.writeText(clave).then(
+      () => this.copiada.set(true),
+      () => this.error.set('No se pudo copiar: seleccione la contraseña y cópiela a mano.'),
+    );
+  }
+
+  /** Para quien se cambió de nombre o lo escribió mal al registrarse. */
+  protected editarNombre(u: UsuarioResumen): void {
+    this.nombres = u.nombres ?? '';
+    this.apellidos = u.apellidos ?? '';
+    this.editando.set(u.id);
+  }
+
+  protected guardarNombre(u: UsuarioResumen): void {
+    const nombres = this.nombres.trim();
+    const apellidos = this.apellidos.trim();
+    this.aviso.set(null);
+    this.editando.set(null);
+    this.ejecutar(this.api.corregirNombre(u.id, nombres, apellidos), `Nombre de ${this.quien(u)} corregido.`);
   }
 
   /** Para quien se registró con el correo mal escrito: con el correo corregido ya puede entrar con él. */
