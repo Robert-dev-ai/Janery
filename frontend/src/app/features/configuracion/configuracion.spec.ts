@@ -33,18 +33,31 @@ describe('configuración', () => {
     expect(fixture.nativeElement.textContent).toContain('Completar datos');
   });
 
-  it('edita solo teléfono (con su prefijo) y dirección', () => {
+  function abrirEdicion() {
     sesion(true);
     const fixture = TestBed.createComponent(PerfilPagina);
     fixture.detectChanges();
     http.expectOne(`${api}/personas/me`).flush(perfil);
     fixture.detectChanges();
     const elemento: HTMLElement = fixture.nativeElement;
-
     elemento.querySelector<HTMLButtonElement>('button')!.click();
     fixture.detectChanges();
-    // Prefijo y número del teléfono, y la dirección.
-    expect(elemento.querySelectorAll('form input').length).toBe(3);
+    return { fixture, elemento };
+  }
+
+  function escribir(elemento: HTMLElement, nombre: string, valor: string): void {
+    const input = elemento.querySelector<HTMLInputElement>(`input[formcontrolname=${nombre}]`)!;
+    input.value = valor;
+    input.dispatchEvent(new Event('input'));
+  }
+
+  it('edita teléfono y dirección; nombres y cédula no son campos', () => {
+    const { fixture, elemento } = abrirEdicion();
+    // Correo, prefijo y número del teléfono, y la dirección.
+    expect(elemento.querySelectorAll('form input').length).toBe(4);
+    for (const fijo of ['nombres', 'apellidos', 'identificacion']) {
+      expect(elemento.querySelector(`input[formcontrolname=${fijo}]`)).toBeNull();
+    }
     elemento.querySelector<HTMLFormElement>('form')!.dispatchEvent(new Event('submit'));
 
     const peticion = http.expectOne(`${api}/personas/me`);
@@ -54,6 +67,27 @@ describe('configuración', () => {
     fixture.detectChanges();
     expect(elemento.textContent).toContain('+593 981234567');
     expect(elemento.textContent).toContain('Datos actualizados');
+  });
+
+  it('para cambiar el correo pide la contraseña actual', () => {
+    const { fixture, elemento } = abrirEdicion();
+    expect(elemento.querySelector('input[formcontrolname=contrasena]')).toBeNull();
+    escribir(elemento, 'correo', 'Nuevo@B.ec');
+    fixture.detectChanges();
+    elemento.querySelector<HTMLFormElement>('form')!.dispatchEvent(new Event('submit'));
+    fixture.detectChanges();
+    // Sin la contraseña no se envía nada.
+    expect(elemento.textContent).toContain('La contraseña actual es obligatorio');
+
+    escribir(elemento, 'contrasena', 'Clave-Actual-1');
+    elemento.querySelector<HTMLFormElement>('form')!.dispatchEvent(new Event('submit'));
+    const correo = http.expectOne(`${api}/auth/correo`);
+    expect(correo.request.body).toEqual({ correo: 'Nuevo@B.ec', contrasena: 'Clave-Actual-1' });
+    correo.flush(null);
+    http.expectOne(`${api}/auth/me`).flush({ correo: 'nuevo@b.ec', tienePerfil: true });
+    http.expectOne(`${api}/personas/me`).flush(perfil);
+    fixture.detectChanges();
+    expect(elemento.textContent).toContain('nuevo@b.ec');
   });
 
   describe('contraseña', () => {

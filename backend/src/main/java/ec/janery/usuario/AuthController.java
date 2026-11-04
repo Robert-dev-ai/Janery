@@ -57,6 +57,10 @@ public class AuthController {
             @NotBlank @Size(min = 8, max = 72) String nueva) {
     }
 
+    public record CambioCorreoRequest(@NotBlank @Email @Size(max = 254) String correo,
+            @NotBlank @Size(max = 72) String contrasena) {
+    }
+
     public record TokenResponse(String accessToken, Instant expiraEn) {
     }
 
@@ -121,6 +125,12 @@ public class AuthController {
             @CookieValue(name = COOKIE, required = false) String refresh,
             @Valid @RequestBody CambioContrasenaRequest request) {
         service.cambiarContrasena(Long.valueOf(jwt.getSubject()), request.actual(), request.nueva(), refresh);
+    }
+
+    @PutMapping("/correo")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void cambiarCorreo(@AuthenticationPrincipal Jwt jwt, @Valid @RequestBody CambioCorreoRequest request) {
+        service.cambiarMiCorreo(Long.valueOf(jwt.getSubject()), request.correo(), request.contrasena());
     }
 
     @PostMapping("/sesiones/cerrar-otras")

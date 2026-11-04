@@ -66,4 +66,20 @@ public class Persona {
         this.telefono = telefono;
         this.direccion = direccion;
     }
+
+    private static final java.util.Locale ESPANOL = java.util.Locale.of("es", "EC");
+
+    /**
+     * Mayúscula inicial en cada palabra y el resto en minúsculas, como sea que se haya escrito: "mARÍA  josé" queda
+     * "María José". También tras un guion ("Ruiz-pérez" queda "Ruiz-Pérez").
+     */
+    public static String formatearNombre(String texto) {
+        StringBuilder resultado = new StringBuilder();
+        boolean inicio = true;
+        for (char c : texto.trim().replaceAll("\\s+", " ").toLowerCase(ESPANOL).toCharArray()) {
+            resultado.append(inicio ? Character.toUpperCase(c) : c);
+            inicio = c == ' ' || c == '-';
+        }
+        return resultado.toString();
+    }
 }

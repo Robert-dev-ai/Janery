@@ -120,6 +120,13 @@ export class AuthService {
     );
   }
 
+  /** Pide la contraseña porque con el correo se inicia sesión. */
+  cambiarCorreo(correo: string, contrasena: string): Observable<void> {
+    return this.http.put<void>(`${this.api}/correo`, { correo, contrasena }).pipe(
+      switchMap(() => this.cargarYo().pipe(map(() => undefined))),
+    );
+  }
+
   /** Sin correo saliente: la petición le llega a la presidencia, que entrega una contraseña temporal. */
   pedirRestablecimiento(identificador: string): Observable<void> {
     return this.http.post<void>(`${this.api}/recuperar`, { identificador });

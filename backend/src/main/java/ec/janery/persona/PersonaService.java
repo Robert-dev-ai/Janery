@@ -38,14 +38,15 @@ public class PersonaService {
         if (repository.existsByIdentificacion(r.identificacion().trim())) {
             throw NegocioException.conflicto("IDENTIFICACION_REGISTRADA", "Esa identificación ya está registrada");
         }
-        Persona persona = repository.save(new Persona(null, usuarioId, r.nombres().trim(), r.apellidos().trim(),
+        Persona persona = repository.save(new Persona(null, usuarioId, Persona.formatearNombre(r.nombres()),
+                Persona.formatearNombre(r.apellidos()),
                 r.identificacion().trim(), r.telefono().trim(), r.direccion() == null || r.direccion().isBlank() ? null : r.direccion().trim(),
                 Instant.now(reloj), null, null, null, null, null, null, null, null, null, null, null));
         auditoria.registrar(usuarioId, "PERFIL_COMPLETADO", "PERSONA", "persona", persona.getId(), null, null, null);
         return persona;
     }
 
-    /** Nombres e identificación quedan fijos: son los datos con los que se abrió la cuenta. */
+    /** Nombres e identificación quedan fijos: todo lo de la persona está vinculado a ellos. */
     @Transactional
     public Persona actualizarContacto(Long usuarioId, PersonaController.ContactoRequest r) {
         Persona persona = repository.findByUsuarioId(usuarioId)

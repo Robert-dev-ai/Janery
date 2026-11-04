@@ -3,6 +3,7 @@ import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { CircleUser, LucideAngularModule } from 'lucide-angular';
+import { of, switchMap } from 'rxjs';
 
 import { AuthService } from '../../core/auth/auth';
 import { ApiService, Perfil } from '../../core/services/api';
@@ -60,12 +61,19 @@ import { FormDatosCredito } from './form-datos-credito';
           <div><dt>Nombre</dt><dd>{{ p.nombres }} {{ p.apellidos }}</dd></div>
           <div><dt>Cédula</dt><dd>{{ p.identificacion }}</dd></div>
           @if (!editando()) {
+            <div><dt>Correo</dt><dd>{{ auth.yo()?.correo }}</dd></div>
             <div><dt>Teléfono</dt><dd>{{ p.telefono }}</dd></div>
             <div><dt>Dirección</dt><dd>{{ p.direccion ?? 'Sin registrar' }}</dd></div>
           }
         </dl>
         @if (editando()) {
           <form [formGroup]="form" (ngSubmit)="guardar()">
+            <label>Correo <input type="email" formControlName="correo" autocomplete="email" maxlength="254" /></label>
+            @if (correoCambia()) {
+              <label>Su contraseña actual, para confirmar el cambio de correo
+                <input type="password" formControlName="contrasena" autocomplete="current-password" maxlength="72" />
+              </label>
+            }
             <label for="telefono-perfil">Teléfono</label>
             <app-campo-telefono class="mb-3 block" idCampo="telefono-perfil" formControlName="telefono" />
             <label>Dirección <input formControlName="direccion" autocomplete="street-address" maxlength="200" /></label>
@@ -78,9 +86,9 @@ import { FormDatosCredito } from './form-datos-credito';
             </div>
           </form>
         } @else {
-          <button type="button" (click)="editar(p)">Editar teléfono y dirección</button>
+          <button type="button" (click)="editar(p)">Editar mis datos</button>
         }
-        <p class="suave mt-3 mb-0">Para corregir su nombre o su cédula, pídalo a la presidencia.</p>
+        <p class="suave mt-3 mb-0">El nombre y la cédula no se pueden cambiar: a ellos está vinculada toda su información.</p>
       </section>
       @if (guardado()) { <p class="exito" role="status">Datos actualizados.</p> }
 
@@ -114,9 +122,15 @@ export class PerfilPagina implements OnInit {
   private readonly api = inject(ApiService);
 
   protected readonly iconos = { CircleUser };
-  private static readonly ETIQUETAS: Record<string, string> = { telefono: 'El teléfono', direccion: 'La dirección' };
+  private static readonly ETIQUETAS: Record<string, string> = {
+    correo: 'El correo', contrasena: 'La contraseña actual',
+    telefono: 'El teléfono', direccion: 'La dirección',
+  };
 
   protected readonly form = inject(NonNullableFormBuilder).group({
+    correo: ['', [Validators.required, Validators.email, Validators.maxLength(254)]],
+    // Solo se exige si cambia el correo; ver correoCambia().
+    contrasena: [''],
     telefono: ['', [Validators.required, telefonoValido]],
     direccion: ['', [Validators.required, Validators.pattern(/\S/), Validators.maxLength(200)]],
   });
@@ -172,8 +186,17 @@ export class PerfilPagina implements OnInit {
     this.auth.quitarFoto().subscribe({ error: (e) => this.error.set(mensajeDeError(e)) });
   }
 
+  protected correoCambia(): boolean {
+    return this.form.controls.correo.value.trim().toLowerCase() !== (this.auth.yo()?.correo ?? '');
+  }
+
   protected editar(p: Perfil): void {
-    this.form.setValue({ telefono: p.telefono, direccion: p.direccion ?? '' });
+    this.form.setValue({
+      correo: this.auth.yo()?.correo ?? '',
+      contrasena: '',
+      telefono: p.telefono,
+      direccion: p.direccion ?? '',
+    });
     this.form.markAllAsTouched();
     this.guardado.set(false);
     this.error.set(null);
@@ -194,14 +217,22 @@ export class PerfilPagina implements OnInit {
 
   protected guardar(): void {
     this.intentado.set(true);
+    const contrasena = this.form.controls.contrasena;
+    contrasena.setErrors(this.correoCambia() && !contrasena.value ? { required: true } : null);
     if (this.form.invalid) {
       this.form.markAllAsTouched();
       return;
     }
     this.enviando.set(true);
     this.error.set(null);
-    const { telefono, direccion } = this.form.getRawValue();
-    this.api.actualizarContacto({ telefono, direccion: direccion.trim() }).subscribe({
+    const { correo, telefono, direccion } = this.form.getRawValue();
+    // Primero el correo: si la contraseña está mal, no se guarda nada.
+    const cambioCorreo = this.correoCambia()
+      ? this.auth.cambiarCorreo(correo.trim(), contrasena.value)
+      : of(undefined);
+    cambioCorreo.pipe(
+      switchMap(() => this.api.actualizarContacto({ telefono, direccion: direccion.trim() })),
+    ).subscribe({
       next: (p) => {
         this.perfil.set(p);
         this.editando.set(false);

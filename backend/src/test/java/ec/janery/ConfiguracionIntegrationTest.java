@@ -44,22 +44,65 @@ class ConfiguracionIntegrationTest {
     private JdbcTemplate jdbc;
 
     @Test
-    void cambiaTelefonoYDireccionSinTocarLosDemasDatos() throws Exception {
+    void editaElContactoPeroNoLosNombresNiLaCedula() throws Exception {
         String token = token(login(registrar(), CLAVE));
+        String cedula = identificacion();
         mvc.perform(post("/api/v1/personas/perfil").header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"nombres\":\"Ana\",\"apellidos\":\"Paz\",\"identificacion\":\"" + identificacion()
+                        .content("{\"nombres\":\"  aNA   maría \",\"apellidos\":\"PAZ ruiz-pérez\",\"identificacion\":\"" + cedula
                                 + "\",\"telefono\":\"0990000000\",\"direccion\":\"Quito\"}"))
-                .andExpect(status().isCreated());
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.nombres").value("Ana María"))
+                .andExpect(jsonPath("$.apellidos").value("Paz Ruiz-Pérez"));
 
-        // Los campos no editables que lleguen en el cuerpo se ignoran.
-        contacto(token, "{\"telefono\":\" 0980000000 \",\"direccion\":\"Cuenca\",\"nombres\":\"Otro\"}")
+        // Nombres y cédula que lleguen en el cuerpo se ignoran: quedan fijos.
+        contacto(token, "{\"nombres\":\"Juan\",\"apellidos\":\"López\",\"telefono\":\" 0980000000 \",\"direccion\":\"Cuenca\","
+                + "\"identificacion\":\"1111111111\"}")
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.nombres").value("Ana María"))
+                .andExpect(jsonPath("$.apellidos").value("Paz Ruiz-Pérez"))
                 .andExpect(jsonPath("$.telefono").value("0980000000"))
                 .andExpect(jsonPath("$.direccion").value("Cuenca"))
-                .andExpect(jsonPath("$.nombres").value("Ana"));
+                .andExpect(jsonPath("$.identificacion").value(cedula));
 
         contacto(token, "{\"telefono\":\"\",\"direccion\":\"Cuenca\"}").andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void laCedulaDebeTenerDiezNumeros() throws Exception {
+        String token = token(login(registrar(), CLAVE));
+        for (String cedula : new String[] { "123456789", "12345678901", "12345abcde", "" }) {
+            mvc.perform(post("/api/v1/personas/perfil").header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"nombres\":\"Ana\",\"apellidos\":\"Paz\",\"identificacion\":\"" + cedula
+                            + "\",\"telefono\":\"0990000000\"}"))
+                    .andExpect(status().isBadRequest());
+        }
+    }
+
+    @Test
+    void laPersonaCambiaSuCorreoConSuContrasena() throws Exception {
+        String correo = registrar();
+        String token = token(login(correo, CLAVE));
+        String nuevo = "Nuevo-" + UUID.randomUUID().toString().substring(0, 8) + "@JANERY.test";
+        cambiarCorreo(token, nuevo, "Mala-Clave-1").andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.codigo").value("CONTRASENA_ACTUAL_INCORRECTA"));
+        // El correo de otra cuenta no se puede tomar.
+        cambiarCorreo(token, registrar(), CLAVE).andExpect(status().isConflict());
+
+        cambiarCorreo(token, nuevo, CLAVE).andExpect(status().isNoContent());
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM usuarios WHERE correo = ?", Integer.class,
+                nuevo.toLowerCase())).isEqualTo(1);
+        login(nuevo.toLowerCase(), CLAVE);
+    }
+
+    @Test
+    void elCorreoSeGuardaEnMinusculas() throws Exception {
+        String correo = "MAYUS-" + UUID.randomUUID().toString().substring(0, 8) + "@Janery.Test";
+        mvc.perform(post("/api/v1/auth/register").contentType(MediaType.APPLICATION_JSON).content(credenciales(correo, CLAVE)))
+                .andExpect(status().isCreated());
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM usuarios WHERE correo = ?", Integer.class,
+                correo.toLowerCase())).isEqualTo(1);
     }
 
     @Test
@@ -210,6 +253,11 @@ class ConfiguracionIntegrationTest {
     private ResultActions contacto(String token, String cuerpo) throws Exception {
         return mvc.perform(put("/api/v1/personas/me").header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                 .contentType(MediaType.APPLICATION_JSON).content(cuerpo));
+    }
+
+    private ResultActions cambiarCorreo(String token, String correo, String clave) throws Exception {
+        return mvc.perform(put("/api/v1/auth/correo").header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .contentType(MediaType.APPLICATION_JSON).content(credenciales(correo, clave)));
     }
 
     private ResultActions contrasena(MockHttpServletResponse sesion, String actual, String nueva) throws Exception {

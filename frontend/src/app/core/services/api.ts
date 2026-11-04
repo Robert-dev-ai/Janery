@@ -787,6 +787,7 @@ export class ApiService {
     return this.http.post<Perfil>(`${this.base}/personas/perfil`, perfil);
   }
 
+  /** Nombres y cédula no se envían: no se pueden cambiar. */
   actualizarContacto(contacto: { telefono: string; direccion: string }): Observable<Perfil> {
     return this.http.put<Perfil>(`${this.base}/personas/me`, contacto);
   }

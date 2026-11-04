@@ -187,6 +187,20 @@ public class AuthService {
         auditoria.registrar(actorId, "CORREO_CAMBIADO", MODULO, "usuario", usuarioId, antes, normalizado, null);
     }
 
+    /** La persona cambia su propio correo. Pide la contraseña porque con el correo se inicia sesión. */
+    @Transactional
+    public void cambiarMiCorreo(Long usuarioId, String correo, String contrasena) {
+        Usuario usuario = usuarios.findById(usuarioId).filter(Usuario::activo)
+                .orElseThrow(() -> NegocioException.noEncontrado("Usuario no encontrado"));
+        // Con 401 el cliente entendería que caducó la sesión.
+        if (!encoder.matches(contrasena, usuario.getHashContrasena())) {
+            auditoria.registrar(usuarioId, "CONTRASENA_FALLIDA", MODULO, "usuario", usuarioId, null, null, null);
+            throw new NegocioException(HttpStatus.BAD_REQUEST, "CONTRASENA_ACTUAL_INCORRECTA",
+                    "La contraseña actual no es correcta");
+        }
+        cambiarCorreo(usuarioId, usuarioId, correo);
+    }
+
     @Transactional
     public Sesion refrescar(String refreshToken) {
         Instant ahora = Instant.now(reloj);
