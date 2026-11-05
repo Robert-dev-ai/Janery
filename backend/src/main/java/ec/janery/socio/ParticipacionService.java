@@ -256,6 +256,7 @@ public class ParticipacionService {
     private final CuentaService cuentas;
     private final CajaService cajas;
     private final CreditoService creditos;
+    private final ec.janery.credito.PagoCreditoService pagosCredito;
     private final CompraventaRepository compraventas;
     private final AutorizacionRepository autorizaciones;
     private final PersonaService personas;
@@ -733,12 +734,13 @@ public class ParticipacionService {
     /** Descuenta de las ganancias liberadas lo que el presidente eligió, todo o nada. La clave evita repetirlo. */
     @Transactional
     public void descontar(Long actorId, Long socioId, List<Descuento> elegidos, String clave) {
-        if (cuentas.claveUsada(clave)) {
-            return;
-        }
         Long personaId = socios.personaDe(socioId);
         CuentaPrincipal cuenta = cuentas.bloquearSiActiva(personaId).orElse(null);
         SocioService.Socio socio = socios.bloquear(socioId);
+        // Tras los bloqueos: un reintento simultáneo espera aquí y encuentra la clave ya usada.
+        if (cuentas.claveUsada(clave)) {
+            return;
+        }
         String claveLibre = clave;
         for (Descuento d : elegidos) {
             switch (d.tipo()) {
@@ -798,7 +800,7 @@ public class ParticipacionService {
         Long operacion = cuentas.crearOperacionInterna("RETIRO_GANANCIA", importe, clave, actorId);
         cuentas.mover(cuenta, operacion, ENTRADA, importe, "DESCUENTO_DE_GANANCIAS");
         variacion(socioId, "DESCUENTO_OBLIGACION", importe.negate(), null);
-        creditos.pagar(personas.usuarioDe(socio.getPersonaId()), cuota.creditoId(), importe, false, false,
+        pagosCredito.pagar(personas.usuarioDe(socio.getPersonaId()), cuota.creditoId(), importe, false, false,
                 "descuento-" + java.util.UUID.randomUUID());
         auditoria.registrar(actorId, "DESCUENTO_CUOTA", MODULO, "socio", socioId, null, importe.toPlainString(), cuota.cuotaId().toString());
     }

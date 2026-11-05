@@ -148,6 +148,37 @@ class ProductosIntegrationTest {
         assertThat(credito(p, credito).get("cuotasPagadas")).hasSize(1);
     }
 
+    /** Antes devolvía la operación del primer crédito como si hubiera pagado el segundo. */
+    @Test
+    void laClaveDeUnPagoNoSirveParaOtroCredito() throws Exception {
+        Persona p = persona();
+        depositar(p, "300.00");
+        long primero = solicitarLetras(p, "NORMAL", "300.00", 3);
+        long segundo = solicitarLetras(p, "NORMAL", "300.00", 3);
+        aprobar(primero);
+        aprobar(segundo);
+        String clave = UUID.randomUUID().toString();
+        pagarCon(p, primero, "{}", clave).andExpect(status().isOk());
+        BigDecimal tras = saldo(p);
+
+        pagarCon(p, segundo, "{}", clave).andExpect(status().isConflict())
+                .andExpect(jsonPath("$.codigo").value("CLAVE_REUTILIZADA"));
+        assertThat(credito(p, segundo).get("cuotasPagadas")).isEmpty();
+        assertThat(saldo(p)).isEqualByComparingTo(tras);
+    }
+
+    @Test
+    void sinClaveDeIdempotenciaNoSeOpera() throws Exception {
+        Persona p = persona();
+        depositar(p, "100.00");
+        long credito = solicitarLetras(p, "NORMAL", "300.00", 3);
+        aprobar(credito);
+        BigDecimal antes = saldo(p);
+        pagarCon(p, credito, "{}", "   ").andExpect(status().isBadRequest());
+        pagarCon(p, credito, "{}", "x".repeat(101)).andExpect(status().isBadRequest());
+        assertThat(saldo(p)).isEqualByComparingTo(antes);
+    }
+
     @Test
     void unClienteSoloPideElCreditoALetrasNormal() throws Exception {
         Persona p = persona();
@@ -659,6 +690,46 @@ class ProductosIntegrationTest {
         // 1000 * 7 % * 12/12, la tasa del plazo de 12 meses.
         assertThat(saldo(p)).isEqualByComparingTo("1070");
         assertThat(jdbc.queryForObject("select estado from cuentas_ahorro where id = ?", String.class, id)).isEqualTo("CERRADA");
+    }
+
+    /** Antes respondía 409 al reintento: la pantalla mostraba un error aunque el plazo fijo sí se había abierto. */
+    @Test
+    void reintentoDePlazoFijoDevuelveElMismoAhorroSinCobrarDosVeces() throws Exception {
+        Persona p = persona();
+        depositar(p, "800.00");
+        String clave = UUID.randomUUID().toString();
+        String cuerpo = "{\"nombre\":\"Fijo\",\"importe\":500.00,\"plazoMeses\":12}";
+        long primero = json.readTree(plazoFijo(p, cuerpo, clave).andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString()).get("id").asLong();
+        long reintento = json.readTree(plazoFijo(p, cuerpo, clave).andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString()).get("id").asLong();
+
+        assertThat(reintento).isEqualTo(primero);
+        assertThat(saldo(p)).isEqualByComparingTo("300");
+    }
+
+    @Test
+    void laClaveDeUnDepositoAAhorroNoSirveParaOtroAhorro() throws Exception {
+        Persona p = persona();
+        depositar(p, "100.00");
+        long uno = crearNormal(p, "Uno");
+        long dos = crearNormal(p, "Dos");
+        String clave = UUID.randomUUID().toString();
+        conClave(p, "/api/v1/ahorros/" + uno + "/depositos", "{\"importe\":10.00}", clave).andExpect(status().isOk());
+
+        conClave(p, "/api/v1/ahorros/" + dos + "/depositos", "{\"importe\":10.00}", clave)
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.codigo").value("CLAVE_REUTILIZADA"));
+        assertThat(saldoAhorro(p, dos)).isEqualByComparingTo("0");
+        assertThat(saldo(p)).isEqualByComparingTo("90");
+    }
+
+    private ResultActions plazoFijo(Persona p, String cuerpo, String clave) throws Exception {
+        return conClave(p, "/api/v1/ahorros/plazo-fijo", cuerpo, clave);
+    }
+
+    private ResultActions conClave(Persona p, String ruta, String cuerpo, String clave) throws Exception {
+        return mvc.perform(post(ruta).header(HttpHeaders.AUTHORIZATION, bearer(p.token()))
+                .header("Idempotency-Key", clave).contentType(MediaType.APPLICATION_JSON).content(cuerpo));
     }
 
     @Test

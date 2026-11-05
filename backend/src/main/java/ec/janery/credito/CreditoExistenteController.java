@@ -72,7 +72,7 @@ public class CreditoExistenteController {
     @PostMapping("/personas/{usuarioId}")
     @ResponseStatus(HttpStatus.CREATED)
     public CreditoController.CreadoResponse registrar(@AuthenticationPrincipal Jwt jwt, @PathVariable Long usuarioId,
-            @RequestHeader("Idempotency-Key") @Size(max = 100) String clave, @Valid @RequestBody ExistenteRequest r) {
+            @RequestHeader("Idempotency-Key") @jakarta.validation.constraints.NotBlank @Size(max = 100) String clave, @Valid @RequestBody ExistenteRequest r) {
         return new CreditoController.CreadoResponse(service.registrar(Long.valueOf(jwt.getSubject()), r.datos(usuarioId), clave));
     }
 }

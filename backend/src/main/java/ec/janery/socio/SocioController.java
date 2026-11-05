@@ -99,7 +99,7 @@ public class SocioController {
     }
 
     @PostMapping("/socios/me/aportes")
-    public OperacionResponse aportar(@AuthenticationPrincipal Jwt jwt, @RequestHeader("Idempotency-Key") String clave,
+    public OperacionResponse aportar(@AuthenticationPrincipal Jwt jwt, @RequestHeader("Idempotency-Key") @jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Size(max = 100) String clave,
             @Valid @RequestBody AporteRequest r) {
         return new OperacionResponse(service.aportar(id(jwt), r.tipo(), r.importe(), r.periodo(), clave));
     }
@@ -116,7 +116,7 @@ public class SocioController {
 
     /** Pago de varios meses a la vez, del aporte mensual o de caja chica. */
     @PostMapping("/socios/me/aportes/periodos")
-    public OperacionesResponse pagarPeriodos(@AuthenticationPrincipal Jwt jwt, @RequestHeader("Idempotency-Key") @Size(max = 80) String clave,
+    public OperacionesResponse pagarPeriodos(@AuthenticationPrincipal Jwt jwt, @RequestHeader("Idempotency-Key") @jakarta.validation.constraints.NotBlank @Size(max = 80) String clave,
             @Valid @RequestBody PeriodosRequest r) {
         return new OperacionesResponse(service.pagarPeriodos(id(jwt), r.tipo(), r.periodos(), clave));
     }
@@ -132,7 +132,7 @@ public class SocioController {
     }
 
     @PostMapping("/socios/hacerme-socio")
-    public OperacionResponse hacermeSocio(@AuthenticationPrincipal Jwt jwt, @RequestHeader("Idempotency-Key") String clave) {
+    public OperacionResponse hacermeSocio(@AuthenticationPrincipal Jwt jwt, @RequestHeader("Idempotency-Key") @jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Size(max = 100) String clave) {
         return new OperacionResponse(service.hacerseSocio(id(jwt), clave));
     }
 
@@ -145,14 +145,14 @@ public class SocioController {
     /** Quien administra caja chica registra el aporte que un socio le pagó en persona. */
     @PostMapping("/caja-chica/aportes")
     @PreAuthorize("hasAuthority('SCOPE_GESTIONAR_CAJA_CHICA')")
-    public OperacionesResponse recibirAporte(@AuthenticationPrincipal Jwt jwt, @RequestHeader("Idempotency-Key") @Size(max = 80) String clave,
+    public OperacionesResponse recibirAporte(@AuthenticationPrincipal Jwt jwt, @RequestHeader("Idempotency-Key") @jakarta.validation.constraints.NotBlank @Size(max = 80) String clave,
             @Valid @RequestBody RecepcionRequest r) {
         return new OperacionesResponse(service.recibirAporteCajaChica(id(jwt), r.socioId(), r.periodos(), clave));
     }
 
     @PostMapping("/socios/me/aportes-caja-chica")
     public OperacionResponse aportarCajaChica(@AuthenticationPrincipal Jwt jwt,
-            @RequestHeader("Idempotency-Key") String clave, @RequestBody AporteCajaChicaRequest r) {
+            @RequestHeader("Idempotency-Key") @jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Size(max = 100) String clave, @RequestBody AporteCajaChicaRequest r) {
         return new OperacionResponse(service.aportarCajaChica(id(jwt), r.periodo(), clave));
     }
 
@@ -163,7 +163,7 @@ public class SocioController {
 
     @PostMapping("/socios/me/retiro-ganancias")
     public OperacionResponse retirarGanancias(@AuthenticationPrincipal Jwt jwt,
-            @RequestHeader("Idempotency-Key") String clave, @Valid @RequestBody RetiroGananciaRequest r) {
+            @RequestHeader("Idempotency-Key") @jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Size(max = 100) String clave, @Valid @RequestBody RetiroGananciaRequest r) {
         return new OperacionResponse(service.retirarGanancias(id(jwt), r.importe(), clave));
     }
 
@@ -177,7 +177,7 @@ public class SocioController {
     @PreAuthorize("hasAuthority('SCOPE_GESTIONAR_RESULTADOS')")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void descontar(@AuthenticationPrincipal Jwt jwt, @PathVariable Long socioId,
-            @RequestHeader("Idempotency-Key") String clave, @Valid @RequestBody DescuentosRequest r) {
+            @RequestHeader("Idempotency-Key") @jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Size(max = 100) String clave, @Valid @RequestBody DescuentosRequest r) {
         service.descontar(id(jwt), socioId, r.descuentos(), clave);
     }
 
@@ -197,7 +197,7 @@ public class SocioController {
 
     @PostMapping("/admin/socios/compraventas")
     @PreAuthorize("hasAuthority('SCOPE_GESTIONAR_RESULTADOS')")
-    public OperacionResponse compraventa(@AuthenticationPrincipal Jwt jwt, @RequestHeader("Idempotency-Key") String clave,
+    public OperacionResponse compraventa(@AuthenticationPrincipal Jwt jwt, @RequestHeader("Idempotency-Key") @jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Size(max = 100) String clave,
             @Valid @RequestBody CompraventaRequest r) {
         return new OperacionResponse(service.registrarCompraventa(id(jwt), r.vendedorId(), r.compradorId(), r.capital(), r.precio(), clave));
     }
@@ -215,7 +215,7 @@ public class SocioController {
 
     @PostMapping("/caja-chica/gastos")
     @PreAuthorize("hasAuthority('SCOPE_GESTIONAR_CAJA_CHICA')")
-    public OperacionResponse gasto(@AuthenticationPrincipal Jwt jwt, @RequestHeader("Idempotency-Key") String clave,
+    public OperacionResponse gasto(@AuthenticationPrincipal Jwt jwt, @RequestHeader("Idempotency-Key") @jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Size(max = 100) String clave,
             @Valid @RequestBody GastoRequest r) {
         return new OperacionResponse(service.registrarGastoCajaChica(id(jwt), r.importe(), r.detalle().trim(), clave));
     }
@@ -229,7 +229,7 @@ public class SocioController {
     @PostMapping("/admin/socios/{socioId}/aporte-inicial")
     @PreAuthorize("hasAuthority('SCOPE_GESTIONAR_RESULTADOS')")
     public OperacionResponse aporteInicial(@AuthenticationPrincipal Jwt jwt, @PathVariable Long socioId,
-            @RequestHeader("Idempotency-Key") String clave, @Valid @RequestBody AporteInicialRequest r) {
+            @RequestHeader("Idempotency-Key") @jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Size(max = 100) String clave, @Valid @RequestBody AporteInicialRequest r) {
         return new OperacionResponse(service.registrarAporteInicial(id(jwt), socioId, r.importe(), r.metodoPago(),
                 r.referencia(), clave));
     }

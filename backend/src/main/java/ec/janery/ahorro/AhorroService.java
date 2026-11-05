@@ -104,6 +104,8 @@ public class AhorroService {
 
     interface MovimientoAhorroRepository extends JpaRepository<MovimientoAhorro, Long> {
         List<MovimientoAhorro> findByCuentaAhorroIdOrderByIdDesc(Long cuentaAhorroId);
+
+        Optional<MovimientoAhorro> findFirstByOperacionId(Long operacionId);
     }
 
     public record AhorroVista(Long id, String tipo, String nombre, String estado, BigDecimal saldo, BigDecimal tasaAnual,
@@ -146,6 +148,8 @@ public class AhorroService {
     private final AuditoriaService auditoria;
     private final org.springframework.context.ApplicationEventPublisher eventos;
     private final Clock reloj;
+    @jakarta.persistence.PersistenceContext
+    private jakarta.persistence.EntityManager em;
 
     @Transactional
     public AhorroVista crearNormal(Long usuarioId, String nombre) {
@@ -163,7 +167,10 @@ public class AhorroService {
         CuentaPrincipal cuenta = cuentas.cuentaActivaBloqueada(personaId);
         Optional<Long> previa = cuentas.operacionPrevia(clave, "APERTURA_AHORRO", importe, usuarioId);
         if (previa.isPresent()) {
-            throw NegocioException.conflicto("OPERACION_REPETIDA", "Este depósito ya se registró");
+            // Un reintento recibe el mismo plazo fijo, como las demás operaciones con clave.
+            return movimientos.findFirstByOperacionId(previa.get()).flatMap(m -> ahorros.findById(m.getCuentaAhorroId()))
+                    .map(this::vista)
+                    .orElseThrow(() -> new IllegalStateException("Apertura sin plazo fijo: operación " + previa.get()));
         }
         if (!PLAZOS.contains(plazo)) {
             throw NegocioException.conflicto("PLAZO_FUERA_DE_RANGO", "El plazo debe ser de 3, 6, 9, 12 o 24 meses");
@@ -184,7 +191,7 @@ public class AhorroService {
         CuentaPrincipal cuenta = cuentas.cuentaActivaBloqueada(personaId);
         Optional<Long> previa = cuentas.operacionPrevia(clave, "DEPOSITO_AHORRO", importe, usuarioId);
         if (previa.isPresent()) {
-            return previa.get();
+            return mismoAhorro(previa.get(), ahorroId);
         }
         CuentaAhorro a = propia(personaId, ahorroId);
         exigirActiva(a);
@@ -207,7 +214,7 @@ public class AhorroService {
         CuentaPrincipal cuenta = cuentas.cuentaActivaBloqueada(personaId);
         Optional<Long> previa = cuentas.operacionPrevia(clave, "RETIRO_AHORRO", null, usuarioId);
         if (previa.isPresent()) {
-            return previa.get();
+            return mismoAhorro(previa.get(), ahorroId);
         }
         CuentaAhorro a = propia(personaId, ahorroId);
         exigirActiva(a);
@@ -261,7 +268,7 @@ public class AhorroService {
         CuentaPrincipal cuenta = cuentas.cuentaActivaBloqueada(personaId);
         Optional<Long> previa = cuentas.operacionPrevia(clave, "INTERES_AHORRO", null, usuarioId);
         if (previa.isPresent()) {
-            return previa.get();
+            return mismoAhorro(previa.get(), ahorroId);
         }
         CuentaAhorro a = propia(personaId, ahorroId);
         exigirActiva(a);
@@ -428,9 +435,24 @@ public class AhorroService {
                 periodo, tasa, Instant.now(reloj)));
     }
 
+    /** Un reintento con la misma clave debe ser sobre el mismo ahorro; si no, la clave se está reutilizando. */
+    private Long mismoAhorro(Long operacion, Long ahorroId) {
+        boolean otro = movimientos.findFirstByOperacionId(operacion).map(m -> !m.getCuentaAhorroId().equals(ahorroId)).orElse(false);
+        if (otro) {
+            throw NegocioException.conflicto("CLAVE_REUTILIZADA", "La clave de idempotencia ya se usó en otra operación");
+        }
+        return operacion;
+    }
+
+    /**
+     * Bloqueado y releído: si la fila ya estaba cargada en esta transacción (descontarAlInicioDeCredito la lee antes), la
+     * consulta con bloqueo devolvería esa copia antigua y se pisaría lo que guardó la operación anterior.
+     */
     private CuentaAhorro propia(Long personaId, Long ahorroId) {
-        return ahorros.bloquear(ahorroId).filter(a -> a.getPersonaId().equals(personaId))
+        CuentaAhorro a = ahorros.bloquear(ahorroId).filter(x -> x.getPersonaId().equals(personaId))
                 .orElseThrow(() -> NegocioException.noEncontrado("Ahorro no encontrado"));
+        em.refresh(a);
+        return a;
     }
 
     private static void exigirActiva(CuentaAhorro a) {

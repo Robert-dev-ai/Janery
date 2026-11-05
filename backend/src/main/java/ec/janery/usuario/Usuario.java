@@ -48,20 +48,6 @@ public class Usuario {
         this.estado = "ACTIVO";
     }
 
-    /** Devuelve true si con este fallo el acceso queda bloqueado. */
-    public boolean registrarFallo() {
-        intentosFallidos++;
-        if (intentosFallidos >= INTENTOS_MAXIMOS) {
-            estado = "BLOQUEADO";
-            return true;
-        }
-        return false;
-    }
-
-    public void reiniciarIntentos() {
-        intentosFallidos = 0;
-    }
-
     public void cambiarCorreo(String correo) {
         this.correo = correo;
     }

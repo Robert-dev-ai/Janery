@@ -128,7 +128,7 @@ public class CuentaController {
     @PostMapping("/admin/cuentas/{id}/depositos")
     @PreAuthorize("hasAuthority('SCOPE_GESTIONAR_CUENTAS')")
     public OperacionResponse depositar(@AuthenticationPrincipal Jwt jwt, @PathVariable Long id,
-            @RequestHeader("Idempotency-Key") @Size(max = 100) String clave,
+            @RequestHeader("Idempotency-Key") @jakarta.validation.constraints.NotBlank @Size(max = 100) String clave,
             @Valid @RequestBody MovimientoRequest r) {
         return new OperacionResponse(service.depositar(id(jwt), id, r.importe(), r.metodoPago(), r.referencia(), clave));
     }
@@ -136,7 +136,7 @@ public class CuentaController {
     @PostMapping("/admin/cuentas/{id}/retiros")
     @PreAuthorize("hasAuthority('SCOPE_GESTIONAR_CUENTAS')")
     public OperacionResponse retirar(@AuthenticationPrincipal Jwt jwt, @PathVariable Long id,
-            @RequestHeader("Idempotency-Key") @Size(max = 100) String clave,
+            @RequestHeader("Idempotency-Key") @jakarta.validation.constraints.NotBlank @Size(max = 100) String clave,
             @Valid @RequestBody MovimientoRequest r) {
         return new OperacionResponse(service.retirar(id(jwt), id, r.importe(), r.metodoPago(), r.referencia(), clave));
     }

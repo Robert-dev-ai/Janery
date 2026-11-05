@@ -90,4 +90,51 @@ class CalculadoraCreditoTest {
         assertThat(CalculadoraCredito.devengo(bd("150"), bd("0.12"), 1)).isEqualByComparingTo("0.18");
         assertThat(CalculadoraCredito.devengo(bd("100"), bd("0.12"), 0)).isEqualByComparingTo("0");
     }
+
+    /** Ejemplos de docs/reglas-negocio.md: 12 letras exigen 7; 5 letras exigen 3. */
+    @Test
+    void precancelarExigeLaMitadRedondeadaHaciaAbajoMasUna() {
+        assertThat(CalculadoraCredito.letrasParaPrecancelar(12)).isEqualTo(7);
+        assertThat(CalculadoraCredito.letrasParaPrecancelar(5)).isEqualTo(3);
+        assertThat(CalculadoraCredito.letrasParaPrecancelar(3)).isEqualTo(2);
+    }
+
+    @Test
+    void unaLineaMuestraLoDevengadoSinGuardarloYDevengarLoFijaUnaSolaVez() {
+        Entidades.Credito c = linea(bd("100"), bd("0.12"), INICIO);
+        LocalDate diezDias = INICIO.plusDays(10);
+
+        assertThat(c.interesHasta(diezDias)).isEqualByComparingTo("1.20");
+        assertThat(c.getInteresAcumulado()).isEqualByComparingTo("0");
+
+        c.devengar(diezDias);
+        c.devengar(diezDias);
+        assertThat(c.getInteresAcumulado()).isEqualByComparingTo("1.20");
+        assertThat(c.getUltimoDevengo()).isEqualTo(diezDias);
+        // Una fecha anterior al último devengo no resta.
+        assertThat(c.interesHasta(INICIO)).isEqualByComparingTo("1.20");
+    }
+
+    @Test
+    void soloLosCuposSonLineas() {
+        Entidades.Credito c = new Entidades.Credito();
+        for (String familia : new String[] { "EMERGENTE_SOCIO", "EMERGENTE_ESTACIONAL" }) {
+            c.setFamilia(familia);
+            assertThat(c.esLinea()).as(familia).isTrue();
+        }
+        for (String familia : new String[] { "LETRAS", "EMERGENTE_CLIENTE" }) {
+            c.setFamilia(familia);
+            assertThat(c.esLinea()).as(familia).isFalse();
+        }
+    }
+
+    private static Entidades.Credito linea(BigDecimal capital, BigDecimal tasaDiaria, LocalDate desde) {
+        Entidades.Credito c = new Entidades.Credito();
+        c.setFamilia("EMERGENTE_SOCIO");
+        c.setCapitalPendiente(capital);
+        c.setTasaInteres(tasaDiaria);
+        c.setTasaDesgravamen(BigDecimal.ZERO);
+        c.setUltimoDevengo(desde);
+        return c;
+    }
 }

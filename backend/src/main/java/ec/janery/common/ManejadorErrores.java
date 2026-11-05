@@ -5,6 +5,7 @@ import java.util.UUID;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.ConcurrencyFailureException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
@@ -46,6 +47,17 @@ public class ManejadorErrores {
     ResponseEntity<ApiError> integridad(DataIntegrityViolationException e) {
         log.warn("Violación de integridad: {}", e.getMostSpecificCause().getMessage());
         return respuesta(HttpStatus.CONFLICT, "CONFLICTO", "La operación entra en conflicto con datos existentes", List.of());
+    }
+
+    /**
+     * Interbloqueo o espera de bloqueo cancelada por PostgreSQL. La transacción se deshizo entera: repetir la operación,
+     * con la misma clave de idempotencia, es seguro.
+     */
+    @ExceptionHandler(ConcurrencyFailureException.class)
+    ResponseEntity<ApiError> concurrencia(ConcurrencyFailureException e) {
+        log.warn("Operación simultánea revertida: {}", e.getMostSpecificCause().getMessage());
+        return respuesta(HttpStatus.CONFLICT, "OPERACION_SIMULTANEA",
+                "Otra operación cambió estos datos al mismo tiempo. Intente de nuevo", List.of());
     }
 
     @ExceptionHandler(NoResourceFoundException.class)

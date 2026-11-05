@@ -68,7 +68,7 @@ public class AhorroController {
     @PostMapping("/plazo-fijo")
     @ResponseStatus(HttpStatus.CREATED)
     public AhorroService.AhorroVista crearPlazoFijo(@AuthenticationPrincipal Jwt jwt,
-            @RequestHeader("Idempotency-Key") String clave, @Valid @RequestBody PlazoFijoRequest r) {
+            @RequestHeader("Idempotency-Key") @jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Size(max = 100) String clave, @Valid @RequestBody PlazoFijoRequest r) {
         return service.crearPlazoFijo(id(jwt), r.nombre().trim(), r.importe(), r.plazoMeses(), clave);
     }
 
@@ -79,19 +79,19 @@ public class AhorroController {
 
     @PostMapping("/{ahorroId}/depositos")
     public OperacionResponse depositar(@AuthenticationPrincipal Jwt jwt, @PathVariable Long ahorroId,
-            @RequestHeader("Idempotency-Key") String clave, @Valid @RequestBody DepositoRequest r) {
+            @RequestHeader("Idempotency-Key") @jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Size(max = 100) String clave, @Valid @RequestBody DepositoRequest r) {
         return new OperacionResponse(service.depositar(id(jwt), ahorroId, r.importe(), clave));
     }
 
     @PostMapping("/{ahorroId}/retiros")
     public OperacionResponse retirar(@AuthenticationPrincipal Jwt jwt, @PathVariable Long ahorroId,
-            @RequestHeader("Idempotency-Key") String clave, @Valid @RequestBody RetiroRequest r) {
+            @RequestHeader("Idempotency-Key") @jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Size(max = 100) String clave, @Valid @RequestBody RetiroRequest r) {
         return new OperacionResponse(service.retirar(id(jwt), ahorroId, r.importe(), clave));
     }
 
     @PostMapping("/{ahorroId}/interes")
     public OperacionResponse retirarInteres(@AuthenticationPrincipal Jwt jwt, @PathVariable Long ahorroId,
-            @RequestHeader("Idempotency-Key") String clave) {
+            @RequestHeader("Idempotency-Key") @jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Size(max = 100) String clave) {
         return new OperacionResponse(service.retirarInteres(id(jwt), ahorroId, clave));
     }
 

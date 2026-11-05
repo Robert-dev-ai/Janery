@@ -17,6 +17,8 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 @Service
 public class EventosService {
 
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(EventosService.class);
+
     /** Algo más que el token de acceso: al cerrarse, el navegador reconecta con un token vigente. */
     private static final long DURACION_MS = 16 * 60 * 1000L;
 
@@ -56,11 +58,18 @@ public class EventosService {
         conexiones.forEach(c -> enviar(c, SseEmitter.event().name("cambio").data(modulo)));
     }
 
+    /**
+     * Nunca lanza: se llama tras confirmar operaciones de dinero, y un fallo aquí devolvería un error al cliente por una
+     * operación que sí se guardó. Una conexión que falla se descarta; el navegador vuelve a conectarse solo.
+     */
     private void enviar(SseEmitter conexion, SseEmitter.SseEventBuilder evento) {
         try {
             conexion.send(evento);
         } catch (IOException | IllegalStateException e) {
             conexiones.remove(conexion);
+        } catch (RuntimeException e) {
+            conexiones.remove(conexion);
+            log.warn("No se pudo avisar a una pantalla conectada: {}", e.toString());
         }
     }
 }

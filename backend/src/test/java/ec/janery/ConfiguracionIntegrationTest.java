@@ -6,6 +6,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.util.List;
 import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
@@ -94,6 +95,52 @@ class ConfiguracionIntegrationTest {
         assertThat(jdbc.queryForObject("SELECT count(*) FROM usuarios WHERE correo = ?", Integer.class,
                 nuevo.toLowerCase())).isEqualTo(1);
         login(nuevo.toLowerCase(), CLAVE);
+    }
+
+    /** Antes cada intento leía el contador, sumaba en memoria y lo guardaba: en paralelo, ninguno llegaba a bloquear. */
+    @Test
+    void intentosFallidosSimultaneosTambienBloquean() throws Exception {
+        String correo = registrar();
+        List<Integer> estados = simultaneos(8, () -> mvc.perform(post("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON)
+                .content(credenciales(correo, "Mala-Clave-1"))).andReturn().getResponse().getStatus());
+
+        assertThat(estados).containsOnly(401);
+        assertThat(jdbc.queryForObject("select estado from usuarios where correo = ?", String.class, correo)).isEqualTo("BLOQUEADO");
+        mvc.perform(post("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON).content(credenciales(correo, CLAVE)))
+                .andExpect(status().isUnauthorized()).andExpect(jsonPath("$.codigo").value("ACCESO_BLOQUEADO"));
+    }
+
+    /** Un token de refresco sirve una vez, aunque lleguen varias peticiones con él al mismo tiempo. */
+    @Test
+    void refrescosSimultaneosConElMismoTokenAbrenUnaSolaSesion() throws Exception {
+        MockHttpServletResponse sesion = login(registrar(), CLAVE);
+        List<Integer> estados = simultaneos(6, () -> refrescar(sesion).andReturn().getResponse().getStatus());
+
+        assertThat(estados).filteredOn(e -> e == 200).hasSize(1);
+        assertThat(estados).filteredOn(e -> e == 401).hasSize(5);
+    }
+
+    /** Lanza las tareas a la vez y devuelve el resultado de cada una. */
+    private static <T> List<T> simultaneos(int cuantas, java.util.concurrent.Callable<T> tarea) throws Exception {
+        java.util.concurrent.ExecutorService hilos = java.util.concurrent.Executors.newFixedThreadPool(cuantas);
+        try {
+            java.util.concurrent.CountDownLatch salida = new java.util.concurrent.CountDownLatch(1);
+            List<java.util.concurrent.Future<T>> futuros = new java.util.ArrayList<>();
+            for (int i = 0; i < cuantas; i++) {
+                futuros.add(hilos.submit(() -> {
+                    salida.await();
+                    return tarea.call();
+                }));
+            }
+            salida.countDown();
+            List<T> resultados = new java.util.ArrayList<>();
+            for (java.util.concurrent.Future<T> f : futuros) {
+                resultados.add(f.get(60, java.util.concurrent.TimeUnit.SECONDS));
+            }
+            return resultados;
+        } finally {
+            hilos.shutdownNow();
+        }
     }
 
     @Test
