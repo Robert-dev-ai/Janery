@@ -1021,8 +1021,10 @@ export class ApiService {
     return this.http.post<Simulacion>(`${this.base}/creditos/letras/simulacion`, { modalidad, importe, plazoMeses });
   }
 
-  solicitarLetras(modalidad: string, importe: number, plazoMeses: number, origenEncaje: string, ahorroEncajeId: number | null): Observable<{ id: number }> {
-    return this.http.post<{ id: number }>(`${this.base}/creditos/letras/solicitudes`, { modalidad, importe, plazoMeses, origenEncaje, ahorroEncajeId });
+  solicitarLetras(modalidad: string, importe: number, plazoMeses: number, origenEncaje: string, ahorroEncajeId: number | null,
+      clave: string): Observable<{ id: number }> {
+    return this.http.post<{ id: number }>(`${this.base}/creditos/letras/solicitudes`, { modalidad, importe, plazoMeses, origenEncaje, ahorroEncajeId },
+      conClave(clave));
   }
 
   /** tipo: APERTURA (id de la cuenta) o DEPOSITO (id del aviso). */
@@ -1167,8 +1169,8 @@ export class ApiService {
     return this.http.post(`${this.base}/ahorros/${id}/interes`, null, conClave(clave));
   }
 
-  crearAhorroNormal(nombre: string): Observable<Ahorro> {
-    return this.http.post<Ahorro>(`${this.base}/ahorros/normales`, { nombre });
+  crearAhorroNormal(nombre: string, clave: string): Observable<Ahorro> {
+    return this.http.post<Ahorro>(`${this.base}/ahorros/normales`, { nombre }, conClave(clave));
   }
 
   crearPlazoFijo(nombre: string, importe: number, plazoMeses: number, clave: string): Observable<Ahorro> {
@@ -1379,8 +1381,10 @@ export class ApiService {
     return this.http.post<Simulacion>(`${this.base}/admin/creditos/tramite/personas/${usuarioId}/simulacion`, { modalidad, importe, plazoMeses });
   }
 
-  letrasTramite(usuarioId: number, modalidad: string, importe: number, plazoMeses: number, origenEncaje: string): Observable<{ id: number }> {
-    return this.http.post<{ id: number }>(`${this.base}/admin/creditos/tramite/personas/${usuarioId}/letras`, { modalidad, importe, plazoMeses, origenEncaje });
+  letrasTramite(usuarioId: number, modalidad: string, importe: number, plazoMeses: number, origenEncaje: string,
+      clave: string): Observable<{ id: number }> {
+    return this.http.post<{ id: number }>(`${this.base}/admin/creditos/tramite/personas/${usuarioId}/letras`, { modalidad, importe, plazoMeses, origenEncaje },
+      conClave(clave));
   }
 
   emergenteTramite(usuarioId: number, importe: number, clave: string): Observable<{ id: number }> {

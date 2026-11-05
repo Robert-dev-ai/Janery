@@ -65,7 +65,7 @@ function topeRedondo(maximo: number): number {
       <summary>Ver como tabla</summary>
       <div class="tabla">
         <table>
-          <thead><tr><th>Periodo</th>@for (s of series(); track s) { <th class="num">{{ s }}</th> }</tr></thead>
+          <thead><tr><th scope="col">Periodo</th>@for (s of series(); track s) { <th scope="col" class="num">{{ s }}</th> }</tr></thead>
           <tbody>
             @for (g of filas(); track g.titulo) {
               <tr><td>{{ g.titulo }}</td>@for (b of g.barras; track b.serie) { <td class="num">{{ b.texto }}</td> }</tr>

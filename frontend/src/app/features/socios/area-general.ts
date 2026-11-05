@@ -40,7 +40,7 @@ import { mensajeDeError } from '../../shared/utils/errores';
       } @else {
         <div class="tabla">
           <table>
-            <thead><tr><th>Persona</th><th class="num">Saldo</th><th class="num">Ahorros</th><th>Créditos</th><th class="num">Capital pendiente</th><th>Letras vencidas</th><th></th></tr></thead>
+            <thead><tr><th scope="col">Persona</th><th scope="col" class="num">Saldo</th><th scope="col" class="num">Ahorros</th><th scope="col">Créditos</th><th scope="col" class="num">Capital pendiente</th><th scope="col">Letras vencidas</th><th scope="col"></th></tr></thead>
             <tbody>
               @for (p of d.contenido; track p.id) {
                 <tr>
@@ -70,7 +70,7 @@ import { mensajeDeError } from '../../shared/utils/errores';
         @let creditos = x.creditos;
         <div class="tabla">
           <table>
-            <thead><tr><th>Crédito</th><th>Estado</th><th class="num">Importe</th><th class="num">Capital pendiente</th><th>Letras pagadas</th><th>Próximo vencimiento</th></tr></thead>
+            <thead><tr><th scope="col">Crédito</th><th scope="col">Estado</th><th scope="col" class="num">Importe</th><th scope="col" class="num">Capital pendiente</th><th scope="col">Letras pagadas</th><th scope="col">Próximo vencimiento</th></tr></thead>
             <tbody>
               @for (c of creditos; track c.id) {
                 <tr>
@@ -109,7 +109,7 @@ import { mensajeDeError } from '../../shared/utils/errores';
       } @else {
         <div class="tabla">
           <table>
-            <thead><tr><th>Fecha</th><th>Persona</th><th>Concepto</th><th class="num">Importe</th></tr></thead>
+            <thead><tr><th scope="col">Fecha</th><th scope="col">Persona</th><th scope="col">Concepto</th><th scope="col" class="num">Importe</th></tr></thead>
             <tbody>
               @for (m of d.contenido; track m.id) {
                 <tr>

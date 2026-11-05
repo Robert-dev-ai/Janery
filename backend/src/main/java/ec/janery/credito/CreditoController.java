@@ -75,8 +75,11 @@ public class CreditoController {
 
     @PostMapping("/creditos/letras/solicitudes")
     @ResponseStatus(HttpStatus.CREATED)
-    public CreadoResponse solicitar(@AuthenticationPrincipal Jwt jwt, @Valid @RequestBody LetrasRequest r) {
-        return new CreadoResponse(service.solicitarLetras(id(jwt), r.modalidad(), r.importe(), r.plazoMeses(), r.origenEncaje(), r.ahorroEncajeId()));
+    public CreadoResponse solicitar(@AuthenticationPrincipal Jwt jwt,
+            @RequestHeader("Idempotency-Key") @jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Size(max = 100) String clave,
+            @Valid @RequestBody LetrasRequest r) {
+        return new CreadoResponse(service.solicitarLetras(id(jwt), r.modalidad(), r.importe(), r.plazoMeses(), r.origenEncaje(), r.ahorroEncajeId(),
+                clave));
     }
 
     @PostMapping("/creditos/emergentes/solicitudes")

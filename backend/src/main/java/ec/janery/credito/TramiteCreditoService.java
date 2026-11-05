@@ -77,8 +77,12 @@ public class TramiteCreditoService {
 
     @Transactional
     public Long solicitarLetras(Long actorId, Long usuarioId, String modalidad, BigDecimal importe, int plazo,
-            String origenEncaje, Long ahorroEncajeId) {
-        Long id = creditos.solicitarLetras(usuarioId, modalidad, importe, plazo, origenEncaje, ahorroEncajeId);
+            String origenEncaje, Long ahorroEncajeId, String clave) {
+        boolean repetida = creditos.claveDeSolicitudUsada(clave);
+        Long id = creditos.solicitarLetras(usuarioId, modalidad, importe, plazo, origenEncaje, ahorroEncajeId, clave);
+        if (repetida) {
+            return id;
+        }
         auditoria.registrar(actorId, "CREDITO_TRAMITADO", MODULO, "credito", id, null, importe.toPlainString(), null);
         return id;
     }

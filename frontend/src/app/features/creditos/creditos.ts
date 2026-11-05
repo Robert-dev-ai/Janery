@@ -131,7 +131,7 @@ import { FormDatosCredito } from '../configuracion/form-datos-credito';
             </label>
             <p class="suave">Imprima la solicitud de crédito, fírmela y súbala escaneada o fotografiada como PDF.</p>
           }
-          <button type="submit" [disabled]="!importeEmergente || importeEmergente <= 0 || (p.perfil === 'CLIENTE' && !firmadaEmergente.length)">Solicitar</button>
+          <button type="submit" [disabled]="enviando() || !importeEmergente || importeEmergente <= 0 || (p.perfil === 'CLIENTE' && !firmadaEmergente.length)">{{ enviando() ? 'Enviando…' : 'Solicitar' }}</button>
         </form>
       </section>
 
@@ -158,7 +158,7 @@ import { FormDatosCredito } from '../configuracion/form-datos-credito';
           <p class="mt-4">Al inicio: encaje <strong>{{ s.encaje | currency: 'USD' }}</strong> (se devuelve al terminar) y suministros <strong>{{ s.suministros | currency: 'USD' }}</strong> (no se devuelven).</p>
           <div class="tabla">
             <table>
-              <thead><tr><th>N.º</th><th class="num">Capital</th><th class="num">Interés</th><th class="num">Desgravamen</th><th class="num">Ahorro letras</th><th class="num">Total</th></tr></thead>
+              <thead><tr><th scope="col">N.º</th><th scope="col" class="num">Capital</th><th scope="col" class="num">Interés</th><th scope="col" class="num">Desgravamen</th><th scope="col" class="num">Ahorro letras</th><th scope="col" class="num">Total</th></tr></thead>
               <tbody>
                 @for (l of s.cuotas; track l.numero) {
                   <tr>
@@ -205,7 +205,7 @@ import { FormDatosCredito } from '../configuracion/form-datos-credito';
                 <input type="file" accept="application/pdf,.pdf" multiple (change)="elegirDocumentos($event)" />
               </label>
               @if (documentos.length) { <p class="suave">{{ documentos.length }} {{ documentos.length === 1 ? 'documento elegido' : 'documentos elegidos' }}.</p> }
-              <button type="button" [disabled]="!origenEncaje || (origenEncaje === 'AHORROS' && !ahorroEncaje) || (p.perfil === 'CLIENTE' && !documentos.length)" (click)="solicitar()">Solicitar este crédito</button>
+              <button type="button" [disabled]="enviando() || !origenEncaje || (origenEncaje === 'AHORROS' && !ahorroEncaje) || (p.perfil === 'CLIENTE' && !documentos.length)" (click)="solicitar()">{{ enviando() ? 'Enviando…' : 'Solicitar este crédito' }}</button>
             }
           </div>
         }
@@ -217,7 +217,7 @@ import { FormDatosCredito } from '../configuracion/form-datos-credito';
       @if (historial().length) {
         <div class="tabla">
           <table>
-            <thead><tr><th>Código</th><th>Crédito</th><th>Solicitado</th><th>Terminado</th><th class="num">Importe</th><th class="num">Letras</th><th class="num">Pendiente</th><th>Estado</th></tr></thead>
+            <thead><tr><th scope="col">Código</th><th scope="col">Crédito</th><th scope="col">Solicitado</th><th scope="col">Terminado</th><th scope="col" class="num">Importe</th><th scope="col" class="num">Letras</th><th scope="col" class="num">Pendiente</th><th scope="col">Estado</th></tr></thead>
             <tbody>
               @for (c of historial(); track c.id) {
                 <tr>
@@ -282,12 +282,12 @@ import { FormDatosCredito } from '../configuracion/form-datos-credito';
             <label>Importe a pagar (USD)
               <input type="number" min="0" step="any" name="pago{{ c.id }}" [(ngModel)]="importePago" />
             </label>
-            <button type="submit" [disabled]="!importePago || importePago <= 0">Pagar</button>
+            <button type="submit" [disabled]="enviando() || !importePago || importePago <= 0">{{ enviando() ? 'Pagando…' : 'Pagar' }}</button>
           </form>
         } @else {
           <div class="tabla">
             <table>
-              <thead><tr><th>N.º</th><th>Vence</th><th class="num">Capital</th><th class="num">Interés</th><th class="num">Desgravamen</th><th class="num">Ahorro letras</th><th class="num">Total</th>@if (c.tasaMora > 0) { <th class="num">Mora</th> }<th>Estado</th></tr></thead>
+              <thead><tr><th scope="col">N.º</th><th scope="col">Vence</th><th scope="col" class="num">Capital</th><th scope="col" class="num">Interés</th><th scope="col" class="num">Desgravamen</th><th scope="col" class="num">Ahorro letras</th><th scope="col" class="num">Total</th>@if (c.tasaMora > 0) { <th scope="col" class="num">Mora</th> }<th scope="col">Estado</th></tr></thead>
               <tbody>
                 @for (l of c.cuotas; track l.numero) {
                   <tr>
@@ -325,7 +325,7 @@ import { FormDatosCredito } from '../configuracion/form-datos-credito';
             <label>Importe (USD; vacío, lo que falta de la letra)
               <input type="number" min="0" step="any" name="letra{{ c.id }}" [(ngModel)]="importeLetra" />
             </label>
-            <button type="submit">Pagar</button>
+            <button type="submit" [disabled]="enviando()">{{ enviando() ? 'Pagando…' : 'Pagar' }}</button>
           </form>
           <p class="suave">Si paga solo una parte, se cobra en este orden: capital, desgravamen, interés, ahorro letras y mora.</p>
           @if (c.familia === 'LETRAS') {
@@ -333,7 +333,7 @@ import { FormDatosCredito } from '../configuracion/form-datos-credito';
               <div class="tarjeta mt-4">
                 <h3>Pagar todo el crédito</h3>
                 <p>Ya puede terminar el crédito pagando todo el capital pendiente@if (c.moraPendiente > 0) { y su mora }: <strong>{{ c.capitalPendiente + c.moraPendiente | currency: 'USD' }}</strong>. Sin interés, desgravamen ni ahorro letras de las letras que faltan. Su encaje y ahorro letras vuelven a su cuenta.</p>
-                <button type="button" (click)="precancelar(c)">Pagar todo el crédito</button>
+                <button type="button" [disabled]="enviando()" (click)="precancelar(c)">Pagar todo el crédito</button>
               </div>
             } @else {
               <p class="suave">Podrá pagar todo el crédito, solo con su capital, cuando tenga {{ c.letrasParaPrecancelar }} letras pagadas. Lleva {{ c.cuotasPagadas.length }}.</p>
@@ -375,6 +375,8 @@ export class Creditos implements OnInit {
   protected readonly simulacion = signal<Simulacion | null>(null);
   protected readonly error = signal<string | null>(null);
   protected readonly aviso = signal<string | null>(null);
+  /** Mientras una operación está en curso: evita el doble clic y deja ver que se está procesando. */
+  protected readonly enviando = signal(false);
 
   protected modalidad = 'NORMAL';
   protected importe: number | null = null;
@@ -462,15 +464,21 @@ export class Creditos implements OnInit {
   }
 
   protected solicitar(): void {
+    if (this.enviando()) {
+      return;
+    }
+    this.enviando.set(true);
     this.error.set(null);
     this.aviso.set(null);
     const ahorro = this.origenEncaje === 'AHORROS' ? this.ahorroEncaje : null;
     const archivos = this.documentos;
-    this.api.solicitarLetras(this.modalidad, this.importe!, this.plazo!, this.origenEncaje, ahorro).pipe(
+    this.api.solicitarLetras(this.modalidad, this.importe!, this.plazo!, this.origenEncaje, ahorro, this.clave).pipe(
       // La solicitud ya existe: si falla la subida, se reintenta desde «Solicitudes en trámite».
       switchMap(({ id }) => (archivos.length ? this.api.subirDocumentosCredito(id, archivos) : of(null))),
     ).subscribe({
       next: () => {
+        this.clave = crypto.randomUUID();
+        this.enviando.set(false);
         this.simulacion.set(null);
         this.datosConfirmados.set(false);
         this.origenEncaje = '';
@@ -480,6 +488,7 @@ export class Creditos implements OnInit {
         this.cargar();
       },
       error: (e) => {
+        this.enviando.set(false);
         this.error.set(mensajeDeError(e));
         this.cargar();
       },
@@ -528,16 +537,22 @@ export class Creditos implements OnInit {
   }
 
   private ejecutar(accion: Observable<unknown>, aviso: string, alTerminar?: () => void, para?: string): void {
+    if (this.enviando()) {
+      return;
+    }
+    this.enviando.set(true);
     this.error.set(null);
     this.aviso.set(null);
     accion.subscribe({
       next: () => {
+        this.enviando.set(false);
         this.clave = crypto.randomUUID();
         this.aviso.set(aviso);
         alTerminar?.();
         this.cargar();
       },
       error: (e) => {
+        this.enviando.set(false);
         if (!para || !llevarADepositarSiFaltaSaldo(e, this.router, para)) {
           this.error.set(mensajeDeError(e));
         }

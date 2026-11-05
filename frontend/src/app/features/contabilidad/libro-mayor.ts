@@ -44,7 +44,7 @@ const LINEAS = [
       } @else {
         <div class="tabla">
           <table>
-            <thead><tr><th>Fecha</th><th>Movimiento</th><th>De quién</th><th class="num">Sube</th><th class="num">Baja</th><th class="num">Saldo</th></tr></thead>
+            <thead><tr><th scope="col">Fecha</th><th scope="col">Movimiento</th><th scope="col">De quién</th><th scope="col" class="num">Sube</th><th scope="col" class="num">Baja</th><th scope="col" class="num">Saldo</th></tr></thead>
             <tbody>
               @for (f of d.movimientos.contenido; track $index) {
                 <tr>

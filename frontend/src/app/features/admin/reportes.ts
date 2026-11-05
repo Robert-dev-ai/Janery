@@ -42,7 +42,7 @@ import { mensajeDeError } from '../../shared/utils/errores';
           <table>
             <thead>
               <tr>
-                @for (c of t.columnas; track $index) { <th [class.num]="t.numericas[$index]">{{ c }}</th> }
+                @for (c of t.columnas; track $index) { <th scope="col" [class.num]="t.numericas[$index]">{{ c }}</th> }
               </tr>
             </thead>
             <tbody>

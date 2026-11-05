@@ -179,8 +179,17 @@ class ConfiguracionIntegrationTest {
         mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/api/v1/auth/me")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token(sesion)))
                 .andExpect(jsonPath("$.debeCambiarContrasena").value(true));
+        // Con la temporal, quien la dictó no puede operar en nombre del titular: antes se podía.
+        mvc.perform(post("/api/v1/cuentas-principales/apertura").header(HttpHeaders.AUTHORIZATION, "Bearer " + token(sesion))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"metodoPago\":\"EFECTIVO\"}"))
+                .andExpect(status().isForbidden()).andExpect(jsonPath("$.codigo").value("CAMBIO_CONTRASENA_REQUERIDO"));
         contrasena(sesion, temporal, CLAVE_NUEVA).andExpect(status().isNoContent());
         assertThat(jdbc.queryForObject("select debe_cambiar_contrasena from usuarios where id = ?", Boolean.class, id)).isFalse();
+        // El token nuevo, tras renovar, ya no lleva la marca.
+        String renovado = token(refrescar(sesion).andExpect(status().isOk()).andReturn().getResponse());
+        mvc.perform(post("/api/v1/cuentas-principales/apertura").header(HttpHeaders.AUTHORIZATION, "Bearer " + renovado)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"metodoPago\":\"EFECTIVO\"}"))
+                .andExpect(status().is(org.hamcrest.Matchers.not(403)));
     }
 
     @Test

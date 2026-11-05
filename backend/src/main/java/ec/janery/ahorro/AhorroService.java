@@ -66,6 +66,8 @@ public class AhorroService {
         private BigDecimal interesAcumulado;
         private BigDecimal interesDisponible;
         private LocalDate ultimoDevengo;
+        /** Solo en los ahorros normales abiertos con clave de idempotencia. */
+        private String claveCreacion;
     }
 
     @Entity(name = "MovimientoAhorro")
@@ -94,6 +96,8 @@ public class AhorroService {
         Optional<CuentaAhorro> bloquear(@Param("id") Long id);
 
         List<CuentaAhorro> findByPersonaIdOrderByIdDesc(Long personaId);
+
+        Optional<CuentaAhorro> findByClaveCreacion(String clave);
 
         @Query("""
                 select count(c) > 0 from CuentaAhorro c where c.personaId = :personaId and c.estado = 'ACTIVA'
@@ -152,11 +156,19 @@ public class AhorroService {
     private jakarta.persistence.EntityManager em;
 
     @Transactional
-    public AhorroVista crearNormal(Long usuarioId, String nombre) {
+    public AhorroVista crearNormal(Long usuarioId, String nombre, String clave) {
         Long personaId = personaDe(usuarioId);
         cuentas.cuentaActivaBloqueada(personaId);
+        // Tras el bloqueo: un doble clic espera aquí y recibe el ahorro ya abierto, no un segundo.
+        Optional<CuentaAhorro> previo = ahorros.findByClaveCreacion(clave);
+        if (previo.isPresent()) {
+            if (!previo.get().getPersonaId().equals(personaId)) {
+                throw NegocioException.conflicto("CLAVE_REUTILIZADA", "La clave de idempotencia ya se usó en otra operación");
+            }
+            return vista(previo.get());
+        }
         CuentaAhorro a = ahorros.save(new CuentaAhorro(null, personaId, NORMAL, nombre, ACTIVA,
-                BigDecimal.ZERO.setScale(2), null, null, null, Instant.now(reloj), null, CERO, CERO, LocalDate.now(reloj)));
+                BigDecimal.ZERO.setScale(2), null, null, null, Instant.now(reloj), null, CERO, CERO, LocalDate.now(reloj), clave));
         auditoria.registrar(usuarioId, "AHORRO_CREADO", MODULO, "ahorro", a.getId(), null, NORMAL, null);
         return vista(a);
     }
@@ -177,7 +189,7 @@ public class AhorroService {
         }
         CuentaAhorro a = ahorros.save(new CuentaAhorro(null, personaId, PLAZO_FIJO, nombre, ACTIVA, importe,
                 parametros.valorVigente(parametroPlazo(plazo)), plazo, LocalDate.now(reloj).plusMonths(plazo),
-                Instant.now(reloj), null, CERO, CERO, null));
+                Instant.now(reloj), null, CERO, CERO, null, null));
         Long operacion = cuentas.crearOperacionInterna("APERTURA_AHORRO", importe, clave, usuarioId);
         cuentas.mover(cuenta, operacion, SALIDA, importe, "APERTURA_PLAZO_FIJO");
         asiento(a, operacion, ENTRADA, importe, "APERTURA", null, null);

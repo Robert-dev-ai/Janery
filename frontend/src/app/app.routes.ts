@@ -1,31 +1,37 @@
 import { Routes } from '@angular/router';
 
-import { autenticadoGuard, cuentaActivaGuard, permisoGuard, personalGuard, socioGuard } from './core/auth/guards';
+import { autenticadoGuard, contrasenaTemporalGuard, cuentaActivaGuard, permisoGuard, personalGuard, socioGuard } from './core/auth/guards';
 
 export const routes: Routes = [
   {
     path: '',
+    data: { publica: true },
     loadComponent: () => import('./layout/layout-publico').then((m) => m.LayoutPublico),
     children: [
       {
         path: '',
         pathMatch: 'full',
+        data: { publica: true },
         loadComponent: () => import('./features/public/inicio/inicio').then((m) => m.Inicio),
       },
       {
         path: 'informacion',
+        data: { publica: true },
         loadComponent: () => import('./features/public/informacion').then((m) => m.Informacion),
       },
       {
         path: 'registro',
+        data: { publica: true },
         loadComponent: () => import('./features/auth/registro').then((m) => m.Registro),
       },
       {
         path: 'iniciar-sesion',
+        data: { publica: true },
         loadComponent: () => import('./features/auth/iniciar-sesion').then((m) => m.IniciarSesion),
       },
       {
         path: 'recuperar-contrasena',
+        data: { publica: true },
         loadComponent: () => import('./features/auth/recuperar-contrasena').then((m) => m.RecuperarContrasena),
       },
     ],
@@ -33,6 +39,7 @@ export const routes: Routes = [
   {
     path: '',
     canActivate: [autenticadoGuard],
+    canActivateChild: [contrasenaTemporalGuard],
     data: { experiencia: 'portal' },
     loadComponent: () => import('./layout/layout-panel').then((m) => m.LayoutPanel),
     children: [
@@ -69,7 +76,7 @@ export const routes: Routes = [
           { path: 'perfil', redirectTo: '/configuracion/perfil' },
           { path: 'creditos', loadComponent: () => import('./features/creditos/creditos').then((m) => m.Creditos) },
           { path: 'ahorros', loadComponent: () => import('./features/ahorros/ahorros').then((m) => m.Ahorros) },
-          { path: 'inversiones', loadComponent: () => import('./features/socios/inversiones').then((m) => m.Inversiones) },
+          { path: 'inversiones', canActivate: [socioGuard], loadComponent: () => import('./features/socios/inversiones').then((m) => m.Inversiones) },
           {
             path: 'socios/general',
             canActivate: [socioGuard],
@@ -96,6 +103,7 @@ export const routes: Routes = [
   {
     path: '',
     canActivate: [autenticadoGuard],
+    canActivateChild: [contrasenaTemporalGuard],
     data: { experiencia: 'admin' },
     loadComponent: () => import('./layout/layout-panel').then((m) => m.LayoutPanel),
     children: [

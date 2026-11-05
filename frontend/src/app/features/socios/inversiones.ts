@@ -68,7 +68,7 @@ const TIPOS: Record<string, string> = {
               <label>Importe (USD)
                 <input type="number" min="0" step="1" name="retiro" [(ngModel)]="importeRetiro" />
               </label>
-              <button type="submit" [disabled]="!importeRetiro || importeRetiro <= 0">Retirar</button>
+              <button type="submit" [disabled]="enviando() || !importeRetiro || importeRetiro <= 0">Retirar</button>
             </form>
           }
         </section>
@@ -91,7 +91,7 @@ const TIPOS: Record<string, string> = {
             <label>Importe (USD)
               <input type="number" min="0" step="1" name="personal" [(ngModel)]="importe" />
             </label>
-            <button type="submit" [disabled]="!importe || importe <= 0">Aportar</button>
+            <button type="submit" [disabled]="enviando() || !importe || importe <= 0">Aportar</button>
           </form>
         </section>
         <section class="tarjeta">
@@ -118,7 +118,7 @@ const TIPOS: Record<string, string> = {
         @if (p.variaciones.length) {
           <div class="tabla">
             <table>
-              <thead><tr><th>Fecha</th><th>Concepto</th><th class="num">Variación</th></tr></thead>
+              <thead><tr><th scope="col">Fecha</th><th scope="col">Concepto</th><th scope="col" class="num">Variación</th></tr></thead>
               <tbody>
                 @for (v of p.variaciones; track $index) {
                   <tr>
@@ -163,6 +163,8 @@ export class Inversiones implements OnInit {
   protected readonly personales = computed(() => this.aportes().filter((a) => a.tipo === 'PERSONAL'));
   protected readonly error = signal<string | null>(null);
   protected readonly aviso = signal<string | null>(null);
+  /** Mientras una operación está en curso: evita el doble clic y deja ver que se está procesando. */
+  protected readonly enviando = signal(false);
 
   protected importe: number | null = null;
   protected importeRetiro: number | null = null;
@@ -205,16 +207,22 @@ export class Inversiones implements OnInit {
   }
 
   private ejecutar(accion: Observable<unknown>, aviso: string, alTerminar?: () => void): void {
+    if (this.enviando()) {
+      return;
+    }
+    this.enviando.set(true);
     this.error.set(null);
     this.aviso.set(null);
     accion.subscribe({
       next: () => {
+        this.enviando.set(false);
         this.clave = crypto.randomUUID();
         this.aviso.set(aviso);
         alTerminar?.();
         this.cargar();
       },
       error: (e) => {
+        this.enviando.set(false);
         if (!llevarADepositarSiFaltaSaldo(e, this.router, 'este aporte')) {
           this.error.set(mensajeDeError(e));
         }
@@ -229,7 +237,10 @@ export class Inversiones implements OnInit {
         this.periodos.set(periodos);
         this.aportes.set(aportes);
       },
-      error: (e) => this.error.set(mensajeDeError(e)),
+      error: (e) => {
+        this.enviando.set(false);
+        this.error.set(mensajeDeError(e));
+      },
     });
   }
 }

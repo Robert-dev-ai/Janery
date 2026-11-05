@@ -77,7 +77,7 @@ class AreaSociosContabilidadIntegrationTest {
         BigDecimal reservaAntes = reserva();
 
         // Suministros al aprobar e interés de una letra: el 10 % a reservas y el resto 1:3, según los fondos.
-        long credito = json.readTree(mvc.perform(post("/api/v1/creditos/letras/solicitudes").header(HttpHeaders.AUTHORIZATION, bearer(cliente.token()))
+        long credito = json.readTree(mvc.perform(post("/api/v1/creditos/letras/solicitudes").header("Idempotency-Key", UUID.randomUUID().toString()).header(HttpHeaders.AUTHORIZATION, bearer(cliente.token()))
                 .contentType(MediaType.APPLICATION_JSON).content("{\"modalidad\":\"NORMAL\",\"importe\":3000.00,\"plazoMeses\":3,\"origenEncaje\":\"CREDITO\"}"))
                 .andReturn().getResponse().getContentAsString()).get("id").asLong();
         mvc.perform(post("/api/v1/admin/creditos/" + credito + "/aprobar").header(HttpHeaders.AUTHORIZATION, bearer(presidente()))).andExpect(status().is2xxSuccessful());
@@ -187,7 +187,7 @@ class AreaSociosContabilidadIntegrationTest {
         Persona p = persona("50.00");
         solicitar(p, "{\"importe\":10.00,\"medio\":\"TRANSFERENCIA\"}").resultado().andExpect(status().isBadRequest());
         solicitar(p, "{\"importe\":99.00,\"medio\":\"EFECTIVO\"}").resultado().andExpect(status().isConflict())
-                .andExpect(jsonPath("$.codigo").value("SALDO_INSUFICIENTE"));
+                .andExpect(jsonPath("$.codigo").value("SALDO_CUENTA_INSUFICIENTE"));
 
         String clave = UUID.randomUUID().toString();
         String banco = "{\"importe\":10.00,\"medio\":\"TRANSFERENCIA\",\"banco\":\"Pichincha\",\"tipoCuenta\":\"AHORROS\",\"numeroCuenta\":\"123\",\"titularCuenta\":\"Ana Paz\"}";
@@ -304,19 +304,19 @@ class AreaSociosContabilidadIntegrationTest {
         Persona p = persona("500.00");
         String auth = bearer(p.token());
         // Ahorro normal y plazo fijo.
-        JsonNode ahorro = json.readTree(mvc.perform(post("/api/v1/ahorros/normales").header(HttpHeaders.AUTHORIZATION, auth)
+        JsonNode ahorro = json.readTree(mvc.perform(post("/api/v1/ahorros/normales").header("Idempotency-Key", UUID.randomUUID().toString()).header(HttpHeaders.AUTHORIZATION, auth)
                 .contentType(MediaType.APPLICATION_JSON).content("{\"nombre\":\"Meta\"}")).andReturn().getResponse().getContentAsString());
         conClave(auth, "/api/v1/ahorros/" + ahorro.get("id").asLong() + "/depositos", "{\"importe\":50.00}").andExpect(status().isOk());
         conClave(auth, "/api/v1/ahorros/plazo-fijo", "{\"nombre\":\"Fijo\",\"importe\":40.00,\"plazoMeses\":6}").andExpect(status().is2xxSuccessful());
         // Crédito a letras aprobado y una letra pagada.
-        long credito = json.readTree(mvc.perform(post("/api/v1/creditos/letras/solicitudes").header(HttpHeaders.AUTHORIZATION, auth)
+        long credito = json.readTree(mvc.perform(post("/api/v1/creditos/letras/solicitudes").header("Idempotency-Key", UUID.randomUUID().toString()).header(HttpHeaders.AUTHORIZATION, auth)
                 .contentType(MediaType.APPLICATION_JSON).content("{\"modalidad\":\"NORMAL\",\"importe\":300.00,\"plazoMeses\":6,\"origenEncaje\":\"CREDITO\"}"))
                 .andReturn().getResponse().getContentAsString()).get("id").asLong();
         mvc.perform(post("/api/v1/admin/creditos/" + credito + "/aprobar").header(HttpHeaders.AUTHORIZATION, bearer(presidente())))
                 .andExpect(status().is2xxSuccessful());
         conClave(auth, "/api/v1/creditos/" + credito + "/pagos", "{}").andExpect(status().isOk());
         // Pago adelantado y precancelación de otro crédito: deben dejar el balance cuadrado.
-        long otro = json.readTree(mvc.perform(post("/api/v1/creditos/letras/solicitudes").header(HttpHeaders.AUTHORIZATION, auth)
+        long otro = json.readTree(mvc.perform(post("/api/v1/creditos/letras/solicitudes").header("Idempotency-Key", UUID.randomUUID().toString()).header(HttpHeaders.AUTHORIZATION, auth)
                 .contentType(MediaType.APPLICATION_JSON).content("{\"modalidad\":\"NORMAL\",\"importe\":300.00,\"plazoMeses\":3,\"origenEncaje\":\"CREDITO\"}"))
                 .andReturn().getResponse().getContentAsString()).get("id").asLong();
         mvc.perform(post("/api/v1/admin/creditos/" + otro + "/aprobar").header(HttpHeaders.AUTHORIZATION, bearer(presidente()))).andExpect(status().is2xxSuccessful());

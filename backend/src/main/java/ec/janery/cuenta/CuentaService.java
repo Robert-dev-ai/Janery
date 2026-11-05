@@ -249,7 +249,7 @@ public class CuentaService {
                 ? cuenta.getSaldoDisponible().add(importe)
                 : cuenta.getSaldoDisponible().subtract(importe);
         if (nuevoSaldo.signum() < 0) {
-            throw NegocioException.conflicto("SALDO_INSUFICIENTE", "Su saldo disponible no cubre esta operación");
+            throw NegocioException.conflicto("SALDO_CUENTA_INSUFICIENTE", "Su saldo disponible no cubre esta operación");
         }
         movimientos.save(new MovimientoCuenta(null, cuenta.getId(), operacionId, sentido, importe, concepto,
                 nuevoSaldo, Instant.now(reloj)));

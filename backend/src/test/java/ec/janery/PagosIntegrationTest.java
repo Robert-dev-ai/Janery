@@ -206,7 +206,7 @@ class PagosIntegrationTest {
     }
 
     private long creditoAprobado(Persona p) throws Exception {
-        String r = mvc.perform(post("/api/v1/creditos/letras/solicitudes").header(HttpHeaders.AUTHORIZATION, bearer(p.token()))
+        String r = mvc.perform(post("/api/v1/creditos/letras/solicitudes").header("Idempotency-Key", UUID.randomUUID().toString()).header(HttpHeaders.AUTHORIZATION, bearer(p.token()))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"modalidad\":\"NORMAL\",\"importe\":300.00,\"plazoMeses\":3,\"origenEncaje\":\"CREDITO\"}"))
                 .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
@@ -217,7 +217,7 @@ class PagosIntegrationTest {
     }
 
     private long crearAhorro(Persona p) throws Exception {
-        String r = mvc.perform(post("/api/v1/ahorros/normales").header(HttpHeaders.AUTHORIZATION, bearer(p.token()))
+        String r = mvc.perform(post("/api/v1/ahorros/normales").header("Idempotency-Key", UUID.randomUUID().toString()).header(HttpHeaders.AUTHORIZATION, bearer(p.token()))
                         .contentType(MediaType.APPLICATION_JSON).content("{\"nombre\":\"Para la casa\"}"))
                 .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
         return json.readTree(r).get("id").asLong();

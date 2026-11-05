@@ -61,8 +61,10 @@ public class AhorroController {
 
     @PostMapping("/normales")
     @ResponseStatus(HttpStatus.CREATED)
-    public AhorroService.AhorroVista crearNormal(@AuthenticationPrincipal Jwt jwt, @Valid @RequestBody NormalRequest r) {
-        return service.crearNormal(id(jwt), r.nombre().trim());
+    public AhorroService.AhorroVista crearNormal(@AuthenticationPrincipal Jwt jwt,
+            @RequestHeader("Idempotency-Key") @jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Size(max = 100) String clave,
+            @Valid @RequestBody NormalRequest r) {
+        return service.crearNormal(id(jwt), r.nombre().trim(), clave);
     }
 
     @PostMapping("/plazo-fijo")

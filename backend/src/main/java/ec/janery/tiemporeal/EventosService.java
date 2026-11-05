@@ -1,7 +1,11 @@
 package ec.janery.tiemporeal;
 
 import java.io.IOException;
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import org.springframework.scheduling.annotation.Scheduled;
@@ -22,16 +26,54 @@ public class EventosService {
     /** Algo más que el token de acceso: al cerrarse, el navegador reconecta con un token vigente. */
     private static final long DURACION_MS = 16 * 60 * 1000L;
 
-    private final List<SseEmitter> conexiones = new CopyOnWriteArrayList<>();
+    /** Una por pestaña abierta. Pasado el límite se cierra la más antigua de esa persona: nadie acumula conexiones sin fin. */
+    static final int MAXIMO_POR_USUARIO = 5;
 
-    public SseEmitter conectar() {
+    private final List<SseEmitter> conexiones = new CopyOnWriteArrayList<>();
+    private final Map<Long, Deque<SseEmitter>> porUsuario = new ConcurrentHashMap<>();
+
+    public SseEmitter conectar(Long usuarioId) {
         SseEmitter conexion = new SseEmitter(DURACION_MS);
-        conexion.onCompletion(() -> conexiones.remove(conexion));
+        conexion.onCompletion(() -> quitar(usuarioId, conexion));
         conexion.onTimeout(conexion::complete);
-        conexion.onError(e -> conexiones.remove(conexion));
+        conexion.onError(e -> quitar(usuarioId, conexion));
         conexiones.add(conexion);
+        SseEmitter sobrante;
+        Deque<SseEmitter> propias = porUsuario.computeIfAbsent(usuarioId, k -> new ArrayDeque<>());
+        synchronized (propias) {
+            propias.addLast(conexion);
+            sobrante = propias.size() > MAXIMO_POR_USUARIO ? propias.pollFirst() : null;
+        }
+        if (sobrante != null) {
+            conexiones.remove(sobrante);
+            sobrante.complete();
+        }
         enviar(conexion, SseEmitter.event().comment("conectado"));
         return conexion;
+    }
+
+    private void quitar(Long usuarioId, SseEmitter conexion) {
+        conexiones.remove(conexion);
+        Deque<SseEmitter> propias = porUsuario.get(usuarioId);
+        if (propias != null) {
+            synchronized (propias) {
+                propias.remove(conexion);
+                if (propias.isEmpty()) {
+                    porUsuario.remove(usuarioId, propias);
+                }
+            }
+        }
+    }
+
+    /** Conexiones abiertas de una persona. */
+    int conexionesDe(Long usuarioId) {
+        Deque<SseEmitter> propias = porUsuario.get(usuarioId);
+        if (propias == null) {
+            return 0;
+        }
+        synchronized (propias) {
+            return propias.size();
+        }
     }
 
     /** Se envía al confirmarse la transacción: una operación revertida no debe avisar, ni la pantalla leer antes de tiempo. */

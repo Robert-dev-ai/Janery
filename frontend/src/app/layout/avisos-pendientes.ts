@@ -69,7 +69,8 @@ export class AvisosPendientes implements OnInit {
   protected readonly total = computed(() => this.conTareas().reduce((suma, p) => suma + p.total, 0));
 
   constructor() {
-    alCambiar(() => this.ngOnInit());
+    // Cuentas, retiros, depósitos y créditos; en el simulador, el paso del tiempo genera atrasos.
+    alCambiar(() => this.ngOnInit(), ['CUENTA', 'CREDITO', 'SIMULACION']);
   }
 
   ngOnInit(): void {

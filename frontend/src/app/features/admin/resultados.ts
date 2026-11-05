@@ -26,7 +26,7 @@ import { mensajeDeError } from '../../shared/utils/errores';
     } @else {
       <div class="tabla">
         <table>
-          <thead><tr><th>Socio</th><th class="num">Iniciales</th><th class="num">Mensuales</th><th class="num">Personales</th><th class="num">Ganancias</th><th class="num">Fondo personal</th><th class="num">Participación</th><th class="num">Este mes</th><th class="num">Caja chica</th></tr></thead>
+          <thead><tr><th scope="col">Socio</th><th scope="col" class="num">Iniciales</th><th scope="col" class="num">Mensuales</th><th scope="col" class="num">Personales</th><th scope="col" class="num">Ganancias</th><th scope="col" class="num">Fondo personal</th><th scope="col" class="num">Participación</th><th scope="col" class="num">Este mes</th><th scope="col" class="num">Caja chica</th></tr></thead>
           <tbody>
             @for (s of socios(); track s.socioId) {
               <tr>
@@ -61,7 +61,7 @@ import { mensajeDeError } from '../../shared/utils/errores';
           </select>
         </label>
         <label>Referencia <input name="referenciaInicial" maxlength="100" [(ngModel)]="referenciaInicial" /></label>
-        <button type="submit" [disabled]="!socioInicial || !importeInicial || importeInicial <= 0">Registrar</button>
+        <button type="submit" [disabled]="enviando() || !socioInicial || !importeInicial || importeInicial <= 0">Registrar</button>
       </form>
 
       <form class="tarjeta estrecho" (ngSubmit)="registrarCompraventa()">
@@ -79,7 +79,7 @@ import { mensajeDeError } from '../../shared/utils/errores';
         </label>
         <label>Capital que cambia de manos (USD) <input type="number" min="0" step="1" name="capital" [(ngModel)]="capitalVenta" /></label>
         <label>Precio acordado (USD) <input type="number" min="0" step="1" name="precio" [(ngModel)]="precioVenta" /></label>
-        <button type="submit" [disabled]="!vendedor || !comprador || vendedor === comprador || !capitalVenta || !precioVenta">Registrar</button>
+        <button type="submit" [disabled]="enviando() || !vendedor || !comprador || vendedor === comprador || !capitalVenta || !precioVenta">Registrar</button>
       </form>
     }
     }
@@ -98,7 +98,7 @@ import { mensajeDeError } from '../../shared/utils/errores';
       <label>Importe (USD) <input type="number" min="0" step="1" name="importe" [(ngModel)]="importe" /></label>
       <label>Concepto <input name="concepto" maxlength="200" [(ngModel)]="concepto" /></label>
       <label>Fecha (vacío: hoy) <input type="date" name="fecha" [(ngModel)]="fecha" /></label>
-      <button type="submit" [disabled]="!importe || importe <= 0 || !concepto.trim()">Registrar</button>
+      <button type="submit" [disabled]="enviando() || !importe || importe <= 0 || !concepto.trim()">Registrar</button>
     </form>
     }
 
@@ -115,7 +115,7 @@ import { mensajeDeError } from '../../shared/utils/errores';
       } @else {
         <div class="tabla">
           <table>
-            <thead><tr><th>Fecha</th><th>Concepto</th><th class="num">Importe</th><th class="num">A reserva</th></tr></thead>
+            <thead><tr><th scope="col">Fecha</th><th scope="col">Concepto</th><th scope="col" class="num">Importe</th><th scope="col" class="num">A reserva</th></tr></thead>
             <tbody>
               @for (x of r.contenido; track x.id) {
                 <tr>
@@ -138,13 +138,13 @@ import { mensajeDeError } from '../../shared/utils/errores';
       @if (gestiona) {
       <form class="acciones" (ngSubmit)="cerrar()">
         <label>Año <input type="number" step="1" name="anio" [(ngModel)]="anio" /></label>
-        <button type="submit" class="peligro" [disabled]="!anio">Cerrar año</button>
+        <button type="submit" class="peligro" [disabled]="enviando() || !anio">Cerrar año</button>
       </form>
       }
       @if (cierres().length) {
         <div class="tabla">
           <table>
-            <thead><tr><th>Año</th><th class="num">Resultado neto</th><th class="num">Reserva</th><th class="num">A fondos personales</th></tr></thead>
+            <thead><tr><th scope="col">Año</th><th scope="col" class="num">Resultado neto</th><th scope="col" class="num">Reserva</th><th scope="col" class="num">A fondos personales</th></tr></thead>
             <tbody>
               @for (c of cierres(); track c.anio) {
                 <tr>
@@ -173,6 +173,8 @@ export class AdminResultados implements OnInit {
   protected readonly cierres = signal<CierreAnual[]>([]);
   protected readonly error = signal<string | null>(null);
   protected readonly aviso = signal<string | null>(null);
+  /** Mientras una operación está en curso: evita el doble clic y deja ver que se está procesando. */
+  protected readonly enviando = signal(false);
 
   protected tipo = 'GANANCIA';
   protected importe: number | null = null;
@@ -249,15 +251,23 @@ export class AdminResultados implements OnInit {
   }
 
   private ejecutar(accion: Observable<unknown>, aviso: string, alTerminar?: () => void): void {
+    if (this.enviando()) {
+      return;
+    }
+    this.enviando.set(true);
     this.error.set(null);
     this.aviso.set(null);
     accion.subscribe({
       next: () => {
+        this.enviando.set(false);
         this.aviso.set(aviso);
         alTerminar?.();
         this.cargar();
       },
-      error: (e) => this.error.set(mensajeDeError(e)),
+      error: (e) => {
+        this.enviando.set(false);
+        this.error.set(mensajeDeError(e));
+      },
     });
   }
 

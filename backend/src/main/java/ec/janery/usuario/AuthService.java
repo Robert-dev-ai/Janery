@@ -221,7 +221,11 @@ public class AuthService {
     @Transactional
     public Sesion refrescar(String refreshToken) {
         Instant ahora = Instant.now(reloj);
-        TokenRefresco actual = refreshToken == null ? null : tokens.findByHashToken(hash(refreshToken)).orElse(null);
+        if (refreshToken == null) {
+            // Distinto de una sesión vencida: el navegador no reintenta, y abrir la página sin sesión no espera.
+            throw new NegocioException(HttpStatus.UNAUTHORIZED, "SIN_SESION", "No hay una sesión iniciada");
+        }
+        TokenRefresco actual = tokens.findByHashToken(hash(refreshToken)).orElse(null);
         if (actual == null || !actual.vigente(ahora)) {
             throw new NegocioException(HttpStatus.UNAUTHORIZED, "SESION_EXPIRADA", "La sesión ha expirado");
         }
@@ -288,6 +292,11 @@ public class AuthService {
                 .issuedAt(ahora)
                 .expiresAt(expira)
                 .claim("scope", String.join(" ", alcances(usuario.getId())))
+                .claims(c -> {
+                    if (usuario.isDebeCambiarContrasena()) {
+                        c.put(ContrasenaTemporalFiltro.RECLAMO, true);
+                    }
+                })
                 .build();
         String access = jwtEncoder
                 .encode(JwtEncoderParameters.from(JwsHeader.with(MacAlgorithm.HS256).build(), claims))

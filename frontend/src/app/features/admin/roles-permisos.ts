@@ -15,8 +15,8 @@ import { mensajeDeError } from '../../shared/utils/errores';
       <table>
         <thead>
           <tr>
-            <th>Permiso</th>
-            @for (c of cargos(); track c.codigo) { <th>{{ c.nombre }}</th> }
+            <th scope="col">Permiso</th>
+            @for (c of cargos(); track c.codigo) { <th scope="col">{{ c.nombre }}</th> }
           </tr>
         </thead>
         <tbody>

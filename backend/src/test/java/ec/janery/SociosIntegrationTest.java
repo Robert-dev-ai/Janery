@@ -412,7 +412,7 @@ class SociosIntegrationTest {
                         {"lugarTrabajo":"Tienda","ocupacion":"Vendedora","antiguedadTrabajo":"2 años","ingresosMensuales":500.00,
                          "fechaNacimiento":"1990-01-01","estadoCivil":"SOLTERO","referenciaNombre":"Luis","referenciaTelefono":"099",
                          "banco":"Pichincha","tipoCuentaBanco":"AHORROS","numeroCuentaBanco":"123"}""")).andExpect(status().isOk());
-        String r = mvc.perform(post("/api/v1/creditos/letras/solicitudes").header(HttpHeaders.AUTHORIZATION, bearer(a.token()))
+        String r = mvc.perform(post("/api/v1/creditos/letras/solicitudes").header("Idempotency-Key", UUID.randomUUID().toString()).header(HttpHeaders.AUTHORIZATION, bearer(a.token()))
                         .contentType(MediaType.APPLICATION_JSON).content("{\"modalidad\":\"NORMAL\",\"importe\":300.00,\"plazoMeses\":3,\"origenEncaje\":\"CREDITO\"}"))
                 .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
         long credito = json.readTree(r).get("id").asLong();
@@ -467,7 +467,7 @@ class SociosIntegrationTest {
 
         compraventa(vendedor, comprador, "100.01", "10.00").andExpect(status().isConflict()).andExpect(jsonPath("$.codigo").value("CAPITAL_INSUFICIENTE"));
         compraventa(vendedor, vendedor, "1.00", "1.00").andExpect(status().isBadRequest());
-        compraventa(vendedor, comprador, "40.00", "150.01").andExpect(status().isConflict()).andExpect(jsonPath("$.codigo").value("SALDO_INSUFICIENTE"));
+        compraventa(vendedor, comprador, "40.00", "150.01").andExpect(status().isConflict()).andExpect(jsonPath("$.codigo").value("SALDO_CUENTA_INSUFICIENTE"));
 
         compraventa(vendedor, comprador, "40.00", "50.00").andExpect(status().isOk());
 

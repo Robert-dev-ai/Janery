@@ -22,7 +22,7 @@ import { mensajeDeError } from '../../shared/utils/errores';
     } @else {
       <div class="tabla">
         <table>
-          <thead><tr><th>Socio</th><th class="num">Ganancias liberadas</th><th class="num">Debe</th><th>Retiro</th><th>Acción</th></tr></thead>
+          <thead><tr><th scope="col">Socio</th><th scope="col" class="num">Ganancias liberadas</th><th scope="col" class="num">Debe</th><th scope="col">Retiro</th><th scope="col">Acción</th></tr></thead>
           <tbody>
             @for (s of socios(); track s.socioId) {
               <tr>
@@ -60,7 +60,7 @@ import { mensajeDeError } from '../../shared/utils/errores';
               </div>
             }
             <p class="suave">Una letra puede cubrirse en parte: lo primero que se cobra es el capital.</p>
-            <button type="submit" [disabled]="!hayElegidas()">Descontar lo elegido</button>
+            <button type="submit" [disabled]="enviando() || !hayElegidas()">Descontar lo elegido</button>
           </form>
         } @else {
           <p>Está al día.</p>
@@ -69,9 +69,9 @@ import { mensajeDeError } from '../../shared/utils/errores';
         <h3>Retiro de ganancias de este año</h3>
         @if (m.retiroAutorizado) {
           <p>Autorizado.</p>
-          <button type="button" class="peligro" (click)="revocar(m)">Quitar autorización</button>
+          <button type="button" class="peligro" [disabled]="enviando()" (click)="revocar(m)">Quitar autorización</button>
         } @else {
-          <button type="button" [disabled]="m.total > 0" (click)="autorizar(m)">Autorizar retiro</button>
+          <button type="button" [disabled]="enviando() || m.total > 0" (click)="autorizar(m)">Autorizar retiro</button>
           @if (m.total > 0) { <p class="suave">Debe estar al día para autorizarlo.</p> }
         }
       </section>
@@ -86,6 +86,8 @@ export class AdminRetiros implements OnInit {
   protected readonly menu = signal<MenuObligaciones | null>(null);
   protected readonly error = signal<string | null>(null);
   protected readonly aviso = signal<string | null>(null);
+  /** Mientras una operación está en curso: evita el doble clic y deja ver que se está procesando. */
+  protected readonly enviando = signal(false);
 
   protected elegidas: boolean[] = [];
   protected importes: (number | null)[] = [];
@@ -146,16 +148,24 @@ export class AdminRetiros implements OnInit {
   }
 
   private ejecutar(accion: Observable<unknown>, aviso: string, socioId: number, alTerminar?: () => void): void {
+    if (this.enviando()) {
+      return;
+    }
+    this.enviando.set(true);
     this.error.set(null);
     this.aviso.set(null);
     accion.subscribe({
       next: () => {
+        this.enviando.set(false);
         this.aviso.set(aviso);
         alTerminar?.();
         this.cargarSocios();
         this.abrir(socioId);
       },
-      error: (e) => this.error.set(mensajeDeError(e)),
+      error: (e) => {
+        this.enviando.set(false);
+        this.error.set(mensajeDeError(e));
+      },
     });
   }
 

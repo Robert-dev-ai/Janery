@@ -4,7 +4,7 @@ import { TestBed } from '@angular/core/testing';
 
 import { environment } from '../../../environments/environment';
 import { AuthService, Yo } from '../auth/auth';
-import { TiempoRealService } from './tiempo-real';
+import { alCambiar, TiempoRealService } from './tiempo-real';
 
 describe('TiempoRealService', () => {
   const yo: Yo = { id: 1, correo: 'a@b.c', cargos: [], permisos: [], tienePerfil: true, estadoCuenta: 'ACTIVA', esSocio: false, nombre: 'Ana', tieneFoto: false, debeCambiarContrasena: false };
@@ -58,5 +58,51 @@ describe('TiempoRealService', () => {
     auth.yo.set(null);
     TestBed.tick();
     expect(servicio.conectado()).toBeFalse();
+  });
+
+  async function conectar(): Promise<void> {
+    auth.token.set('abc');
+    auth.yo.set(yo);
+    TestBed.tick();
+    await esperar(10);
+  }
+
+  it('reconoce un aviso aunque la red lo entregue partido en varios trozos', async () => {
+    await conectar();
+    const recibidos: ReadonlySet<string>[] = [];
+    servicio.cambios.subscribe((m) => recibidos.push(m));
+    enviar('event:cam');
+    enviar('bio\r\nda');
+    enviar('ta:CREDITO\r\n');
+    enviar('\r\n');
+    await esperar(350);
+
+    expect(recibidos.length).toBe(1);
+    expect([...recibidos[0]]).toEqual(['CREDITO']);
+    // CREDITO no cambia los datos de la persona: no se vuelve a pedir /auth/me.
+    TestBed.inject(HttpTestingController).expectNone(`${environment.apiBaseUrl}/auth/me`);
+    auth.yo.set(null);
+    TestBed.tick();
+  });
+
+  it('alCambiar con módulos solo reacciona a esos módulos', async () => {
+    await conectar();
+    let anuncios = 0;
+    let todas = 0;
+    TestBed.runInInjectionContext(() => {
+      alCambiar(() => anuncios++, ['ANUNCIO']);
+      alCambiar(() => todas++);
+    });
+    enviar('event:cambio\ndata:CREDITO\n\n');
+    await esperar(350);
+    expect(anuncios).toBe(0);
+    expect(todas).toBe(1);
+
+    enviar('event:cambio\ndata:ANUNCIO\n\n');
+    await esperar(350);
+    expect(anuncios).toBe(1);
+    expect(todas).toBe(2);
+    auth.yo.set(null);
+    TestBed.tick();
   });
 });

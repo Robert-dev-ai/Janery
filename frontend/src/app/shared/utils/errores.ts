@@ -15,13 +15,9 @@ export function mensajeDeError(error: unknown): string {
   return 'Ocurrió un error inesperado.';
 }
 
-/** La operación salía de la cuenta principal y no alcanzó el saldo: se ofrece depositar. */
+/** La operación salía de la cuenta principal y no alcanzó el saldo: se ofrece depositar. El backend usa un código propio. */
 export function faltaSaldoEnCuenta(error: unknown): boolean {
-  if (!(error instanceof HttpErrorResponse)) {
-    return false;
-  }
-  const cuerpo = error.error as { codigo?: string; mensaje?: string } | null;
-  return cuerpo?.codigo === 'SALDO_INSUFICIENTE' && !!cuerpo.mensaje?.toLowerCase().includes('saldo disponible');
+  return error instanceof HttpErrorResponse && (error.error as { codigo?: string } | null)?.codigo === 'SALDO_CUENTA_INSUFICIENTE';
 }
 
 /**

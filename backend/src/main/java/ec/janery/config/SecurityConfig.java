@@ -55,6 +55,9 @@ public class SecurityConfig {
                                 "/api/v1/auth/refresh", "/api/v1/auth/logout", "/api/v1/auth/recuperar").permitAll()
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()))
+                // Tras validar el token: con contraseña temporal, solo se puede cambiarla.
+                .addFilterAfter(new ec.janery.usuario.ContrasenaTemporalFiltro(),
+                        org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter.class)
                 .build();
     }
 

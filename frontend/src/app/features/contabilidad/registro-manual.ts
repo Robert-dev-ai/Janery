@@ -33,7 +33,7 @@ import { mensajeDeError } from '../../shared/utils/errores';
       }
       <label>Importe (USD) <input type="number" min="0" step="1" name="importe" [(ngModel)]="importe" /></label>
       <label>Descripción <input name="descripcion" maxlength="150" [(ngModel)]="descripcion" /></label>
-      <button type="submit" [disabled]="!linea() || !importe || importe <= 0 || !descripcion.trim()">Registrar</button>
+      <button type="submit" [disabled]="enviando() || !linea() || !importe || importe <= 0 || !descripcion.trim()">Registrar</button>
     </form>
 
     @if (datos(); as d) {
@@ -42,7 +42,7 @@ import { mensajeDeError } from '../../shared/utils/errores';
       } @else {
         <div class="tabla">
           <table>
-            <thead><tr><th>Fecha</th><th>Línea</th><th>Descripción</th><th class="num">Importe</th><th>Acción</th></tr></thead>
+            <thead><tr><th scope="col">Fecha</th><th scope="col">Línea</th><th scope="col">Descripción</th><th scope="col" class="num">Importe</th><th scope="col">Acción</th></tr></thead>
             <tbody>
               @for (a of d.contenido; track a.id) {
                 <tr>
@@ -81,6 +81,8 @@ export class RegistroManual implements OnInit {
   protected readonly datos = signal<Pagina<AsientoManual> | null>(null);
   protected readonly error = signal<string | null>(null);
   protected readonly aviso = signal<string | null>(null);
+  /** Mientras una operación está en curso: evita el doble clic y deja ver que se está procesando. */
+  protected readonly enviando = signal(false);
 
   protected disminuye = false;
   protected importe: number | null = null;
@@ -114,17 +116,25 @@ export class RegistroManual implements OnInit {
   }
 
   protected registrar(): void {
+    if (this.enviando()) {
+      return;
+    }
+    this.enviando.set(true);
     this.error.set(null);
     this.aviso.set(null);
     this.api.registrarAsiento({ linea: this.linea(), disminuye: this.disminuye, importe: this.importe!, descripcion: this.descripcion.trim() }, this.clave).subscribe({
       next: () => {
+        this.enviando.set(false);
         this.clave = crypto.randomUUID();
         this.importe = null;
         this.descripcion = '';
         this.aviso.set('Registro guardado.');
         this.cargar(0);
       },
-      error: (e) => this.error.set(mensajeDeError(e)),
+      error: (e) => {
+        this.enviando.set(false);
+        this.error.set(mensajeDeError(e));
+      },
     });
   }
 

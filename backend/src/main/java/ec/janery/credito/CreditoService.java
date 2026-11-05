@@ -278,9 +278,15 @@ public class CreditoService {
 
     /** Las tasas y el origen del encaje quedan fijados al solicitar; las fechas de las letras, al aprobar. */
     @Transactional
-    public Long solicitarLetras(Long usuarioId, String modalidad, BigDecimal importe, int plazo, String origenEncaje, Long ahorroEncajeId) {
+    public Long solicitarLetras(Long usuarioId, String modalidad, BigDecimal importe, int plazo, String origenEncaje, Long ahorroEncajeId,
+            String clave) {
         Long personaId = personaDe(usuarioId);
         cuentas.cuentaActivaBloqueada(personaId);
+        // Tras el bloqueo: un doble clic espera aquí y recibe la solicitud ya creada, no una segunda.
+        Optional<Long> previa = solicitudPrevia(clave, personaId, LETRAS, importe);
+        if (previa.isPresent()) {
+            return previa.get();
+        }
         String perfil = perfil(personaId);
         validarLetras(importe, plazo);
         exigirModalidad(perfil, modalidad);
@@ -302,9 +308,30 @@ public class CreditoService {
         c.setPorcentajeSuministros(parametros.valorVigente(codigoSuministros(modalidad)));
         c.setOrigenEncaje(origenEncaje);
         c.setAhorroEncajeId("AHORROS".equals(origenEncaje) ? ahorroEncajeId : null);
+        c.setClaveSolicitud(clave);
         creditos.save(c);
         auditoria.registrar(usuarioId, "CREDITO_SOLICITADO", MODULO, "credito", c.getId(), null, importe.toPlainString(), null);
         return c.getId();
+    }
+
+    /** True si ya hay una solicitud con esa clave: quien tramita no debe auditarla dos veces. */
+    @Transactional(readOnly = true)
+    public boolean claveDeSolicitudUsada(String clave) {
+        return creditos.findByClaveSolicitud(clave).isPresent();
+    }
+
+    /**
+     * Solicitud ya creada con esa clave, para responder igual a un reintento. Debe ser de la misma persona, familia e
+     * importe: si no, la clave se está reutilizando en otra solicitud.
+     */
+    private Optional<Long> solicitudPrevia(String clave, Long personaId, String familia, BigDecimal importe) {
+        return creditos.findByClaveSolicitud(clave).map(previa -> {
+            if (!previa.getPersonaId().equals(personaId) || !familia.equals(previa.getFamilia())
+                    || previa.getImporte().compareTo(importe) != 0) {
+                throw NegocioException.conflicto("CLAVE_REUTILIZADA", "La clave de idempotencia ya se usó en otra operación");
+            }
+            return previa.getId();
+        });
     }
 
     /** Voto de aprobación. El dinero se desembolsa cuando votan las tres áreas y todas aprueban. */
@@ -428,12 +455,9 @@ public class CreditoService {
     public Long solicitarEmergenteCliente(Long usuarioId, BigDecimal importe, String clave) {
         Long personaId = personaDe(usuarioId);
         cuentas.cuentaActivaBloqueada(personaId);
-        Optional<Credito> previa = creditos.findByClaveSolicitud(clave);
+        Optional<Long> previa = solicitudPrevia(clave, personaId, EMERGENTE_CLIENTE, importe);
         if (previa.isPresent()) {
-            if (!previa.get().getPersonaId().equals(personaId) || previa.get().getImporte().compareTo(importe) != 0) {
-                throw NegocioException.conflicto("CLAVE_REUTILIZADA", "La clave de idempotencia ya se usó en otra operación");
-            }
-            return previa.get().getId();
+            return previa.get();
         }
         if (socios.esSocio(personaId)) {
             throw NegocioException.conflicto("PERFIL_INCORRECTO", "Los socios usan el cupo emergente");

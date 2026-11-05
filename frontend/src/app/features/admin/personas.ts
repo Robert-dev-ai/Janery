@@ -25,7 +25,7 @@ import { mensajeDeError } from '../../shared/utils/errores';
       } @else {
         <div class="tabla">
           <table>
-            <thead><tr><th>Nombre</th><th>Identificación</th><th>Contacto</th><th>Dirección</th><th>Cuenta</th><th>Condición</th><th>Registro</th></tr></thead>
+            <thead><tr><th scope="col">Nombre</th><th scope="col">Identificación</th><th scope="col">Contacto</th><th scope="col">Dirección</th><th scope="col">Cuenta</th><th scope="col">Condición</th><th scope="col">Registro</th></tr></thead>
             <tbody>
               @for (p of d.contenido; track p.id) {
                 <tr>

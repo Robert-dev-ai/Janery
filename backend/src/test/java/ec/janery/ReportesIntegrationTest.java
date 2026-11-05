@@ -203,7 +203,8 @@ class ReportesIntegrationTest {
     private Persona persona() throws Exception {
         String sufijo = UUID.randomUUID().toString().substring(0, 12);
         String correo = "r-" + sufijo + "@janery.test";
-        String apellido = "Apellido" + sufijo;
+        // Sin guion: el nombre se guarda con mayúscula tras cada guion, y la comparación fallaba si le seguía una letra.
+        String apellido = "Apellido" + sufijo.replace("-", "");
         mvc.perform(post("/api/v1/auth/register").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"correo\":\"" + correo + "\",\"contrasena\":\"Clave-Segura-1\"}"))
                 .andExpect(status().isCreated());
