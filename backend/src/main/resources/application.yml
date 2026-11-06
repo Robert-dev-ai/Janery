@@ -43,6 +43,11 @@ server:
     include-message: never
     include-stacktrace: never
 
+logging:
+  pattern:
+    # Código de la petición (CorrelacionFiltro): el mismo que muestra la pantalla de error.
+    correlation: "[%X{correlacion:-}] "
+
 management:
   endpoints:
     web:

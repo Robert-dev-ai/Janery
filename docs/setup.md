@@ -8,7 +8,9 @@
 - Maven compatible con Java 21 (o Maven Wrapper generado en el proyecto).
 - Node.js compatible con Angular 20 y npm.
 - Angular CLI 20.x.
-- PostgreSQL instalado y servicio iniciado.
+- PostgreSQL: la base de trabajo está en Neon ([neon.md](neon.md)); en la computadora solo hacen falta las herramientas de línea de comandos de PostgreSQL 18 (`psql`, `pg_dump`) para el simulador y los respaldos.
+
+> Este documento es la guía con la que se creó el proyecto. Para preparar una computadora nueva, seguir [neon.md](neon.md).
 - Git recomendado.
 - Editor/IDE a elección.
 

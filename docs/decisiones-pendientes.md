@@ -17,7 +17,9 @@ Claude no debe inventar respuestas a estos puntos. Puede preparar estructuras ex
 - Verificación de correo. El límite de intentos ya existe: 3 contraseñas incorrectas bloquean el acceso.
 - Contraseña fuerte de PostgreSQL y usuario propio de la aplicación.
 - Actualizar Spring Boot: revisar si 3.5 sigue recibiendo soporte.
-- Control de versiones (Git) y respaldos automáticos.
+- Respaldos automáticos fuera de la computadora. El control de versiones (Git y GitHub, con CI) ya existe, y `respaldo.ps1` hace el respaldo manual.
+- Separar los datos reales de la rama de desarrollo de Neon (hoy la rama `development` tiene los datos reales y `production` está vacía).
+- Decidir si el simulador copia los datos personales tal cual o anonimizados.
 
 ## Criterios de implementación aplicados, a confirmar por el propietario
 

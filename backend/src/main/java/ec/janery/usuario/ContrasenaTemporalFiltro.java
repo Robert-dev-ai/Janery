@@ -2,7 +2,6 @@ package ec.janery.usuario;
 
 import java.io.IOException;
 import java.util.List;
-import java.util.UUID;
 
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
@@ -39,7 +38,7 @@ public class ContrasenaTemporalFiltro extends OncePerRequestFilter {
             response.setCharacterEncoding("UTF-8");
             response.getWriter().write("""
                     {"codigo":"CAMBIO_CONTRASENA_REQUERIDO","mensaje":"Cambie su contraseña temporal antes de continuar",\
-                    "detalles":[],"correlacion":"%s"}""".formatted(UUID.randomUUID()));
+                    "detalles":[],"correlacion":"%s"}""".formatted(ec.janery.common.CorrelacionFiltro.actual()));
             return;
         }
         chain.doFilter(request, response);

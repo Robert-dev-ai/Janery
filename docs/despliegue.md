@@ -13,6 +13,7 @@ Mantener configuración diferenciada para desarrollo, pruebas y producción. No 
 
 ## 3. Construcción
 
+- Integración continua: `.github/workflows/ci.yml` compila y prueba backend y frontend en cada push a `main` y en cada pull request, con un PostgreSQL 18 desechable. No usa secretos ni Neon.
 - Backend: Maven Wrapper para compilar, probar y empaquetar.
 - Frontend: npm scripts para instalar, probar y compilar.
 - Documentar comandos exactos que se utilicen.
@@ -52,8 +53,8 @@ Arranque, parada, logs, health checks, respaldos, restauración, actualización 
 
 El administrador prueba en una instancia aparte, que no toca la base real:
 
-- Backend: el mismo `.jar` con `SPRING_PROFILES_ACTIVE=simulacion`, las mismas variables `JANERY_DB_*` de la base real (solo para leer al personal y los parámetros al reiniciar) y `JANERY_SIMULADOR_ORIGENES` con el dominio del simulador. Usa la base `janery_simulacion`, en el mismo servidor PostgreSQL; créela una vez antes de arrancarlo. Escucha en `JANERY_SIMULADOR_PUERTO` (8081 por defecto).
+- Backend: el mismo `.jar` con `SPRING_PROFILES_ACTIVE=simulacion`, las mismas variables `JANERY_DB_*` de la base real y `JANERY_SIMULADOR_ORIGENES` con el dominio del simulador. La base real se lee por una conexión de solo lectura: «Iniciar simulación» copia **todos** sus datos (personas, cuentas, créditos, auditoría y hashes de contraseña) a la base del simulador, y «Finalizar» deja solo al personal y los parámetros. El simulador publicado guarda, por tanto, una copia de los datos personales: protéjalo como a la instancia real. Usa la base `janery_simulacion`, en el mismo servidor PostgreSQL; créela una vez antes de arrancarlo. Escucha en `JANERY_SIMULADOR_PUERTO` (8081 por defecto).
 - Frontend: `npm run build:simulador` → `frontend/dist/simulador/browser`. Llama a `/api/v1` en su propio dominio.
 - Dominio propio, por ejemplo `simulador.` delante del dominio real: la cookie de sesión va en `/api/v1/auth` y no funciona bajo una subcarpeta.
 - En la instancia real, `JANERY_SIMULADOR_URL` con la dirección del simulador: así aparece en Administración → Simulador.
-- El perfil `simulacion` se niega a arrancar si la URL de la base no contiene «simulacion».
+- El perfil `simulacion` se niega a arrancar si la URL de la base no contiene «simulacion». Además, iniciar o finalizar una simulación pregunta a la propia base su nombre y se niega a vaciarla si no es de simulación; y Flyway rechaza cualquier limpieza fuera de una base de simulación o de esquemas `*_test` (`ProteccionDatosReales`).

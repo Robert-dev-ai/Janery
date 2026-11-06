@@ -1,7 +1,6 @@
 package ec.janery.common;
 
 import java.util.List;
-import java.util.UUID;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -78,7 +77,7 @@ public class ManejadorErrores {
         if (e instanceof org.springframework.http.converter.HttpMessageNotReadableException) {
             return respuesta(HttpStatus.BAD_REQUEST, "SOLICITUD_INVALIDA", "Solicitud no válida", List.of());
         }
-        String correlacion = UUID.randomUUID().toString();
+        String correlacion = CorrelacionFiltro.actual();
         log.error("Error inesperado [{}]", correlacion, e);
         return ResponseEntity.internalServerError()
                 .body(new ApiError("ERROR_INTERNO", "Ocurrió un error interno", List.of(), correlacion));
@@ -86,6 +85,6 @@ public class ManejadorErrores {
 
     private ResponseEntity<ApiError> respuesta(HttpStatusCode status, String codigo, String mensaje, List<String> detalles) {
         return ResponseEntity.status(status)
-                .body(new ApiError(codigo, mensaje, detalles, UUID.randomUUID().toString()));
+                .body(new ApiError(codigo, mensaje, detalles, CorrelacionFiltro.actual()));
     }
 }
