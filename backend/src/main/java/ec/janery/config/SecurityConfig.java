@@ -53,12 +53,23 @@ public class SecurityConfig {
                         .requestMatchers("/actuator/health", "/api/v1/public/**").permitAll()
                         .requestMatchers("/api/v1/auth/register", "/api/v1/auth/registro", "/api/v1/auth/login",
                                 "/api/v1/auth/refresh", "/api/v1/auth/logout", "/api/v1/auth/recuperar").permitAll()
+                        // El frontend publicado en el mismo dominio (FrontendConfig): archivos públicos, sin datos.
+                        .requestMatchers(SecurityConfig::esFrontend).permitAll()
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()))
                 // Tras validar el token: con contraseña temporal, solo se puede cambiarla.
                 .addFilterAfter(new ec.janery.usuario.ContrasenaTemporalFiltro(),
                         org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter.class)
                 .build();
+    }
+
+    /** Lecturas fuera de la API y del actuator: las páginas y archivos del frontend. */
+    static boolean esFrontend(jakarta.servlet.http.HttpServletRequest request) {
+        if (!"GET".equals(request.getMethod()) && !"HEAD".equals(request.getMethod())) {
+            return false;
+        }
+        String ruta = request.getRequestURI().substring(request.getContextPath().length());
+        return !ruta.startsWith("/api/") && !ruta.equals("/api") && !ruta.startsWith("/actuator");
     }
 
     @Bean

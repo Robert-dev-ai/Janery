@@ -1,0 +1,16 @@
+# Nunca dentro de la imagen: secretos, respaldos ni datos.
+.env
+.env.*
+respaldos/
+*.dump
+*.sql.gz
+simulacion.log*
+
+# Se regeneran dentro del Dockerfile.
+.git/
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/.angular/
+backend/target/
+test-out/
