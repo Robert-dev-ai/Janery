@@ -15,7 +15,9 @@ Copie `.env.example` a `.env` y complete los valores. El archivo `.env` nunca se
 | `JANERY_COOKIE_SEGURA` | `true` salvo en pruebas locales muy concretas; exige HTTPS fuera de `localhost` |
 | `JANERY_SERVER_PORT` | Puerto del backend |
 | `JANERY_FLYWAY_ENABLED` | `true`: aplica las migraciones pendientes al arrancar |
-| `JANERY_ADMIN_CORREO`, `JANERY_ADMIN_PASSWORD` | Presidente inicial; se crea al arrancar si ese correo no existe |
+| `JANERY_ADMIN_CORREO`, `JANERY_ADMIN_PASSWORD` | Presidente inicial; se crea al arrancar si ese correo no existe. Vaciar la contraseña después del primer arranque |
+| `JANERY_SIMULADOR_URL` | En la instancia real: dirección del simulador publicado. Vacío: no se ofrece |
+| `JANERY_SIMULADOR_ORIGENES`, `JANERY_SIMULADOR_PUERTO` | En la instancia del simulador: orígenes de su frontend y puerto (8081) |
 
 ## 2. Arranque y parada en desarrollo
 
@@ -34,18 +36,24 @@ Para detener cada uno, use `Ctrl+C` en su terminal. Los logs salen por esa misma
 
 ## 4. Respaldo y restauración
 
-Haga un respaldo antes de cada actualización. La carpeta `respaldos/` no se sube al repositorio, y los archivos contienen datos personales y financieros: guárdelos en un lugar protegido.
+Haga un respaldo antes de cada actualización y, mientras no haya respaldos automáticos, al menos una vez por semana. Los archivos contienen datos personales y financieros: guárdelos fuera de esta computadora, en un lugar protegido. La carpeta `respaldos/` no se sube al repositorio.
 
 ```powershell
-$env:PGPASSWORD = '<clave>'
-& "C:\Program Files\PostgreSQL\18\bin\pg_dump.exe" -h localhost -U postgres -d janery -Fc -f respaldos\janery_AAAAMMDD.dump
-& "C:\Program Files\PostgreSQL\18\bin\pg_restore.exe" --list respaldos\janery_AAAAMMDD.dump   # comprueba que se puede leer
+.\respaldo.ps1                          # respaldos\janery_AAAAMMDD-HHMM.dump
+.\respaldo.ps1 -Destino E:\respaldos    # en otra carpeta o disco
 ```
 
-Para restaurar, primero detenga el backend. Esta orden reemplaza los datos actuales:
+El script lee la base y el esquema del `.env` (Neon, conexión directa sin `-pooler`), respalda solo el esquema `janery` con `pg_dump` 18 y comprueba al terminar que el archivo se puede leer. Necesita las herramientas de línea de comandos de PostgreSQL 18. No cambia la base.
+
+Neon guarda además un historial para restaurar una rama a un momento anterior, pero en el plan gratuito cubre poco tiempo: revise la ventana en la consola de Neon y no la use como único respaldo.
+
+Para restaurar, primero detenga el backend. Restaurar reemplaza los datos actuales del esquema: hágalo solo con la autorización del propietario, después de un respaldo del estado actual y comprobando que `-h` y `-d` son la base que quiere reemplazar:
 
 ```powershell
-& "C:\Program Files\PostgreSQL\18\bin\pg_restore.exe" -h localhost -U postgres -d janery --clean --if-exists respaldos\janery_AAAAMMDD.dump
+$env:PGSSLMODE = 'require'
+$env:PGPASSWORD = '<clave del .env>'
+& "C:\Program Files\PostgreSQL\18\bin\pg_restore.exe" -h <host del .env> -U <usuario> -d neondb --no-owner --clean --if-exists respaldos\janery_AAAAMMDD-HHMM.dump
+Remove-Item Env:PGPASSWORD
 ```
 
 Nunca ejecute `DROP DATABASE`.
@@ -61,7 +69,9 @@ cd backend;  .\mvnw.cmd test
 cd frontend; npx ng test --watch=false --browsers=ChromeHeadless
 ```
 
-Las pruebas del backend necesitan PostgreSQL y `.env`. Solo usan el esquema `janery_test`, que recrean en cada ejecución.
+Las pruebas del backend necesitan PostgreSQL y `.env`. Solo usan los esquemas `janery_test` y `janery_simulacion_test`, que recrean en cada ejecución. Flyway se niega a limpiar cualquier otro esquema fuera de una base de simulación (`ProteccionDatosReales`).
+
+Mientras el `.env` apunte a la base con datos reales, prefiera la CI de GitHub (`.github/workflows/ci.yml`), que prueba todo en un PostgreSQL desechable en cada push a `main` y en cada pull request.
 
 ## 7. Actualizar a una versión nueva
 
@@ -78,5 +88,6 @@ Las pruebas del backend necesitan PostgreSQL y `.env`. Solo usan el esquema `jan
 | `JANERY_JWT_SECRET debe definirse` | Falta el secreto en `.env`, o es demasiado corto |
 | Health `503` | PostgreSQL detenido, o credenciales incorrectas |
 | `Schema-validation` al arrancar | El código espera una tabla o columna que falta: revise las migraciones |
-| Error 500 en pantalla | El mensaje trae un código de correlación; búsquelo en el log |
+| Error en pantalla | El mensaje trae un código de correlación (también en la cabecera `X-Correlation-Id`); cada línea del log de esa petición lo lleva entre corchetes |
+| `Operación destructiva rechazada` | Algo intentó limpiar con Flyway una base que puede tener datos reales. Revise el perfil y las variables `JANERY_DB_*` antes de continuar |
 | El interés del ahorro normal no se abonó | El servidor estaba apagado el día 1 de ese mes; no se abona solo (`reglas-negocio.md`, sección 10) |

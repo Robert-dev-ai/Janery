@@ -104,7 +104,7 @@ class SimulacionIntegrationTest {
     @Test
     void cruzarUnDiaUnoLiberaElInteresDelAhorroSinTocarSuSaldo() throws Exception {
         Persona p = persona("1200.00");
-        String r = mvc.perform(post("/api/v1/ahorros/normales").header(HttpHeaders.AUTHORIZATION, bearer(p.token()))
+        String r = mvc.perform(post("/api/v1/ahorros/normales").header("Idempotency-Key", UUID.randomUUID().toString()).header(HttpHeaders.AUTHORIZATION, bearer(p.token()))
                         .contentType(MediaType.APPLICATION_JSON).content("{\"nombre\":\"Vacaciones\"}"))
                 .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
         long ahorro = json.readTree(r).get("id").asLong();

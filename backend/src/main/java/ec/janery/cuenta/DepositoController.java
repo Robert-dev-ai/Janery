@@ -45,7 +45,7 @@ public class DepositoController {
     @PostMapping("/cuentas-principales/me/depositos")
     @ResponseStatus(HttpStatus.CREATED)
     public DepositoService.Vista solicitar(@AuthenticationPrincipal Jwt jwt,
-            @RequestHeader("Idempotency-Key") @Size(max = 100) String clave, @Valid @RequestBody SolicitudRequest r) {
+            @RequestHeader("Idempotency-Key") @jakarta.validation.constraints.NotBlank @Size(max = 100) String clave, @Valid @RequestBody SolicitudRequest r) {
         boolean sinReferencia = r.referencia() == null || r.referencia().isBlank();
         if ("TRANSFERENCIA".equals(r.medio()) && sinReferencia) {
             throw new NegocioException(HttpStatus.BAD_REQUEST, "REFERENCIA_REQUERIDA", "Indique el número de la transferencia");

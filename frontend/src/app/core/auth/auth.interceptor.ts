@@ -5,7 +5,8 @@ import { catchError, switchMap, throwError } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { AuthService } from './auth';
 
-const RUTAS_SIN_TOKEN = ['/auth/login', '/auth/register', '/auth/refresh', '/auth/logout'];
+/** Rutas públicas de la sesión: un 401 en ellas es la respuesta esperada, no un token vencido que renovar. */
+const RUTAS_SIN_TOKEN = ['/auth/login', '/auth/registro', '/auth/register', '/auth/refresh', '/auth/logout', '/auth/recuperar'];
 
 function conToken(req: HttpRequest<unknown>, token: string | null) {
   return token ? req.clone({ setHeaders: { Authorization: `Bearer ${token}` } }) : req;
@@ -18,10 +19,16 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
     return next(req);
   }
   const auth = inject(AuthService);
-  return next(conToken(req, auth.token())).pipe(
+  const usado = auth.token();
+  return next(conToken(req, usado)).pipe(
     catchError((error: HttpErrorResponse) => {
       if (error.status !== 401) {
         return throwError(() => error);
+      }
+      // Salió con un token que otra petición ya renovó: basta con repetirla con el actual.
+      const actual = auth.token();
+      if (actual && actual !== usado) {
+        return next(conToken(req, actual));
       }
       return auth.renovar().pipe(
         switchMap((token) => (token ? next(conToken(req, token)) : throwError(() => error))),

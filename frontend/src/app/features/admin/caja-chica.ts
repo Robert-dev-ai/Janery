@@ -78,7 +78,7 @@ const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'O
       } @else {
         <div class="tabla">
           <table>
-            <thead><tr><th>Fecha</th><th>Movimiento</th><th>De quién</th><th>Detalle</th><th class="num">Importe</th></tr></thead>
+            <thead><tr><th scope="col">Fecha</th><th scope="col">Movimiento</th><th scope="col">De quién</th><th scope="col">Detalle</th><th scope="col" class="num">Importe</th></tr></thead>
             <tbody>
               @for (m of d.movimientos.contenido; track m.id) {
                 <tr>

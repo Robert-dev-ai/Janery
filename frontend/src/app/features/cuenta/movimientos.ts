@@ -22,7 +22,7 @@ import { mensajeDeError } from '../../shared/utils/errores';
       } @else {
         <div class="tabla">
           <table>
-            <thead><tr><th>Fecha</th><th>Concepto</th><th class="num">Importe</th><th class="num">Saldo</th></tr></thead>
+            <thead><tr><th scope="col">Fecha</th><th scope="col">Concepto</th><th scope="col" class="num">Importe</th><th scope="col" class="num">Saldo</th></tr></thead>
             <tbody>
               @for (m of d.contenido; track m.id) {
                 <tr>

@@ -178,7 +178,7 @@ export class TramiteCredito {
 
   protected letras(): void {
     const p = this.persona()!;
-    this.registrar(this.api.letrasTramite(p.usuarioId, this.modalidad, this.importe!, this.plazo!, this.origen), true);
+    this.registrar(this.api.letrasTramite(p.usuarioId, this.modalidad, this.importe!, this.plazo!, this.origen, this.clave), true);
   }
 
   protected emergente(): void {

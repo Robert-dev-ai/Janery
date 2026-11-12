@@ -62,11 +62,11 @@ public class CreditoExistenteService {
     private final CreditoService.CreditoRepository creditos;
     private final CreditoService.CuotaRepository cuotas;
     private final CreditoService.DesembolsoRepository desembolsos;
-    private final CreditoService.PagoRepository pagos;
-    private final CreditoService.DetalleRepository detalles;
+    private final PagoCreditoService.PagoRepository pagos;
+    private final PagoCreditoService.DetalleRepository detalles;
     private final CreditoService.EncajeRepository encajes;
     private final CreditoService.AhorroLetrasRepository ahorros;
-    private final CreditoService.MovimientoAhorroLetrasRepository movimientosAhorro;
+    private final PagoCreditoService.MovimientoAhorroLetrasRepository movimientosAhorro;
     private final CuentaService cuentas;
     private final PersonaService personas;
     private final SocioService socios;

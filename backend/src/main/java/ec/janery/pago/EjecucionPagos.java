@@ -12,7 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import ec.janery.ahorro.AhorroService;
 import ec.janery.common.NegocioException;
-import ec.janery.credito.CreditoService;
+import ec.janery.credito.PagoCreditoService;
 import ec.janery.cuenta.CuentaService;
 import ec.janery.cuenta.EjecutorPagos;
 import ec.janery.socio.ParticipacionService;
@@ -32,7 +32,7 @@ class EjecucionPagos implements EjecutorPagos {
 
     private final JdbcClient jdbc;
     private final CuentaService cuentas;
-    private final CreditoService creditos;
+    private final PagoCreditoService pagosCredito;
     private final AhorroService ahorros;
     private final ParticipacionService participacion;
 
@@ -52,6 +52,9 @@ class EjecucionPagos implements EjecutorPagos {
         }
         Map<Long, BigDecimal> porPersona = new LinkedHashMap<>();
         filas.forEach(f -> porPersona.merge(f.personaId(), f.importe(), BigDecimal::add));
+        // Todas las cuentas primero y por id, como en la compraventa: dos pagos con las mismas personas en otro orden se
+        // bloquearían entre sí. Luego se deposita en el orden del pago, para anotar la operación de la primera persona.
+        porPersona.keySet().stream().sorted().forEach(cuentas::cuentaActivaBloqueada);
         Long primera = null;
         for (Map.Entry<Long, BigDecimal> e : porPersona.entrySet()) {
             Long cuenta = cuentas.cuentaActivaBloqueada(e.getKey()).getId();
@@ -75,7 +78,7 @@ class EjecucionPagos implements EjecutorPagos {
             case PagoService.CUENTA -> {
                 // El dinero ya quedó en su cuenta principal.
             }
-            case PagoService.CUOTA_CREDITO -> creditos.pagar(f.usuarioId(), f.referenciaId(), f.importe(), false, false, clave);
+            case PagoService.CUOTA_CREDITO -> pagosCredito.pagar(f.usuarioId(), f.referenciaId(), f.importe(), false, false, clave);
             case PagoService.AHORRO -> ahorros.depositar(f.usuarioId(), f.referenciaId(), f.importe(), clave);
             case PagoService.APORTE_PERSONAL -> participacion.aportar(f.usuarioId(), "PERSONAL", f.importe(), null, clave);
             case PagoService.APORTE_OBLIGATORIO -> participacion.pagarPeriodos(f.usuarioId(), "OBLIGATORIO", meses(f), clave);

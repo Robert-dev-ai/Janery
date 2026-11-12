@@ -108,7 +108,7 @@ const ESTADOS_CUENTA = [
         @if (lista.length) {
           <div class="tabla">
             <table>
-              <thead><tr><th>Fecha</th><th>Acción</th><th>Módulo</th></tr></thead>
+              <thead><tr><th scope="col">Fecha</th><th scope="col">Acción</th><th scope="col">Módulo</th></tr></thead>
               <tbody>
                 @for (e of lista; track e.id) {
                   <tr>

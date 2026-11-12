@@ -86,7 +86,7 @@ public class ContabilidadController {
     @PostMapping("/asientos")
     @PreAuthorize("hasAuthority('SCOPE_REGISTRAR_ASIENTOS')")
     @ResponseStatus(HttpStatus.CREATED)
-    public CreadoResponse registrar(@AuthenticationPrincipal Jwt jwt, @RequestHeader("Idempotency-Key") @Size(max = 100) String clave,
+    public CreadoResponse registrar(@AuthenticationPrincipal Jwt jwt, @RequestHeader("Idempotency-Key") @jakarta.validation.constraints.NotBlank @Size(max = 100) String clave,
             @Valid @RequestBody AsientoRequest r) {
         return new CreadoResponse(service.registrar(Long.valueOf(jwt.getSubject()), r.linea(), !r.disminuye(), r.importe(),
                 r.descripcion().trim(), clave));

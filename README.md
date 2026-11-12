@@ -1,13 +1,22 @@
-# JANERY — especificación funcional y guía de construcción
+# JANERY — caja de ahorro y crédito
 
-**Paquete:** v3.0 — proyecto nuevo desde cero  
-**Base de datos PostgreSQL:** `janery`  
+**Base de datos:** PostgreSQL 18 en Neon, base `neondb`, esquema `janery` ([docs/neon.md](docs/neon.md))  
 **Idioma:** español  
-**Estado:** especificación inicial consolidada. Las reglas de negocio no deben alterarse sin autorización del propietario.
+**Estado:** aplicación construida (fases 0 a 7) y en uso con datos reales. Las reglas de negocio no deben alterarse sin autorización del propietario.
 
 ## Qué contiene
 
-Este paquete define qué construir y cómo organizarlo. No contiene el código fuente final de la aplicación. Claude Code debe convertir esta especificación en un proyecto funcional, trabajando por fases.
+| Ruta | Contenido |
+|---|---|
+| `backend/` | API en Spring Boot (Java 21), monolito modular |
+| `frontend/` | Aplicación Angular 20 |
+| `docs/` | Especificación, reglas de negocio, operación y auditorías |
+| `.github/workflows/ci.yml` | Compila y prueba backend y frontend en GitHub, con un PostgreSQL desechable |
+| `simulacion.ps1` | Arranca el simulador de fechas ([docs/testing.md](docs/testing.md), sección 6) |
+| `respaldo.ps1` | Respaldo lógico de la base del `.env` ([docs/operacion.md](docs/operacion.md), sección 4) |
+| `.env.example` | Variables de configuración, sin valores reales. El `.env` real no se sube |
+| `neon.ts`, `package.json` | Configuración de la CLI de Neon (`neon checkout`, ramas). La aplicación no los usa |
+| `respaldos/` | Respaldos locales, ignorados por Git. Contienen datos personales |
 
 ## Lectura obligatoria
 
@@ -29,10 +38,13 @@ Leer todos los documentos de `docs/` antes de programar:
 14. `decisiones-pendientes.md`
 15. `neon.md`
 16. `diseno.md`
+17. `operacion.md`: arranque, respaldos, migraciones y fallos
+18. `fase-1-diseno.md`: diseño aprobado y plan de reinicio (histórico)
+19. `auditoria-backend.md`: hallazgos y correcciones de la auditoría del backend
 
 ## Instrucciones críticas
 
-- Crear Janery desde cero en esta carpeta nueva. No intentar reutilizar el antiguo proyecto de prueba.
+- Janery se creó desde cero en esta carpeta. No reutilizar el antiguo proyecto de prueba.
 - Mantener las reglas de negocio documentadas. No reinterpretar, simplificar, cambiar ni completar tasas, porcentajes, límites, fórmulas o condiciones sin preguntar al propietario.
 - Si una regla está pendiente, documentarla y no implementarla por suposición.
 - Esta autorización se refiere a los objetos de Janery dentro de la base `janery`; NO autoriza borrar la base completa, otros esquemas, otras bases ni datos ajenos.
@@ -102,7 +114,7 @@ Cada módulo debe incluir migraciones, backend, frontend cuando corresponda, val
 
 ## Estado
 
-Fases 0 a 7 construidas para uso local, con valores provisionales y fórmulas por confirmar ([reglas-negocio.md](docs/reglas-negocio.md), secciones 10 y 11). No está lista para datos reales: ver [decisiones-pendientes.md](docs/decisiones-pendientes.md). Operación diaria: [operacion.md](docs/operacion.md). Publicación: [despliegue.md](docs/despliegue.md).
+Fases 0 a 7 construidas, con valores provisionales y fórmulas por confirmar ([reglas-negocio.md](docs/reglas-negocio.md), secciones 10 y 11). Desde el 02/11/2026 la base de Neon (rama `development`) contiene datos reales, aunque quedan tareas marcadas como necesarias antes de publicar en [decisiones-pendientes.md](docs/decisiones-pendientes.md). Operación diaria: [operacion.md](docs/operacion.md). Publicación: [despliegue.md](docs/despliegue.md).
 
 | Módulo | Contenido |
 |---|---|
@@ -118,6 +130,11 @@ Fases 0 a 7 construidas para uso local, con valores provisionales y fórmulas po
 | `auditoria` | Registro de acciones |
 | `contabilidad` | Balance, libros, indicadores y registro manual |
 | `consultas` | Área general de socios, personas e historial crediticio |
+| `pago` | Pagos de varias obligaciones a la vez, confirmados por el personal |
+| `app` | Información pública, anuncios, pendientes y uso de la aplicación |
+| `tiemporeal` | Avisos en vivo a las pantallas (SSE) |
+| `simulacion` | Reloj simulado y copia de datos; solo con el perfil `simulacion` |
+| `config`, `common` | Seguridad, errores, correlación de peticiones y protección de datos reales |
 
 ## Ejecución local
 
@@ -143,6 +160,8 @@ cd backend;  .\mvnw.cmd test
 cd frontend; npx ng test --watch=false --browsers=ChromeHeadless
 ```
 
+Las pruebas de integración del backend usan la base del `.env` (esquemas `janery_test` y `janery_simulacion_test`). Hoy esa base guarda los datos reales: preferir la CI de GitHub, que usa un PostgreSQL desechable, o correr solo la clase que se esté tocando. Flyway rechaza limpiar cualquier esquema que no termine en `_test` fuera de una base de simulación (`ProteccionDatosReales`).
+
 - Comprobación del backend: `GET /actuator/health`. Devuelve `503` si no conecta con PostgreSQL.
 - Conectividad de la API: `GET /api/v1/public/estado`.
 
@@ -165,12 +184,12 @@ cd frontend; npx ng test --watch=false --browsers=ChromeHeadless
 
 ## Decisiones
 
-- La raíz del proyecto es esta carpeta (`janery_desde_cero_v3`), que ya contiene `docs/` y este README.
+- La raíz del proyecto es esta carpeta, que contiene `backend/`, `frontend/`, `docs/` y este README.
 - Paquete raíz: `ec.janery`, el ejemplo de `docs/setup.md`.
 - Se añadió `spring-boot-starter-actuator`, no incluido en la lista de `docs/setup.md`, para el health check exigido.
-- Las pruebas del backend necesitan conexión a Neon y el `.env`. Usan el esquema `janery_test`, que recrean en cada ejecución; nunca tocan `janery`.
+- Las pruebas del backend necesitan PostgreSQL: el del `.env` en local, o el de la CI en GitHub. Usan los esquemas `janery_test` y `janery_simulacion_test`, que recrean en cada ejecución; nunca tocan `janery`.
 - Lombok se usa en las entidades, para evitar getters repetitivos.
-- El presidente inicial se crea al arrancar a partir de `JANERY_ADMIN_CORREO` y `JANERY_ADMIN_PASSWORD`, si ese correo aún no existe.
+- El presidente inicial se crea al arrancar a partir de `JANERY_ADMIN_CORREO` y `JANERY_ADMIN_PASSWORD`, si ese correo aún no existe. Después del primer arranque, vaciar `JANERY_ADMIN_PASSWORD` en el `.env`.
 - Decisiones del propietario y criterios por confirmar: [docs/decisiones-pendientes.md](docs/decisiones-pendientes.md).
 
 El diseño propuesto y el plan de reinicio están en [docs/fase-1-diseno.md](docs/fase-1-diseno.md).

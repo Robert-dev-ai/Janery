@@ -32,7 +32,7 @@ import { mensajeDeError } from '../../shared/utils/errores';
     @if (datos(); as d) {
       <div class="tabla">
         <table>
-          <thead><tr><th>Persona</th><th>Correo</th><th>Acceso</th><th>Socio</th><th>Cargos</th><th>Asignar cargo</th></tr></thead>
+          <thead><tr><th scope="col">Persona</th><th scope="col">Correo</th><th scope="col">Acceso</th><th scope="col">Socio</th><th scope="col">Cargos</th><th scope="col">Asignar cargo</th></tr></thead>
           <tbody>
             @for (u of filas(); track u.id) {
               <tr>

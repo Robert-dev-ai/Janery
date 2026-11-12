@@ -68,8 +68,15 @@ Reglas:
 - La fecha simulada se conserva al reiniciar el backend.
 - Las columnas con `DEFAULT now()` que la aplicación no llena muestran la fecha real.
 - Un salto de más de 7 días vence la sesión de refresco: habrá que volver a iniciar sesión.
-- El perfil no arranca sobre una base o esquema sin "simulacion" en su URL. Nunca activarlo en producción.
+- El perfil no arranca sobre una base o esquema sin "simulacion" en su URL, e iniciar o finalizar comprueban el nombre real de la base antes de vaciarla. Nunca activarlo en producción.
+- La copia incluye los datos personales reales: quien tenga `USAR_SIMULADOR` los verá en el simulador.
 
-## 7. Criterio de aceptación
+## 7. Integración continua
+
+`.github/workflows/ci.yml` ejecuta en GitHub, en cada push a `main` y en cada pull request, la compilación y todas las pruebas del backend (contra un PostgreSQL 18 desechable) y del frontend. Es la forma recomendada de correr la suite completa: en local, las pruebas usan la base del `.env`, que hoy guarda los datos reales.
+
+Ninguna prueba puede limpiar datos reales: `ProteccionDatosReales` rechaza, antes de cada `flyway.clean()`, cualquier base que no sea de simulación con esquemas que no terminen en `_test`.
+
+## 8. Criterio de aceptación
 
 Cada módulo debe tener pruebas relevantes aprobadas, migraciones verificadas en base de prueba y revisión manual de los flujos financieros antes de habilitarse.

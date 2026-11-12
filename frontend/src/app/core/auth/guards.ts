@@ -1,5 +1,5 @@
 import { inject } from '@angular/core';
-import { CanActivateFn, Router } from '@angular/router';
+import { CanActivateChildFn, CanActivateFn, Router } from '@angular/router';
 
 import { AuthService } from './auth';
 
@@ -41,4 +41,14 @@ export const permisoGuard =(permiso: string): CanActivateFn => () => {
     return inject(Router).parseUrl('/iniciar-sesion');
   }
   return auth.tienePermiso(permiso) || inject(Router).parseUrl(auth.rutaInicial());
+};
+
+/**
+ * Con una contraseña temporal solo se puede cambiarla: la dictó otra persona. Va en canActivateChild de los layouts con
+ * sesión, para que se compruebe en cada navegación. El backend también lo exige.
+ */
+export const contrasenaTemporalGuard: CanActivateChildFn = (_ruta, estado) => {
+  const auth = inject(AuthService);
+  const destino = '/configuracion/contrasena';
+  return !auth.yo()?.debeCambiarContrasena || estado.url.startsWith(destino) || inject(Router).parseUrl(destino);
 };

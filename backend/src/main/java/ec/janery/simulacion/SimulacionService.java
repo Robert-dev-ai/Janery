@@ -74,6 +74,7 @@ public class SimulacionService {
      * lee por una conexión de solo lectura.
      */
     public synchronized Estado iniciar(Long actorId) {
+        exigirBaseDeSimulacion();
         List<Map<String, Object>> sesiones = sesionesAbiertas();
         // Sin borrar la estructura: copiarTodo vacía cada tabla antes de copiar. Solo se aplican migraciones pendientes.
         flyway.migrate();
@@ -93,6 +94,7 @@ public class SimulacionService {
      * Descarta todo lo simulado. Quedan solo el personal y los parámetros, para poder entrar e iniciar otra simulación.
      */
     public synchronized Estado finalizar(Long actorId) {
+        exigirBaseDeSimulacion();
         List<Map<String, Object>> sesiones = sesionesAbiertas();
         flyway.clean();
         flyway.migrate();
@@ -101,6 +103,17 @@ public class SimulacionService {
         restaurarSesiones(sesiones);
         auditoria.registrar(actorId, "SIMULACION_FINALIZADA", "SIMULACION", "simulador", null, null, null, null);
         return estado();
+    }
+
+    /**
+     * Iniciar y finalizar vacían la base conectada. La URL ya se comprobó al arrancar, pero se pregunta a la propia base:
+     * una URL mal configurada no debe bastar para borrar datos reales.
+     */
+    private void exigirBaseDeSimulacion() {
+        jdbc.execute((org.springframework.jdbc.core.ConnectionCallback<Void>) conexion -> {
+            ec.janery.config.ProteccionDatosReales.exigirDesechable(conexion, List.of(conexion.getSchema()));
+            return null;
+        });
     }
 
     /** Las sesiones del simulador viven en su base: se conservan para que nadie tenga que volver a entrar. */

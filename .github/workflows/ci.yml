@@ -1,0 +1,77 @@
+# Compila y prueba backend y frontend en cada push a main y en cada pull request.
+# Las pruebas del backend usan un PostgreSQL desechable de GitHub, nunca Neon: aquí no hay secretos ni datos reales.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        # La misma versión mayor que Neon.
+        image: postgres:18
+        env:
+          POSTGRES_DB: janery
+          POSTGRES_USER: janery
+          POSTGRES_PASSWORD: solo-para-ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U janery"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      JANERY_DB_HOST: localhost
+      JANERY_DB_PORT: 5432
+      JANERY_DB_NAME: janery
+      JANERY_DB_USER: janery
+      JANERY_DB_PASSWORD: solo-para-ci
+      JANERY_DB_SSLMODE: disable
+      JANERY_DB_CHANNEL_BINDING: disable
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: maven
+      - name: Compilar y probar
+        run: ./mvnw -B verify
+
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - name: Compilar
+        run: npx ng build
+      # Ubuntu 24.04 impide a Chrome crear su sandbox sin este ajuste.
+      - name: Permitir el sandbox de Chrome
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - name: Probar
+        run: npx ng test --watch=false --browsers=ChromeHeadless

@@ -72,7 +72,7 @@ function etiquetaConcepto(codigo: string): string {
         @if (d.caja.duenos.length) {
           <div class="tabla mt-4">
             <table>
-              <thead><tr><th>Persona</th><th class="num">Apertura</th><th class="num">Cuenta</th><th class="num">Ahorro normal</th><th class="num">Plazo fijo</th><th class="num">Encajes</th><th class="num">Ahorro letras</th></tr></thead>
+              <thead><tr><th scope="col">Persona</th><th scope="col" class="num">Apertura</th><th scope="col" class="num">Cuenta</th><th scope="col" class="num">Ahorro normal</th><th scope="col" class="num">Plazo fijo</th><th scope="col" class="num">Encajes</th><th scope="col" class="num">Ahorro letras</th></tr></thead>
               <tbody>
                 @for (x of d.caja.duenos; track x.nombre) {
                   <tr>

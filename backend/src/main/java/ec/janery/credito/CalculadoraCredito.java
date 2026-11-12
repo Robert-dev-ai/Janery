@@ -61,6 +61,11 @@ final class CalculadoraCredito {
         return letras;
     }
 
+    /** Definido por el propietario: mitad redondeada hacia abajo, más una. 12 letras exigen 7 y 5 letras exigen 3. */
+    static int letrasParaPrecancelar(int letras) {
+        return letras / 2 + 1;
+    }
+
     static BigDecimal porcentaje(BigDecimal base, BigDecimal tasa) {
         return base.multiply(tasa).divide(CIEN, 2, RoundingMode.HALF_UP);
     }

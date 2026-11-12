@@ -61,6 +61,7 @@ public class CreditoController {
     }
 
     private final CreditoService service;
+    private final PagoCreditoService pagos;
 
     @GetMapping("/creditos/productos")
     public CreditoService.Productos productos(@AuthenticationPrincipal Jwt jwt) {
@@ -74,18 +75,21 @@ public class CreditoController {
 
     @PostMapping("/creditos/letras/solicitudes")
     @ResponseStatus(HttpStatus.CREATED)
-    public CreadoResponse solicitar(@AuthenticationPrincipal Jwt jwt, @Valid @RequestBody LetrasRequest r) {
-        return new CreadoResponse(service.solicitarLetras(id(jwt), r.modalidad(), r.importe(), r.plazoMeses(), r.origenEncaje(), r.ahorroEncajeId()));
+    public CreadoResponse solicitar(@AuthenticationPrincipal Jwt jwt,
+            @RequestHeader("Idempotency-Key") @jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Size(max = 100) String clave,
+            @Valid @RequestBody LetrasRequest r) {
+        return new CreadoResponse(service.solicitarLetras(id(jwt), r.modalidad(), r.importe(), r.plazoMeses(), r.origenEncaje(), r.ahorroEncajeId(),
+                clave));
     }
 
     @PostMapping("/creditos/emergentes/solicitudes")
-    public CreadoResponse emergente(@AuthenticationPrincipal Jwt jwt, @RequestHeader("Idempotency-Key") String clave,
+    public CreadoResponse emergente(@AuthenticationPrincipal Jwt jwt, @RequestHeader("Idempotency-Key") @jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Size(max = 100) String clave,
             @Valid @RequestBody EmergenteRequest r) {
         return new CreadoResponse(service.solicitarEmergenteCliente(id(jwt), r.importe(), clave));
     }
 
     @PostMapping("/creditos/emergentes/disposiciones")
-    public CreadoResponse disponer(@AuthenticationPrincipal Jwt jwt, @RequestHeader("Idempotency-Key") String clave,
+    public CreadoResponse disponer(@AuthenticationPrincipal Jwt jwt, @RequestHeader("Idempotency-Key") @jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Size(max = 100) String clave,
             @Valid @RequestBody DisposicionRequest r) {
         return new CreadoResponse(service.solicitarCupo(id(jwt), r.importe(), r.promocion(), clave));
     }
@@ -127,14 +131,14 @@ public class CreditoController {
 
     @PostMapping("/creditos/{creditoId}/pagos")
     public OperacionResponse pagar(@AuthenticationPrincipal Jwt jwt, @PathVariable Long creditoId,
-            @RequestHeader("Idempotency-Key") String clave, @Valid @RequestBody PagoRequest r) {
-        return new OperacionResponse(service.pagar(id(jwt), creditoId, r.importe(), r.usarAhorroLetras(), r.usarEncaje(), clave));
+            @RequestHeader("Idempotency-Key") @jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Size(max = 100) String clave, @Valid @RequestBody PagoRequest r) {
+        return new OperacionResponse(pagos.pagar(id(jwt), creditoId, r.importe(), r.usarAhorroLetras(), r.usarEncaje(), clave));
     }
 
     @PostMapping("/creditos/{creditoId}/precancelacion")
     public OperacionResponse precancelar(@AuthenticationPrincipal Jwt jwt, @PathVariable Long creditoId,
-            @RequestHeader("Idempotency-Key") String clave) {
-        return new OperacionResponse(service.precancelar(id(jwt), creditoId, clave));
+            @RequestHeader("Idempotency-Key") @jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Size(max = 100) String clave) {
+        return new OperacionResponse(pagos.precancelar(id(jwt), creditoId, clave));
     }
 
     @GetMapping("/admin/creditos")

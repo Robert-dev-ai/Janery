@@ -50,7 +50,7 @@ public class RetiroController {
     @PostMapping("/cuentas-principales/me/retiros")
     @ResponseStatus(HttpStatus.CREATED)
     public RetiroService.Vista solicitar(@AuthenticationPrincipal Jwt jwt,
-            @RequestHeader("Idempotency-Key") @Size(max = 100) String clave, @Valid @RequestBody SolicitudRequest r) {
+            @RequestHeader("Idempotency-Key") @jakarta.validation.constraints.NotBlank @Size(max = 100) String clave, @Valid @RequestBody SolicitudRequest r) {
         if ("TRANSFERENCIA".equals(r.medio()) && (vacio(r.banco()) || vacio(r.tipoCuenta()) || vacio(r.numeroCuenta()) || vacio(r.titularCuenta()))) {
             throw new NegocioException(HttpStatus.BAD_REQUEST, "DATOS_BANCO_REQUERIDOS", "Indique banco, tipo y número de cuenta, y titular");
         }

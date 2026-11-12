@@ -128,7 +128,7 @@ interface Linea {
       @if (lineas().length) {
         <div class="tabla">
           <table>
-            <thead><tr><th>Para</th><th>Concepto</th><th class="num">Importe</th><th></th></tr></thead>
+            <thead><tr><th scope="col">Para</th><th scope="col">Concepto</th><th scope="col" class="num">Importe</th><th scope="col"></th></tr></thead>
             <tbody>
               @for (l of lineas(); track $index) {
                 <tr>
@@ -139,7 +139,7 @@ interface Linea {
                 </tr>
               }
             </tbody>
-            <tfoot><tr><th colspan="2">Total</th><th class="num">{{ total() | currency: 'USD' }}</th><th></th></tr></tfoot>
+            <tfoot><tr><th scope="row" colspan="2">Total</th><td class="num font-semibold">{{ total() | currency: 'USD' }}</td><td></td></tr></tfoot>
           </table>
         </div>
       } @else {

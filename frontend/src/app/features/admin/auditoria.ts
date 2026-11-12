@@ -15,7 +15,7 @@ import { mensajeDeError } from '../../shared/utils/errores';
     @if (datos(); as d) {
       <div class="tabla">
         <table>
-          <thead><tr><th>Fecha</th><th>Quién</th><th>Qué hizo</th><th>A quién</th><th>Código</th><th>Detalle</th><th>Motivo</th></tr></thead>
+          <thead><tr><th scope="col">Fecha</th><th scope="col">Quién</th><th scope="col">Qué hizo</th><th scope="col">A quién</th><th scope="col">Código</th><th scope="col">Detalle</th><th scope="col">Motivo</th></tr></thead>
           <tbody>
             @for (e of d.contenido; track e.id) {
               <tr>

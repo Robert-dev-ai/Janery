@@ -43,7 +43,7 @@ import { llevarADepositarSiFaltaSaldo, mensajeDeError } from '../../shared/utils
               @if (renombrando() === a.id) {
                 <form class="acciones w-full" (ngSubmit)="renombrar(a)">
                   <label class="flex-1">Nombre <input name="n{{ a.id }}" maxlength="100" [(ngModel)]="nuevoNombre" /></label>
-                  <button type="submit" [disabled]="!nuevoNombre.trim()">Guardar</button>
+                  <button type="submit" [disabled]="enviando() || !nuevoNombre.trim()">Guardar</button>
                   <button type="button" class="secundario" (click)="renombrando.set(null)">Cancelar</button>
                 </form>
               } @else {
@@ -56,20 +56,20 @@ import { llevarADepositarSiFaltaSaldo, mensajeDeError } from '../../shared/utils
               <div>Interés de este mes (se libera el {{ a.proximaLiberacion | date: 'dd/MM' : 'UTC' }})<p class="importe">{{ a.interesAcumulado | currency: 'USD' }}</p></div>
               <div>Interés liberado, para retirar<p class="importe">{{ a.interesDisponible | currency: 'USD' }}</p></div>
             </div>
-            <button type="button" class="secundario" [disabled]="a.interesDisponible <= 0" (click)="retirarInteres(a)">
+            <button type="button" class="secundario" [disabled]="enviando() || a.interesDisponible <= 0" (click)="retirarInteres(a)">
               {{ a.interesDisponible > 0 ? 'Pasar el interés a mi cuenta' : 'El interés se libera el ' + (a.proximaLiberacion | date: 'dd/MM/yyyy' : 'UTC') }}
             </button>
             <form class="acciones" (ngSubmit)="mover(a, 'deposito')">
               <label>Importe (USD)
                 <input type="number" min="0" step="any" name="i{{ a.id }}" [(ngModel)]="importes[a.id]" />
               </label>
-              <button type="submit" [disabled]="!importes[a.id]">Depositar</button>
-              <button type="button" class="secundario" [disabled]="!importes[a.id]" (click)="mover(a, 'retiro')">Retirar</button>
+              <button type="submit" [disabled]="enviando() || !importes[a.id]">Depositar</button>
+              <button type="button" class="secundario" [disabled]="enviando() || !importes[a.id]" (click)="mover(a, 'retiro')">Retirar</button>
             </form>
             @if (a.saldo > 0 || a.interesDisponible > 0) {
               <p class="suave mb-0">Para eliminar este ahorro, primero pase todo su dinero a su cuenta principal.</p>
             } @else {
-              <button type="button" class="enlace-discreto" (click)="eliminar(a)">Eliminar este ahorro</button>
+              <button type="button" class="enlace-discreto" [disabled]="enviando()" (click)="eliminar(a)">Eliminar este ahorro</button>
             }
           </article>
         } @empty {
@@ -91,7 +91,7 @@ import { llevarADepositarSiFaltaSaldo, mensajeDeError } from '../../shared/utils
               @if (renombrando() === a.id) {
                 <form class="acciones w-full" (ngSubmit)="renombrar(a)">
                   <label class="flex-1">Nombre <input name="n{{ a.id }}" maxlength="100" [(ngModel)]="nuevoNombre" /></label>
-                  <button type="submit" [disabled]="!nuevoNombre.trim()">Guardar</button>
+                  <button type="submit" [disabled]="enviando() || !nuevoNombre.trim()">Guardar</button>
                   <button type="button" class="secundario" (click)="renombrando.set(null)">Cancelar</button>
                 </form>
               } @else {
@@ -105,7 +105,7 @@ import { llevarADepositarSiFaltaSaldo, mensajeDeError } from '../../shared/utils
               <div>Interés a recibir<p class="importe">{{ a.interesAlVencimiento | currency: 'USD' }}</p></div>
               <div>Total al terminar<p class="importe">{{ a.saldo + (a.interesAlVencimiento ?? 0) | currency: 'USD' }}</p></div>
             </div>
-            <button type="button" [disabled]="!a.retirable" (click)="liquidar(a)">
+            <button type="button" [disabled]="enviando() || !a.retirable" (click)="liquidar(a)">
               {{ a.retirable ? 'Retirar todo a mi cuenta' : 'Disponible al terminar el contrato' }}
             </button>
           </article>
@@ -158,7 +158,7 @@ import { llevarADepositarSiFaltaSaldo, mensajeDeError } from '../../shared/utils
             </select>
           </label>
         }
-        <button type="submit" [disabled]="!nombre.trim() || (tipo === 'PLAZO_FIJO' && (!importe || !plazo))">Abrir ahorro</button>
+        <button type="submit" [disabled]="enviando() || !nombre.trim() || (tipo === 'PLAZO_FIJO' && (!importe || !plazo))">{{ enviando() ? 'Abriendo…' : 'Abrir ahorro' }}</button>
       </form>
     </section>
   `,
@@ -179,6 +179,8 @@ export class Ahorros implements OnInit {
   protected readonly total = computed(() => this.activos().reduce((t, a) => t + a.saldo, 0) + this.totalLetras());
   protected readonly error = signal<string | null>(null);
   protected readonly aviso = signal<string | null>(null);
+  /** Mientras una operación está en curso: evita el doble clic y deja ver que se está procesando. */
+  protected readonly enviando = signal(false);
   protected readonly renombrando = signal<number | null>(null);
 
   protected tipo = 'NORMAL';
@@ -238,7 +240,7 @@ export class Ahorros implements OnInit {
 
   protected crear(): void {
     const accion = this.tipo === 'NORMAL'
-      ? this.api.crearAhorroNormal(this.nombre.trim())
+      ? this.api.crearAhorroNormal(this.nombre.trim(), this.clave)
       : this.api.crearPlazoFijo(this.nombre.trim(), this.importe!, this.plazo!, this.clave);
     this.ejecutar(accion, 'Ahorro abierto.', 'abrir este plazo fijo', () => {
       this.importe = null;
@@ -282,16 +284,22 @@ export class Ahorros implements OnInit {
   }
 
   private ejecutar(accion: Observable<unknown>, aviso: string, para: string, alTerminar?: () => void): void {
+    if (this.enviando()) {
+      return;
+    }
+    this.enviando.set(true);
     this.error.set(null);
     this.aviso.set(null);
     accion.subscribe({
       next: () => {
+        this.enviando.set(false);
         this.clave = crypto.randomUUID();
         this.aviso.set(aviso);
         alTerminar?.();
         this.cargar();
       },
       error: (e) => {
+        this.enviando.set(false);
         if (!para || !llevarADepositarSiFaltaSaldo(e, this.router, para)) {
           this.error.set(mensajeDeError(e));
         }

@@ -45,7 +45,7 @@ import { tituloDeRuta } from '../../layout/navegacion';
             <h2>Detalle</h2>
             <div class="tabla">
               <table>
-                <thead><tr><th>Pantalla</th><th class="num">Visitas</th><th class="num">Personas</th></tr></thead>
+                <thead><tr><th scope="col">Pantalla</th><th scope="col" class="num">Visitas</th><th scope="col" class="num">Personas</th></tr></thead>
                 <tbody>
                   @for (p of d.pantallas; track p.ruta) {
                     <tr><td>{{ titulo(p.ruta) }}<br /><small class="codigo">{{ p.ruta }}</small></td><td class="num">{{ p.visitas }}</td><td class="num">{{ p.personas }}</td></tr>
@@ -59,7 +59,7 @@ import { tituloDeRuta } from '../../layout/navegacion';
           <h2>Visitas por día</h2>
           <div class="tabla">
             <table>
-              <thead><tr><th>Día</th><th class="num">Visitas</th><th class="num">Personas</th></tr></thead>
+              <thead><tr><th scope="col">Día</th><th scope="col" class="num">Visitas</th><th scope="col" class="num">Personas</th></tr></thead>
               <tbody>
                 @for (x of d.dias; track x.dia) {
                   <tr><td>{{ x.dia | date: 'EEE dd/MM/yyyy' }}</td><td class="num">{{ x.visitas }}</td><td class="num">{{ x.personas }}</td></tr>

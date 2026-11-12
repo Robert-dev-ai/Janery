@@ -34,7 +34,7 @@ import { mensajeDeError } from '../../shared/utils/errores';
       } @else {
         <div class="tabla">
           <table class="tabla-diario">
-            <thead><tr><th class="solo-escritorio">Fecha</th><th>Movimiento</th><th>De quién</th><th class="solo-escritorio">Rubro</th><th class="num">Sube</th><th class="num">Baja</th><th class="num solo-escritorio">Queda en caja</th></tr></thead>
+            <thead><tr><th scope="col" class="solo-escritorio">Fecha</th><th scope="col">Movimiento</th><th scope="col">De quién</th><th scope="col" class="solo-escritorio">Rubro</th><th scope="col" class="num">Sube</th><th scope="col" class="num">Baja</th><th scope="col" class="num solo-escritorio">Queda en caja</th></tr></thead>
             <tbody>
               @for (f of d.movimientos.contenido; track $index) {
                 <tr>

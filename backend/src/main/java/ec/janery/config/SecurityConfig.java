@@ -55,6 +55,9 @@ public class SecurityConfig {
                                 "/api/v1/auth/refresh", "/api/v1/auth/logout", "/api/v1/auth/recuperar").permitAll()
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()))
+                // Tras validar el token: con contraseña temporal, solo se puede cambiarla.
+                .addFilterAfter(new ec.janery.usuario.ContrasenaTemporalFiltro(),
+                        org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter.class)
                 .build();
     }
 
@@ -96,6 +99,7 @@ public class SecurityConfig {
         config.setAllowedOrigins(origenes);
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("Authorization", "Content-Type", "Idempotency-Key"));
+        config.setExposedHeaders(List.of(ec.janery.common.CorrelacionFiltro.CABECERA));
         config.setAllowCredentials(true);
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/api/**", config);

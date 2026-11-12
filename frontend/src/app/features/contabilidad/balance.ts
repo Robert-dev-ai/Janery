@@ -20,7 +20,7 @@ import { mensajeDeError } from '../../shared/utils/errores';
     <ng-template #seccion let-s let-etiqueta="etiqueta">
       <div class="tabla mb-4">
         <table>
-          <thead><tr><th>Código</th><th>{{ s.titulo }}</th><th class="num">USD</th></tr></thead>
+          <thead><tr><th scope="col">Código</th><th scope="col">{{ s.titulo }}</th><th scope="col" class="num">USD</th></tr></thead>
           <tbody>
             @for (l of s.lineas; track l.codigo) {
               <tr [class.fila-detalle]="l.detalle"><td>{{ l.codigo }}</td><td>{{ l.nombre }}</td><td class="num">{{ l.valor | currency: 'USD' }}</td></tr>

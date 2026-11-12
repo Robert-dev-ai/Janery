@@ -150,7 +150,7 @@ function ordenar(a: Parametro, b: Parametro): number {
           <h2>Historial de {{ historialDe() }}</h2>
           <div class="tabla">
             <table>
-              <thead><tr><th>Registrado</th><th>Vigente desde</th><th class="num">Anterior</th><th class="num">Nuevo</th><th>Motivo</th></tr></thead>
+              <thead><tr><th scope="col">Registrado</th><th scope="col">Vigente desde</th><th scope="col" class="num">Anterior</th><th scope="col" class="num">Nuevo</th><th scope="col">Motivo</th></tr></thead>
               <tbody>
                 @for (x of h; track $index) {
                   <tr>
@@ -192,7 +192,7 @@ function ordenar(a: Parametro, b: Parametro): number {
             <p class="suave">Los clientes solo piden el crédito Normal; las demás modalidades son de socios.</p>
             <div class="tabla">
               <table>
-                <thead><tr><th>Modalidad</th><th class="num">Interés clientes</th><th class="num">Encaje clientes</th><th class="num">Interés socios</th><th class="num">Encaje socios</th></tr></thead>
+                <thead><tr><th scope="col">Modalidad</th><th scope="col" class="num">Interés clientes</th><th scope="col" class="num">Encaje clientes</th><th scope="col" class="num">Interés socios</th><th scope="col" class="num">Encaje socios</th></tr></thead>
                 <tbody>
                   @for (m of modalidades; track m.codigo) {
                     <tr>
@@ -226,7 +226,7 @@ function ordenar(a: Parametro, b: Parametro): number {
     <ng-template #tabla let-lista>
       <div class="tabla mb-4">
         <table>
-          <thead><tr><th>Parámetro</th><th class="num">Valor vigente</th><th>Desde</th><th>Programado</th><th>Acciones</th></tr></thead>
+          <thead><tr><th scope="col">Parámetro</th><th scope="col" class="num">Valor vigente</th><th scope="col">Desde</th><th scope="col">Programado</th><th scope="col">Acciones</th></tr></thead>
           <tbody>
             @for (p of lista; track p.id) {
               <tr>

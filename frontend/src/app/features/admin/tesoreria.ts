@@ -35,7 +35,7 @@ import { mensajeDeError } from '../../shared/utils/errores';
           <h2 class="seccion-titulo">Cómo ha variado cada mes</h2>
           <div class="tabla">
             <table>
-              <thead><tr><th>Mes</th><th class="num">Saldo al empezar</th><th class="num">Saldo al terminar</th><th class="num">Variación</th><th class="num">%</th><th>Estado</th></tr></thead>
+              <thead><tr><th scope="col">Mes</th><th scope="col" class="num">Saldo al empezar</th><th scope="col" class="num">Saldo al terminar</th><th scope="col" class="num">Variación</th><th scope="col" class="num">%</th><th scope="col">Estado</th></tr></thead>
               <tbody>
                 @for (m of d.meses; track m.periodo) {
                   <tr>
@@ -61,7 +61,7 @@ import { mensajeDeError } from '../../shared/utils/errores';
       } @else {
         <div class="tabla">
           <table>
-            <thead><tr><th>Fecha</th><th>Movimiento</th><th>De quién</th><th class="num">Importe</th></tr></thead>
+            <thead><tr><th scope="col">Fecha</th><th scope="col">Movimiento</th><th scope="col">De quién</th><th scope="col" class="num">Importe</th></tr></thead>
             <tbody>
               @for (m of d.movimientos.contenido; track m.id) {
                 <tr>

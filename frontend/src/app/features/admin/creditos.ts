@@ -50,7 +50,7 @@ import { TramiteCredito } from './tramite-credito';
         <h2 class="seccion-titulo">Retiros de cupo emergente por aprobar</h2>
         <div class="tabla">
           <table>
-            <thead><tr><th>Código</th><th>Socio</th><th>Destino</th><th class="num">Importe</th><th>Votos</th><th>Su voto</th></tr></thead>
+            <thead><tr><th scope="col">Código</th><th scope="col">Socio</th><th scope="col">Destino</th><th scope="col" class="num">Importe</th><th scope="col">Votos</th><th scope="col">Su voto</th></tr></thead>
             <tbody>
               @for (s of cupos(); track s.id) {
                 <tr>
@@ -100,7 +100,7 @@ import { TramiteCredito } from './tramite-credito';
       } @else {
         <div class="tabla">
           <table>
-            <thead><tr><th>Código</th><th>Titular</th><th>Tipo</th><th>Perfil</th><th>Estado</th><th class="num">Importe</th><th>Plazo</th><th>Tasa</th><th class="num">Pendiente</th><th>Acciones</th></tr></thead>
+            <thead><tr><th scope="col">Código</th><th scope="col">Titular</th><th scope="col">Tipo</th><th scope="col">Perfil</th><th scope="col">Estado</th><th scope="col" class="num">Importe</th><th scope="col">Plazo</th><th scope="col">Tasa</th><th scope="col" class="num">Pendiente</th><th scope="col">Acciones</th></tr></thead>
             <tbody>
               @for (c of filas(); track c.id) {
                 <tr>

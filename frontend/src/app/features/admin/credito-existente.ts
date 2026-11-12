@@ -79,7 +79,7 @@ import { mensajeDeError } from '../../shared/utils/errores';
           }
           <div class="tabla">
             <table>
-              <thead><tr><th>Letra</th><th>Vence</th><th class="num">Capital</th><th class="num">Interés</th><th class="num">Desgravamen</th><th class="num">Ahorro</th><th class="num">Total</th><th>Estado</th></tr></thead>
+              <thead><tr><th scope="col">Letra</th><th scope="col">Vence</th><th scope="col" class="num">Capital</th><th scope="col" class="num">Interés</th><th scope="col" class="num">Desgravamen</th><th scope="col" class="num">Ahorro</th><th scope="col" class="num">Total</th><th scope="col">Estado</th></tr></thead>
               <tbody>
                 @for (l of v.cuotas; track l.numero) {
                   <tr>

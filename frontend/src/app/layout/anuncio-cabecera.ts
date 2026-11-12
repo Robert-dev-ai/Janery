@@ -40,7 +40,7 @@ export class AnuncioCabecera implements OnInit {
   protected readonly texto = signal<string | null>(null);
 
   constructor() {
-    alCambiar(() => this.ngOnInit());
+    alCambiar(() => this.ngOnInit(), ['ANUNCIO']);
   }
 
   ngOnInit(): void {

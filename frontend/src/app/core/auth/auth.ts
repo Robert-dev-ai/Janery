@@ -1,6 +1,7 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { computed, inject, Injectable, signal } from '@angular/core';
-import { catchError, firstValueFrom, map, Observable, of, shareReplay, switchMap, tap } from 'rxjs';
+import { Router } from '@angular/router';
+import { catchError, firstValueFrom, map, Observable, of, shareReplay, switchMap, tap, timer, throwError } from 'rxjs';
 
 import { environment } from '../../../environments/environment';
 
@@ -22,10 +23,22 @@ interface TokenResponse {
   expiraEn: string;
 }
 
+/** Otra pestaña pudo usar el mismo token de refresco al mismo tiempo: pasado este tiempo, la cookie ya trae el nuevo. */
+const ESPERA_OTRA_PESTANA_MS = 300;
+
+/** Había cookie pero el token ya no sirve: puede haberlo usado otra pestaña. Sin cookie (SIN_SESION) no hay qué reintentar. */
+function sesionYaUsada(error: unknown): boolean {
+  return error instanceof HttpErrorResponse && (error.error as { codigo?: string } | null)?.codigo === 'SESION_EXPIRADA';
+}
+
+/** Lo que ve en Iniciar sesión quien perdió la sesión mientras usaba la aplicación. */
+export const AVISO_SESION_TERMINADA = 'Su sesión terminó. Inicie sesión de nuevo para continuar.';
+
 /** El access token vive solo en memoria; el de refresco, en una cookie HttpOnly que el script no puede leer. */
 @Injectable({ providedIn: 'root' })
 export class AuthService {
   private readonly http = inject(HttpClient);
+  private readonly router = inject(Router);
   private readonly api = `${environment.apiBaseUrl}/auth`;
   private renovando: Observable<string | null> | null = null;
 
@@ -75,24 +88,41 @@ export class AuthService {
     return this.http.get<Yo>(`${this.api}/me`).pipe(tap((yo) => this.yo.set(yo)));
   }
 
-  /** Comparte una sola renovación entre peticiones simultáneas: el token de refresco rota en cada uso. */
+  /**
+   * Comparte una sola renovación entre peticiones simultáneas: el token de refresco rota en cada uso. Si falla, reintenta
+   * una vez: otra pestaña pudo usarlo en el mismo instante y la cookie ya trae el nuevo.
+   */
   renovar(): Observable<string | null> {
-    this.renovando ??= this.http
-      .post<TokenResponse>(`${this.api}/refresh`, null, { withCredentials: true })
-      .pipe(
-        map((r) => r.accessToken),
-        tap((token) => {
-          this.token.set(token);
-          this.renovando = null;
-        }),
-        catchError(() => {
-          this.limpiar();
-          this.renovando = null;
-          return of(null);
-        }),
-        shareReplay(1),
-      );
+    this.renovando ??= this.pedirRenovacion().pipe(
+      catchError((e: unknown) => (sesionYaUsada(e)
+        ? timer(ESPERA_OTRA_PESTANA_MS).pipe(switchMap(() => this.pedirRenovacion()))
+        : throwError(() => e))),
+      map((r) => r.accessToken),
+      tap((token) => {
+        this.token.set(token);
+        this.renovando = null;
+      }),
+      catchError(() => {
+        this.renovando = null;
+        this.sesionPerdida();
+        return of(null);
+      }),
+      shareReplay(1),
+    );
     return this.renovando;
+  }
+
+  private pedirRenovacion(): Observable<TokenResponse> {
+    return this.http.post<TokenResponse>(`${this.api}/refresh`, null, { withCredentials: true });
+  }
+
+  /** Si había una sesión abierta, lleva a Iniciar sesión: sin esto la pantalla quedaba con el menú vacío y errores. */
+  private sesionPerdida(): void {
+    const habia = this.yo() !== null;
+    this.limpiar();
+    if (habia) {
+      void this.router.navigateByUrl('/iniciar-sesion', { state: { aviso: AVISO_SESION_TERMINADA } });
+    }
   }
 
   /** Al abrir o recargar la página intenta recuperar la sesión. */
@@ -114,8 +144,9 @@ export class AuthService {
 
   /** Con la cookie, el servidor sabe qué sesión conservar al cerrar las demás. */
   cambiarContrasena(actual: string, nueva: string): Observable<void> {
-    // Se recarga el usuario: cambiar una contraseña temporal levanta la obligación de cambiarla.
+    // Cambiar una contraseña temporal levanta la obligación: se renueva el token, que llevaba la marca, y se recarga el usuario.
     return this.http.post<void>(`${this.api}/contrasena`, { actual, nueva }, { withCredentials: true }).pipe(
+      switchMap(() => (this.yo()?.debeCambiarContrasena ? this.renovar() : of(null))),
       switchMap(() => this.cargarYo().pipe(map(() => undefined))),
     );
   }

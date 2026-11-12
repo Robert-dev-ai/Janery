@@ -76,7 +76,7 @@ src/app/
 └── features/    admin, ahorros, areas, auth, configuracion, creditos, cuenta, public, socios
 ```
 
-Cada pantalla se carga bajo demanda. Adaptar al crecimiento real; no crear capas vacías sin necesidad. El sistema visual y la cobertura del menú están en `diseno.md`.
+Cada pantalla se carga bajo demanda. Tras la primera, las demás se descargan en segundo plano (`PrecargaConSesion`): a un visitante, solo las públicas (`data.publica`); con sesión, todas. Adaptar al crecimiento real; no crear capas vacías sin necesidad. El sistema visual y la cobertura del menú están en `diseno.md`.
 
 ## 4. Reglas de presentación
 
@@ -96,7 +96,7 @@ Toda pantalla nueva o modificada sigue estas reglas.
 
 ### Aplicación dinámica
 - Navegar, enviar un formulario o ejecutar una acción no recarga la página.
-- Tiempo real (decisión del propietario): lo que hace una persona aparece solo en las pantallas de las demás, sin recargar. Toda pantalla que muestra datos llama a `alCambiar` con su función de carga.
+- Tiempo real (decisión del propietario): lo que hace una persona aparece solo en las pantallas de las demás, sin recargar. Toda pantalla que muestra datos llama a `alCambiar` con su función de carga. El aviso dice qué módulo cambió (`CUENTA`, `CREDITO`, `ANUNCIO`...): `alCambiar(cargar, ['CUENTA'])` solo recarga con esos módulos; sin lista, con cualquiera. La cabecera ya filtra, y `/auth/me` solo se vuelve a pedir con los módulos que cambian los datos de la persona. Cada persona puede tener hasta 5 conexiones (pestañas); la sexta cierra la más antigua.
 - Tras una operación, la pantalla pide de nuevo los datos al backend y muestra saldos y estados actualizados.
 - El aviso en tiempo real (`GET /api/v1/eventos`) solo indica el módulo que cambió, nunca datos: cada pantalla los pide a la API, que valida permisos. Toda acción que cambie datos debe pasar por `AuditoriaService.registrar`, que es quien avisa.
 - El estado de cada pantalla se guarda en signals de Angular.

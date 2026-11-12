@@ -124,7 +124,7 @@ class ProductosIntegrationTest {
         BigDecimal aDejar = ultima.subtract(encaje).subtract(ahorroPrevio).add(new BigDecimal("5"));
         retirar(p, saldo(p).subtract(aDejar).toPlainString());
 
-        pagar(p, credito, "{}").andExpect(status().isConflict()).andExpect(jsonPath("$.codigo").value("SALDO_INSUFICIENTE"));
+        pagar(p, credito, "{}").andExpect(status().isConflict()).andExpect(jsonPath("$.codigo").value("SALDO_CUENTA_INSUFICIENTE"));
         assertThat(credito(p, credito).get("estado").asText()).isEqualTo("ACTIVO");
 
         pagar(p, credito, "{\"usarEncaje\":true,\"usarAhorroLetras\":true}").andExpect(status().isOk());
@@ -148,6 +148,70 @@ class ProductosIntegrationTest {
         assertThat(credito(p, credito).get("cuotasPagadas")).hasSize(1);
     }
 
+    /** Antes devolvía la operación del primer crédito como si hubiera pagado el segundo. */
+    @Test
+    void laClaveDeUnPagoNoSirveParaOtroCredito() throws Exception {
+        Persona p = persona();
+        depositar(p, "300.00");
+        long primero = solicitarLetras(p, "NORMAL", "300.00", 3);
+        long segundo = solicitarLetras(p, "NORMAL", "300.00", 3);
+        aprobar(primero);
+        aprobar(segundo);
+        String clave = UUID.randomUUID().toString();
+        pagarCon(p, primero, "{}", clave).andExpect(status().isOk());
+        BigDecimal tras = saldo(p);
+
+        pagarCon(p, segundo, "{}", clave).andExpect(status().isConflict())
+                .andExpect(jsonPath("$.codigo").value("CLAVE_REUTILIZADA"));
+        assertThat(credito(p, segundo).get("cuotasPagadas")).isEmpty();
+        assertThat(saldo(p)).isEqualByComparingTo(tras);
+    }
+
+    /** Antes un doble clic creaba dos solicitudes: aprobadas las dos, la persona recibía el préstamo dos veces. */
+    @Test
+    void repetirLaSolicitudDeCreditoConLaMismaClaveNoCreaOtra() throws Exception {
+        Persona p = persona();
+        String clave = UUID.randomUUID().toString();
+        String cuerpo = "{\"modalidad\":\"NORMAL\",\"importe\":300.00,\"plazoMeses\":3,\"origenEncaje\":\"CREDITO\"}";
+        long primera = json.readTree(conClave(p, "/api/v1/creditos/letras/solicitudes", cuerpo, clave)
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString()).get("id").asLong();
+        long segunda = json.readTree(conClave(p, "/api/v1/creditos/letras/solicitudes", cuerpo, clave)
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString()).get("id").asLong();
+
+        assertThat(segunda).isEqualTo(primera);
+        assertThat(jdbc.queryForObject("select count(*) from creditos c join personas pe on pe.id = c.persona_id"
+                + " join usuarios u on u.id = pe.usuario_id where u.correo = ?", Integer.class, p.correo())).isEqualTo(1);
+        // La misma clave no sirve para un emergente.
+        conClave(p, "/api/v1/creditos/emergentes/solicitudes", "{\"importe\":300.00}", clave)
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.codigo").value("CLAVE_REUTILIZADA"));
+    }
+
+    @Test
+    void repetirLaAperturaDeUnAhorroConLaMismaClaveNoAbreOtro() throws Exception {
+        Persona p = persona();
+        String clave = UUID.randomUUID().toString();
+        long primero = json.readTree(conClave(p, "/api/v1/ahorros/normales", "{\"nombre\":\"Viaje\"}", clave)
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString()).get("id").asLong();
+        long segundo = json.readTree(conClave(p, "/api/v1/ahorros/normales", "{\"nombre\":\"Viaje\"}", clave)
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString()).get("id").asLong();
+
+        assertThat(segundo).isEqualTo(primero);
+        assertThat(json.readTree(mvc.perform(get("/api/v1/ahorros/me").header(HttpHeaders.AUTHORIZATION, bearer(p.token())))
+                .andReturn().getResponse().getContentAsString())).hasSize(1);
+    }
+
+    @Test
+    void sinClaveDeIdempotenciaNoSeOpera() throws Exception {
+        Persona p = persona();
+        depositar(p, "100.00");
+        long credito = solicitarLetras(p, "NORMAL", "300.00", 3);
+        aprobar(credito);
+        BigDecimal antes = saldo(p);
+        pagarCon(p, credito, "{}", "   ").andExpect(status().isBadRequest());
+        pagarCon(p, credito, "{}", "x".repeat(101)).andExpect(status().isBadRequest());
+        assertThat(saldo(p)).isEqualByComparingTo(antes);
+    }
+
     @Test
     void unClienteSoloPideElCreditoALetrasNormal() throws Exception {
         Persona p = persona();
@@ -156,7 +220,8 @@ class ProductosIntegrationTest {
                 .andExpect(jsonPath("$.letras.length()").value(1))
                 .andExpect(jsonPath("$.letras[0].modalidad").value("NORMAL"));
         for (String ruta : new String[] { "/api/v1/creditos/letras/simulacion", "/api/v1/creditos/letras/solicitudes" }) {
-            mvc.perform(post(ruta).header(HttpHeaders.AUTHORIZATION, bearer(p.token())).contentType(MediaType.APPLICATION_JSON)
+            mvc.perform(post(ruta).header(HttpHeaders.AUTHORIZATION, bearer(p.token())).header("Idempotency-Key", UUID.randomUUID().toString())
+                    .contentType(MediaType.APPLICATION_JSON)
                     .content("{\"modalidad\":\"INVERSION\",\"importe\":300.00,\"plazoMeses\":3,\"origenEncaje\":\"CREDITO\"}"))
                     .andExpect(status().isConflict()).andExpect(jsonPath("$.codigo").value("MODALIDAD_SOLO_SOCIOS"));
         }
@@ -348,7 +413,7 @@ class ProductosIntegrationTest {
         // Socio, inversión: 0,75 %, en efectivo: entra a la caja junto con el encaje.
         Persona socio = persona();
         hacerSocio(socio);
-        String r = mvc.perform(post("/api/v1/creditos/letras/solicitudes").header(HttpHeaders.AUTHORIZATION, bearer(socio.token()))
+        String r = mvc.perform(post("/api/v1/creditos/letras/solicitudes").header("Idempotency-Key", UUID.randomUUID().toString()).header(HttpHeaders.AUTHORIZATION, bearer(socio.token()))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"modalidad\":\"INVERSION\",\"importe\":1000.00,\"plazoMeses\":3,\"origenEncaje\":\"EFECTIVO\"}"))
                 .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
@@ -614,7 +679,7 @@ class ProductosIntegrationTest {
     }
 
     private long solicitarLetrasCon(Persona p, String origen) throws Exception {
-        String r = mvc.perform(post("/api/v1/creditos/letras/solicitudes").header(HttpHeaders.AUTHORIZATION, bearer(p.token()))
+        String r = mvc.perform(post("/api/v1/creditos/letras/solicitudes").header("Idempotency-Key", UUID.randomUUID().toString()).header(HttpHeaders.AUTHORIZATION, bearer(p.token()))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"modalidad\":\"NORMAL\",\"importe\":300.00,\"plazoMeses\":3," + origen + "}"))
                 .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
@@ -661,6 +726,46 @@ class ProductosIntegrationTest {
         assertThat(jdbc.queryForObject("select estado from cuentas_ahorro where id = ?", String.class, id)).isEqualTo("CERRADA");
     }
 
+    /** Antes respondía 409 al reintento: la pantalla mostraba un error aunque el plazo fijo sí se había abierto. */
+    @Test
+    void reintentoDePlazoFijoDevuelveElMismoAhorroSinCobrarDosVeces() throws Exception {
+        Persona p = persona();
+        depositar(p, "800.00");
+        String clave = UUID.randomUUID().toString();
+        String cuerpo = "{\"nombre\":\"Fijo\",\"importe\":500.00,\"plazoMeses\":12}";
+        long primero = json.readTree(plazoFijo(p, cuerpo, clave).andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString()).get("id").asLong();
+        long reintento = json.readTree(plazoFijo(p, cuerpo, clave).andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString()).get("id").asLong();
+
+        assertThat(reintento).isEqualTo(primero);
+        assertThat(saldo(p)).isEqualByComparingTo("300");
+    }
+
+    @Test
+    void laClaveDeUnDepositoAAhorroNoSirveParaOtroAhorro() throws Exception {
+        Persona p = persona();
+        depositar(p, "100.00");
+        long uno = crearNormal(p, "Uno");
+        long dos = crearNormal(p, "Dos");
+        String clave = UUID.randomUUID().toString();
+        conClave(p, "/api/v1/ahorros/" + uno + "/depositos", "{\"importe\":10.00}", clave).andExpect(status().isOk());
+
+        conClave(p, "/api/v1/ahorros/" + dos + "/depositos", "{\"importe\":10.00}", clave)
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.codigo").value("CLAVE_REUTILIZADA"));
+        assertThat(saldoAhorro(p, dos)).isEqualByComparingTo("0");
+        assertThat(saldo(p)).isEqualByComparingTo("90");
+    }
+
+    private ResultActions plazoFijo(Persona p, String cuerpo, String clave) throws Exception {
+        return conClave(p, "/api/v1/ahorros/plazo-fijo", cuerpo, clave);
+    }
+
+    private ResultActions conClave(Persona p, String ruta, String cuerpo, String clave) throws Exception {
+        return mvc.perform(post(ruta).header(HttpHeaders.AUTHORIZATION, bearer(p.token()))
+                .header("Idempotency-Key", clave).contentType(MediaType.APPLICATION_JSON).content(cuerpo));
+    }
+
     @Test
     void ahorroAjenoNoSeTocaYLaCuentaNoCierraConProductosPendientes() throws Exception {
         Persona p = persona();
@@ -703,7 +808,7 @@ class ProductosIntegrationTest {
     }
 
     private long solicitarLetras(Persona p, String modalidad, String importe, int plazo) throws Exception {
-        String r = mvc.perform(post("/api/v1/creditos/letras/solicitudes").header(HttpHeaders.AUTHORIZATION, bearer(p.token()))
+        String r = mvc.perform(post("/api/v1/creditos/letras/solicitudes").header("Idempotency-Key", UUID.randomUUID().toString()).header(HttpHeaders.AUTHORIZATION, bearer(p.token()))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"modalidad\":\"" + modalidad + "\",\"importe\":" + importe + ",\"plazoMeses\":" + plazo + ",\"origenEncaje\":\"CREDITO\"}"))
                 .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
@@ -751,7 +856,7 @@ class ProductosIntegrationTest {
     }
 
     private long crearNormal(Persona p, String nombre) throws Exception {
-        String r = mvc.perform(post("/api/v1/ahorros/normales").header(HttpHeaders.AUTHORIZATION, bearer(p.token()))
+        String r = mvc.perform(post("/api/v1/ahorros/normales").header("Idempotency-Key", UUID.randomUUID().toString()).header(HttpHeaders.AUTHORIZATION, bearer(p.token()))
                         .contentType(MediaType.APPLICATION_JSON).content("{\"nombre\":\"" + nombre + "\"}"))
                 .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
         return json.readTree(r).get("id").asLong();
@@ -770,6 +875,7 @@ class ProductosIntegrationTest {
 
     private ResultActions enviar(Persona p, String ruta, Object cuerpo) throws Exception {
         return mvc.perform(post(ruta).header(HttpHeaders.AUTHORIZATION, bearer(p.token()))
+                .header("Idempotency-Key", UUID.randomUUID().toString())
                 .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(cuerpo)));
     }
 

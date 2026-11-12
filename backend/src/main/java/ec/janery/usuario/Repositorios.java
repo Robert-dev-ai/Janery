@@ -70,6 +70,11 @@ final class Repositorios {
                 """)
         int revocarOtros(@Param("usuarioId") Long usuarioId, @Param("hashConservado") String hashConservado,
                 @Param("ahora") Instant ahora);
+
+        /** 0 si otra petición ya lo usó: un token de refresco sirve una sola vez. */
+        @Modifying
+        @Query("UPDATE TokenRefresco t SET t.revocadoEn = :ahora WHERE t.id = :id AND t.revocadoEn IS NULL")
+        int revocarSiVigente(@Param("id") Long id, @Param("ahora") Instant ahora);
     }
 
     interface RestablecimientoRepository extends JpaRepository<SolicitudRestablecimiento, Long> {

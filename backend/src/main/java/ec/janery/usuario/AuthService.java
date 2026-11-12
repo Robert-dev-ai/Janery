@@ -14,6 +14,7 @@ import java.util.Optional;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
+import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
 import org.springframework.security.oauth2.jwt.JwsHeader;
@@ -49,12 +50,15 @@ public class AuthService {
     private final Duration duracionRefresh;
     private final String hashFicticio;
     private final SecureRandom aleatorio = new SecureRandom();
+    private final JdbcClient jdbc;
 
     AuthService(Repositorios.UsuarioRepository usuarios, Repositorios.TokenRefrescoRepository tokens,
             Repositorios.RestablecimientoRepository restablecimientos,
             PasswordEncoder encoder, JwtEncoder jwtEncoder, AuditoriaService auditoria, PersonaService personas, Clock reloj,
+            JdbcClient jdbc,
             @Value("${janery.jwt.access-minutos}") long accessMinutos,
             @Value("${janery.jwt.refresh-dias}") long refreshDias) {
+        this.jdbc = jdbc;
         this.usuarios = usuarios;
         this.tokens = tokens;
         this.restablecimientos = restablecimientos;
@@ -106,13 +110,13 @@ public class AuthService {
             Long id = usuario == null ? null : usuario.getId();
             auditoria.registrar(id, "LOGIN_FALLIDO", MODULO, "usuario", id, null, null, null);
             if (usuario != null && usuario.activo()) {
-                boolean queda = usuario.registrarFallo();
-                usuarios.save(usuario);
-                if (queda) {
+                // Vacío: otro intento simultáneo ya lo bloqueó.
+                int intentos = registrarFallo(id).orElseThrow(AuthService::bloqueado);
+                if (intentos >= Usuario.INTENTOS_MAXIMOS) {
                     auditoria.registrar(id, "ACCESO_BLOQUEADO", MODULO, "usuario", id, "ACTIVO", "BLOQUEADO", null);
                     throw bloqueado();
                 }
-                int restantes = Usuario.INTENTOS_MAXIMOS - usuario.getIntentosFallidos();
+                int restantes = Usuario.INTENTOS_MAXIMOS - intentos;
                 throw new NegocioException(HttpStatus.UNAUTHORIZED, "CREDENCIALES", "Credenciales incorrectas. "
                         + (restantes == 1 ? "Le queda 1 intento" : "Le quedan " + restantes + " intentos")
                         + " antes de que se bloquee su acceso");
@@ -120,11 +124,24 @@ public class AuthService {
             throw new NegocioException(HttpStatus.UNAUTHORIZED, "CREDENCIALES", "Credenciales incorrectas");
         }
         if (usuario.getIntentosFallidos() > 0) {
-            usuario.reiniciarIntentos();
-            usuarios.save(usuario);
+            jdbc.sql("UPDATE usuarios SET intentos_fallidos = 0 WHERE id = :id AND estado = 'ACTIVO'")
+                    .param("id", usuario.getId()).update();
         }
         auditoria.registrar(usuario.getId(), "LOGIN", MODULO, "usuario", usuario.getId(), null, null, null);
         return emitir(usuario);
+    }
+
+    /**
+     * Suma el fallo en la base, en una sentencia: leer, sumar y guardar dejaría que varios intentos simultáneos cuenten
+     * como uno y nunca bloqueen. Devuelve los intentos acumulados, o vacío si el acceso ya no estaba activo.
+     */
+    private Optional<Integer> registrarFallo(Long usuarioId) {
+        return jdbc.sql("""
+                UPDATE usuarios SET intentos_fallidos = intentos_fallidos + 1,
+                       estado = CASE WHEN intentos_fallidos + 1 >= :maximo THEN 'BLOQUEADO' ELSE estado END
+                WHERE id = :id AND estado = 'ACTIVO'
+                RETURNING intentos_fallidos
+                """).param("maximo", Usuario.INTENTOS_MAXIMOS).param("id", usuarioId).query(Integer.class).optional();
     }
 
     private static NegocioException bloqueado() {
@@ -204,14 +221,21 @@ public class AuthService {
     @Transactional
     public Sesion refrescar(String refreshToken) {
         Instant ahora = Instant.now(reloj);
-        TokenRefresco actual = refreshToken == null ? null : tokens.findByHashToken(hash(refreshToken)).orElse(null);
+        if (refreshToken == null) {
+            // Distinto de una sesión vencida: el navegador no reintenta, y abrir la página sin sesión no espera.
+            throw new NegocioException(HttpStatus.UNAUTHORIZED, "SIN_SESION", "No hay una sesión iniciada");
+        }
+        TokenRefresco actual = tokens.findByHashToken(hash(refreshToken)).orElse(null);
         if (actual == null || !actual.vigente(ahora)) {
             throw new NegocioException(HttpStatus.UNAUTHORIZED, "SESION_EXPIRADA", "La sesión ha expirado");
         }
         Usuario usuario = usuarios.findById(actual.getUsuarioId())
                 .filter(Usuario::activo)
                 .orElseThrow(() -> new NegocioException(HttpStatus.UNAUTHORIZED, "SESION_EXPIRADA", "La sesión ha expirado"));
-        actual.revocar(ahora);
+        // Revocar en la base y no en memoria: dos refrescos simultáneos con el mismo token no deben abrir dos sesiones.
+        if (tokens.revocarSiVigente(actual.getId(), ahora) == 0) {
+            throw new NegocioException(HttpStatus.UNAUTHORIZED, "SESION_EXPIRADA", "La sesión ha expirado");
+        }
         return emitir(usuario);
     }
 
@@ -268,6 +292,11 @@ public class AuthService {
                 .issuedAt(ahora)
                 .expiresAt(expira)
                 .claim("scope", String.join(" ", alcances(usuario.getId())))
+                .claims(c -> {
+                    if (usuario.isDebeCambiarContrasena()) {
+                        c.put(ContrasenaTemporalFiltro.RECLAMO, true);
+                    }
+                })
                 .build();
         String access = jwtEncoder
                 .encode(JwtEncoderParameters.from(JwsHeader.with(MacAlgorithm.HS256).build(), claims))

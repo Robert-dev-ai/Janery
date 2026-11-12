@@ -56,7 +56,7 @@ interface Formulario {
         </label>
         <label>Referencia <input name="referencia" maxlength="100" [(ngModel)]="f.referencia" /></label>
         <div class="acciones">
-          <button type="submit" [disabled]="!f.importe || f.importe <= 0">Registrar</button>
+          <button type="submit" [disabled]="enviando() || !f.importe || f.importe <= 0">Registrar</button>
           <button type="button" class="secundario" (click)="formulario.set(null)">Cancelar</button>
         </div>
       </form>
@@ -68,7 +68,7 @@ interface Formulario {
       } @else {
         <div class="tabla">
           <table>
-            <thead><tr><th>Cuenta</th><th>Titular</th><th>Estado</th><th>Pago</th><th class="num">Saldo</th><th>Acciones</th></tr></thead>
+            <thead><tr><th scope="col">Cuenta</th><th scope="col">Titular</th><th scope="col">Estado</th><th scope="col">Pago</th><th scope="col" class="num">Saldo</th><th scope="col">Acciones</th></tr></thead>
             <tbody>
               @for (c of filas(); track c.id) {
                 <tr>
@@ -82,11 +82,11 @@ interface Formulario {
                   <td class="acciones">
                     @switch (c.estado) {
                       @case ('PENDIENTE_PAGO') {
-                        <button type="button" (click)="confirmarApertura(c)">Confirmar pago</button>
-                        <button type="button" class="peligro" (click)="rechazar(c)">Rechazar</button>
+                        <button type="button" [disabled]="enviando()" (click)="confirmarApertura(c)">Confirmar pago</button>
+                        <button type="button" class="peligro" [disabled]="enviando()" (click)="rechazar(c)">Rechazar</button>
                       }
                       @case ('PENDIENTE_CIERRE') {
-                        <button type="button" (click)="confirmarCierre(c)">Confirmar cierre</button>
+                        <button type="button" [disabled]="enviando()" (click)="confirmarCierre(c)">Confirmar cierre</button>
                       }
                       @case ('ACTIVA') {
                         <button type="button" (click)="abrir(c, 'depositos')">Depósito</button>
@@ -118,6 +118,8 @@ export class AdminCuentas implements OnInit {
   protected readonly formulario = signal<Formulario | null>(null);
   protected readonly error = signal<string | null>(null);
   protected readonly aviso = signal<string | null>(null);
+  /** Mientras una operación está en curso: evita el doble clic y deja ver que se está procesando. */
+  protected readonly enviando = signal(false);
 
   constructor() {
     alCambiar(() => this.cargar(this.datos()?.pagina ?? 0));
@@ -171,15 +173,23 @@ export class AdminCuentas implements OnInit {
   }
 
   private ejecutar(accion: Observable<unknown>, aviso: string, alTerminar?: () => void): void {
+    if (this.enviando()) {
+      return;
+    }
+    this.enviando.set(true);
     this.error.set(null);
     this.aviso.set(null);
     accion.subscribe({
       next: () => {
+        this.enviando.set(false);
         this.aviso.set(aviso);
         alTerminar?.();
         this.cargar(this.datos()?.pagina ?? 0);
       },
-      error: (e) => this.error.set(mensajeDeError(e)),
+      error: (e) => {
+        this.enviando.set(false);
+        this.error.set(mensajeDeError(e));
+      },
     });
   }
 }

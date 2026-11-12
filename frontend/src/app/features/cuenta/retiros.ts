@@ -52,7 +52,7 @@ import { mensajeDeError } from '../../shared/utils/errores';
       @if (importe && costo() > 0) {
         <p>Se apartarán de su cuenta <strong>{{ importe + costo() | currency: 'USD' }}</strong>: {{ importe | currency: 'USD' }} del retiro y {{ costo() | currency: 'USD' }} de la transferencia.</p>
       }
-      <button type="submit" [disabled]="!valido()">Solicitar retiro</button>
+      <button type="submit" [disabled]="enviando() || !valido()">Solicitar retiro</button>
     </form>
 
     <h2>Mis solicitudes</h2>
@@ -60,7 +60,7 @@ import { mensajeDeError } from '../../shared/utils/errores';
       @if (lista.length) {
         <div class="tabla">
           <table>
-            <thead><tr><th>Código</th><th>Fecha</th><th class="num">Importe</th><th class="num">Costo</th><th>Medio</th><th>Estado</th><th>Detalle</th><th>Acción</th></tr></thead>
+            <thead><tr><th scope="col">Código</th><th scope="col">Fecha</th><th scope="col" class="num">Importe</th><th scope="col" class="num">Costo</th><th scope="col">Medio</th><th scope="col">Estado</th><th scope="col">Detalle</th><th scope="col">Acción</th></tr></thead>
             <tbody>
               @for (s of lista; track s.id) {
                 <tr>
@@ -93,6 +93,8 @@ export class Retiros implements OnInit {
   protected readonly saldo = signal<number | null>(null);
   protected readonly error = signal<string | null>(null);
   protected readonly aviso = signal<string | null>(null);
+  /** Mientras una operación está en curso: evita el doble clic y deja ver que se está procesando. */
+  protected readonly enviando = signal(false);
 
   protected importe: number | null = null;
   protected medio = 'EFECTIVO';
@@ -132,6 +134,10 @@ export class Retiros implements OnInit {
   }
 
   protected solicitar(): void {
+    if (this.enviando()) {
+      return;
+    }
+    this.enviando.set(true);
     this.error.set(null);
     this.aviso.set(null);
     const banco = this.medio === 'TRANSFERENCIA'
@@ -139,12 +145,16 @@ export class Retiros implements OnInit {
       : {};
     this.api.solicitarRetiro({ importe: this.importe!, medio: this.medio, ...banco }, this.clave).subscribe({
       next: () => {
+        this.enviando.set(false);
         this.clave = crypto.randomUUID();
         this.importe = null;
         this.aviso.set('Solicitud registrada. El importe queda apartado hasta la entrega.');
         this.ngOnInit();
       },
-      error: (e) => this.error.set(mensajeDeError(e)),
+      error: (e) => {
+        this.enviando.set(false);
+        this.error.set(mensajeDeError(e));
+      },
     });
   }
 

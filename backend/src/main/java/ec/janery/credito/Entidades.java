@@ -57,6 +57,33 @@ final class Entidades {
         private String claveSolicitud;
         /** Registrado con sus condiciones originales: ya existía antes de usar Janery. */
         private boolean existente;
+
+        /** Cupo de socio, general o de promoción: sin letras, devenga cargos por día sobre el capital pendiente. */
+        boolean esLinea() {
+            return "EMERGENTE_SOCIO".equals(familia) || "EMERGENTE_ESTACIONAL".equals(familia);
+        }
+
+        /** Interés de una línea hasta hoy, con lo aún no guardado. Sin redondear: se redondea al mostrar o cobrar. */
+        BigDecimal interesHasta(LocalDate hoy) {
+            return interesAcumulado.add(CalculadoraCredito.devengo(capitalPendiente, tasaInteres, diasSinDevengar(hoy)));
+        }
+
+        BigDecimal desgravamenHasta(LocalDate hoy) {
+            return desgravamenAcumulado.add(CalculadoraCredito.devengo(capitalPendiente, tasaDesgravamen, diasSinDevengar(hoy)));
+        }
+
+        /** Guarda los cargos de una línea hasta hoy. Va antes de cambiar el capital o las tasas: lo devengado conserva los suyos. */
+        void devengar(LocalDate hoy) {
+            if (diasSinDevengar(hoy) > 0) {
+                interesAcumulado = interesHasta(hoy);
+                desgravamenAcumulado = desgravamenHasta(hoy);
+                ultimoDevengo = hoy;
+            }
+        }
+
+        private long diasSinDevengar(LocalDate hoy) {
+            return Math.max(0, java.time.temporal.ChronoUnit.DAYS.between(ultimoDevengo, hoy));
+        }
     }
 
     /** Un retiro del cupo de socio, en espera de aprobación. */
@@ -137,6 +164,11 @@ final class Entidades {
         BigDecimal moraPendiente(LocalDate hoy, BigDecimal tasa) {
             return tasa.multiply(BigDecimal.valueOf(diasAtraso(hoy))).setScale(2, java.math.RoundingMode.HALF_UP)
                     .subtract(moraPagada).max(BigDecimal.ZERO);
+        }
+
+        /** Lo que falta para saldar la letra hoy: su parte sin pagar y la mora que lleva. */
+        BigDecimal deuda(LocalDate hoy, BigDecimal tasaMora) {
+            return pendiente().add(moraPendiente(hoy, tasaMora));
         }
     }
 

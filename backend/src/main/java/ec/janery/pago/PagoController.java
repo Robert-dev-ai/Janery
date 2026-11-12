@@ -62,7 +62,7 @@ public class PagoController {
     /** Multiparte: «datos» con el pago en JSON y «archivos» con el comprobante, que es obligatorio. */
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @ResponseStatus(HttpStatus.CREATED)
-    public PagoService.Creado pagar(@AuthenticationPrincipal Jwt jwt, @RequestHeader("Idempotency-Key") @Size(max = 60) String clave,
+    public PagoService.Creado pagar(@AuthenticationPrincipal Jwt jwt, @RequestHeader("Idempotency-Key") @jakarta.validation.constraints.NotBlank @Size(max = 60) String clave,
             @Valid @RequestPart("datos") PagoRequest r, @RequestPart(name = "archivos", required = false) List<MultipartFile> archivos) {
         boolean sinReferencia = r.referencia() == null || r.referencia().isBlank();
         if ("TRANSFERENCIA".equals(r.medio()) && sinReferencia) {

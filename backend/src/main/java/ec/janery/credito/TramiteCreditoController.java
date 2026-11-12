@@ -68,15 +68,16 @@ public class TramiteCreditoController {
     @PostMapping("/personas/{usuarioId}/letras")
     @ResponseStatus(HttpStatus.CREATED)
     public CreditoController.CreadoResponse letras(@AuthenticationPrincipal Jwt jwt, @PathVariable Long usuarioId,
+            @RequestHeader("Idempotency-Key") @jakarta.validation.constraints.NotBlank @Size(max = 100) String clave,
             @Valid @RequestBody CreditoController.LetrasRequest r) {
         return new CreditoController.CreadoResponse(service.solicitarLetras(id(jwt), usuarioId, r.modalidad(), r.importe(),
-                r.plazoMeses(), r.origenEncaje(), r.ahorroEncajeId()));
+                r.plazoMeses(), r.origenEncaje(), r.ahorroEncajeId(), clave));
     }
 
     @PostMapping("/personas/{usuarioId}/emergente")
     @ResponseStatus(HttpStatus.CREATED)
     public CreditoController.CreadoResponse emergente(@AuthenticationPrincipal Jwt jwt, @PathVariable Long usuarioId,
-            @RequestHeader("Idempotency-Key") @Size(max = 100) String clave, @Valid @RequestBody CreditoController.EmergenteRequest r) {
+            @RequestHeader("Idempotency-Key") @jakarta.validation.constraints.NotBlank @Size(max = 100) String clave, @Valid @RequestBody CreditoController.EmergenteRequest r) {
         return new CreditoController.CreadoResponse(service.solicitarEmergente(id(jwt), usuarioId, r.importe(), clave));
     }
 

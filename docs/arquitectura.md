@@ -120,6 +120,18 @@ janery/
 
 La estructura es una guía inicial, no una obligación de crear carpetas vacías. Ajustar nombres y paquetes con criterio y consistencia.
 
+### Estructura real (noviembre 2026)
+
+Paquetes del backend: `ahorro`, `app`, `auditoria`, `caja`, `common`, `config`, `consultas`, `contabilidad`, `credito` (incluye encajes y ahorro letras), `cuenta`, `pago`, `parametros`, `persona`, `reportes`, `simulacion` (solo con el perfil `simulacion`), `socio`, `tiemporeal` y `usuario` (incluye cargos y permisos). Lo que hace cada uno: tabla de módulos del README raíz.
+
+Frontend: `core` (sesión, guards, interceptor y el cliente de la API en `core/services/api.ts`), `shared`, `layout` y `features`. Las pantallas de gestión están en `features/admin`, agrupadas por quién las usa y no por dominio.
+
+Deuda conocida, a resolver por partes y sin cambiar contratos:
+
+- Dependencias circulares entre módulos: `socio` ↔ `caja`, `socio` ↔ `credito` y `socio` → `cuenta` → `usuario` → `socio`. Al tocar esos módulos, preferir una interfaz en el módulo que la necesita, como `cuenta/EjecutorPagos`, en vez de una dependencia directa nueva.
+- Servicios grandes: `ParticipacionService` y `CreditoService`. Separar por caso de uso, como se hizo con el cobro de créditos (`PagoCreditoService`).
+- `core/services/api.ts` concentra todas las llamadas del frontend. Las funcionalidades nuevas pueden tener su propio servicio en su carpeta de `features`.
+
 ## 5. PostgreSQL y Flyway
 
 - Base de datos: `janery`.

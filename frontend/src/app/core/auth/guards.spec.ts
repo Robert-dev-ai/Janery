@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { ActivatedRouteSnapshot, provideRouter, Router, RouterStateSnapshot, UrlTree } from '@angular/router';
 
 import { AuthService, Yo } from './auth';
-import { autenticadoGuard, cuentaActivaGuard, permisoGuard, personalGuard, socioGuard } from './guards';
+import { autenticadoGuard, contrasenaTemporalGuard, cuentaActivaGuard, permisoGuard, personalGuard, socioGuard } from './guards';
 
 describe('guards', () => {
   const yoBase: Yo = { id: 1, correo: 'a@b.c', cargos: [], permisos: [], tienePerfil: true, estadoCuenta: 'ACTIVA', esSocio: false, nombre: 'Ana', tieneFoto: false, debeCambiarContrasena: false };
@@ -57,5 +57,20 @@ describe('guards', () => {
     expect(rutaDe(ejecutar(personalGuard))).toBe('/app/inicio');
     TestBed.inject(AuthService).yo.set({ ...yoBase, permisos: ['CONSULTAR_CAJA'] });
     expect(ejecutar(personalGuard)).toBeTrue();
+  });
+
+  it('con una contraseña temporal solo deja ir a cambiarla', () => {
+    TestBed.inject(AuthService).yo.set({ ...yoBase, debeCambiarContrasena: true });
+    const ir = (url: string) => TestBed.runInInjectionContext(() =>
+      contrasenaTemporalGuard({} as ActivatedRouteSnapshot, { url } as RouterStateSnapshot));
+    expect(rutaDe(ir('/app/inicio'))).toBe('/configuracion/contrasena');
+    expect(rutaDe(ir('/admin/panel'))).toBe('/configuracion/contrasena');
+    expect(ir('/configuracion/contrasena')).toBeTrue();
+  });
+
+  it('sin contraseña temporal no interviene', () => {
+    TestBed.inject(AuthService).yo.set(yoBase);
+    expect(TestBed.runInInjectionContext(() =>
+      contrasenaTemporalGuard({} as ActivatedRouteSnapshot, { url: '/app/inicio' } as RouterStateSnapshot))).toBeTrue();
   });
 });

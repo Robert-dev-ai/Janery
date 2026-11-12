@@ -63,12 +63,12 @@ Opcional, para usar Claude Code con Neon: `neon plugins --global --agent claude-
 ## Trabajo diario
 
 1. Al empezar: `git pull` en `main` y crear una rama, `git checkout -b feature/nombre`.
-2. Si la estructura de la base cambia, añadir una migración nueva en `backend/src/main/resources/db/migration/` (`V11__descripcion.sql`, y así en adelante).
+2. Si la estructura de la base cambia, añadir una migración nueva en `backend/src/main/resources/db/migration/`, con el número siguiente al último (`V27__descripcion.sql` después de `V26`).
 3. Probar con las pruebas automáticas o con el simulador (`janery_simulacion`), no con operaciones inventadas en la aplicación normal: sus datos son reales.
 4. Al terminar: `git add`, `git commit`, `git push`, y fusionar en `main`.
 5. En otra computadora: `git pull` antes de arrancar el backend.
 
-Una migración nueva se aplica sobre los datos reales al arrancar el backend: revisarla antes y hacer un respaldo si cambia o borra datos. Las ramas de Neon no se fusionan.
+Una migración nueva se aplica sobre los datos reales al arrancar el backend, **desde cualquier rama de Git**: arrancar el backend en una rama `feature/` con una migración sin revisar la aplica a los datos reales. Mientras desarrollo y datos reales compartan esta rama de Neon, probar las migraciones con la CI de GitHub (PostgreSQL desechable) antes de arrancar el backend con ellas, y hacer un respaldo (`.\respaldo.ps1`) si cambian o borran datos. Las ramas de Neon no se fusionan.
 
 ## Reglas
 
@@ -79,14 +79,15 @@ Una migración nueva se aplica sobre los datos reales al arrancar el backend: re
 - No usar un host con `-pooler`: no conserva `SET search_path`, del que dependen las consultas.
 - No subir, copiar a mensajes ni mostrar en pantalla el contenido del `.env`. Este repositorio es público.
 - Apagar el backend y desconectar DBeaver al terminar: las conexiones abiertas consumen el cómputo del plan gratuito.
-- Correr solo la clase de pruebas que se esté tocando (`.\mvnw.cmd test -Dtest=SociosIntegrationTest`). La ejecución completa contra Neon tarda unos 20 minutos.
+- Correr solo la clase de pruebas que se esté tocando (`.\mvnw.cmd test -Dtest=SociosIntegrationTest`). La ejecución completa contra Neon tarda unos 20 minutos y comparte la base con los datos reales: para la suite completa, usar la CI de GitHub.
+- Hacer un respaldo con `.\respaldo.ps1` antes de cada migración y periódicamente ([operacion.md](operacion.md), sección 4).
 
 ## Simulador de fechas
 
 Sirve para probar el paso de los días sin esperar. Está en `main`, y solo se activa si se arranca con este script; el programa normal no lo usa.
 
-1. Apagar el backend normal, porque usan el mismo puerto.
-2. Ejecutar `.\simulacion.ps1` desde la raíz. Crea la base `janery_simulacion` en la rama a la que apunte el `.env`, si no existe.
+1. Ejecutar `.\simulacion.ps1` desde la raíz. Arranca en el puerto 8081, así que puede correr junto al backend normal (8080). Crea la base `janery_simulacion` en la rama a la que apunte el `.env`, si no existe.
+2. Arrancar su frontend: `cd frontend; npm run simulador` (http://localhost:4201).
 3. Iniciar sesión con el presidente y usar la barra "Modo simulación" de la parte superior.
 4. Para repetir una prueba: `.\simulacion.ps1 -Reiniciar`, que borra los datos simulados y vuelve a la fecha real.
 

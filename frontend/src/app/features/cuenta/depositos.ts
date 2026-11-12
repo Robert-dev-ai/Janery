@@ -43,7 +43,7 @@ import { mensajeDeError } from '../../shared/utils/errores';
       @if (lista.length) {
         <div class="tabla">
           <table>
-            <thead><tr><th>Código</th><th>Fecha</th><th class="num">Importe</th><th>Medio</th><th>Comprobante</th><th>Estado</th><th>Detalle</th><th>Acción</th></tr></thead>
+            <thead><tr><th scope="col">Código</th><th scope="col">Fecha</th><th scope="col" class="num">Importe</th><th scope="col">Medio</th><th scope="col">Comprobante</th><th scope="col">Estado</th><th scope="col">Detalle</th><th scope="col">Acción</th></tr></thead>
             <tbody>
               @for (s of lista; track s.id) {
                 <tr>

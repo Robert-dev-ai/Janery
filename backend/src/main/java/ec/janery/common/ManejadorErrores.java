@@ -1,10 +1,10 @@
 package ec.janery.common;
 
 import java.util.List;
-import java.util.UUID;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.ConcurrencyFailureException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
@@ -48,6 +48,17 @@ public class ManejadorErrores {
         return respuesta(HttpStatus.CONFLICT, "CONFLICTO", "La operación entra en conflicto con datos existentes", List.of());
     }
 
+    /**
+     * Interbloqueo o espera de bloqueo cancelada por PostgreSQL. La transacción se deshizo entera: repetir la operación,
+     * con la misma clave de idempotencia, es seguro.
+     */
+    @ExceptionHandler(ConcurrencyFailureException.class)
+    ResponseEntity<ApiError> concurrencia(ConcurrencyFailureException e) {
+        log.warn("Operación simultánea revertida: {}", e.getMostSpecificCause().getMessage());
+        return respuesta(HttpStatus.CONFLICT, "OPERACION_SIMULTANEA",
+                "Otra operación cambió estos datos al mismo tiempo. Intente de nuevo", List.of());
+    }
+
     @ExceptionHandler(NoResourceFoundException.class)
     ResponseEntity<ApiError> rutaInexistente(NoResourceFoundException e) {
         return respuesta(HttpStatus.NOT_FOUND, "NO_ENCONTRADO", "Recurso no encontrado", List.of());
@@ -66,7 +77,7 @@ public class ManejadorErrores {
         if (e instanceof org.springframework.http.converter.HttpMessageNotReadableException) {
             return respuesta(HttpStatus.BAD_REQUEST, "SOLICITUD_INVALIDA", "Solicitud no válida", List.of());
         }
-        String correlacion = UUID.randomUUID().toString();
+        String correlacion = CorrelacionFiltro.actual();
         log.error("Error inesperado [{}]", correlacion, e);
         return ResponseEntity.internalServerError()
                 .body(new ApiError("ERROR_INTERNO", "Ocurrió un error interno", List.of(), correlacion));
@@ -74,6 +85,6 @@ public class ManejadorErrores {
 
     private ResponseEntity<ApiError> respuesta(HttpStatusCode status, String codigo, String mensaje, List<String> detalles) {
         return ResponseEntity.status(status)
-                .body(new ApiError(codigo, mensaje, detalles, UUID.randomUUID().toString()));
+                .body(new ApiError(codigo, mensaje, detalles, CorrelacionFiltro.actual()));
     }
 }
