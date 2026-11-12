@@ -1,0 +1,44 @@
+# Publicación en Render (plan gratuito). Pasos y explicación: docs/despliegue.md, sección 8.
+# Aquí no van secretos: los valores con sync: false se escriben a mano en el panel de Render.
+services:
+  - type: web
+    name: janery
+    runtime: docker
+    plan: free
+    # Junto a la base de Neon (us-east-2, Ohio).
+    region: ohio
+    branch: main
+    autoDeploy: true
+    dockerfilePath: ./Dockerfile
+    # No toca la base: así Render ni el visitante automático despiertan a Neon.
+    healthCheckPath: /api/v1/public/estado
+    envVars:
+      - key: JANERY_DB_HOST
+        sync: false
+      - key: JANERY_DB_PORT
+        value: "5432"
+      - key: JANERY_DB_NAME
+        value: neondb
+      - key: JANERY_DB_SCHEMA
+        value: janery
+      - key: JANERY_DB_USER
+        sync: false
+      - key: JANERY_DB_PASSWORD
+        sync: false
+      - key: JANERY_DB_SSLMODE
+        value: require
+      - key: JANERY_DB_CHANNEL_BINDING
+        value: require
+      # Clave de sesión propia de la instancia publicada, generada por Render.
+      - key: JANERY_JWT_SECRET
+        generateValue: true
+      # La dirección pública, por ejemplo https://janery.onrender.com
+      - key: JANERY_CORS_ORIGINS
+        sync: false
+      - key: JANERY_COOKIE_SEGURA
+        value: "true"
+      - key: JANERY_FLYWAY_ENABLED
+        value: "true"
+      # El actuator queda en un puerto interno que Render no publica.
+      - key: MANAGEMENT_SERVER_PORT
+        value: "9090"

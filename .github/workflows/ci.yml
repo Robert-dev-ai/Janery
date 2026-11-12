@@ -75,3 +75,17 @@ jobs:
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - name: Probar
         run: npx ng test --watch=false --browsers=ChromeHeadless
+
+  # La misma imagen que publica Render (render.yaml): si no construye aquí, tampoco allá.
+  imagen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Construir la imagen
+        run: docker build -t janery .
+      # La imagen final solo tiene el JRE: la herramienta jar está en la etapa de construcción.
+      - name: Comprobar que incluye el frontend
+        run: |
+          docker build --target backend -t janery-construccion .
+          docker run --rm --entrypoint jar janery-construccion tf /app/janery.jar | grep -q "BOOT-INF/classes/static/index.html"

@@ -15,6 +15,9 @@ spring:
     password: ${JANERY_DB_PASSWORD:}
     hikari:
       connection-timeout: 5000
+      # Sin conexiones abiertas en reposo: así Neon puede suspenderse y no gasta horas de cómputo.
+      minimum-idle: ${JANERY_DB_MIN_IDLE:0}
+      idle-timeout: 60000
       # El proxy de Neon ignora currentSchema: las consultas nativas dependen de esto.
       connection-init-sql: SET search_path TO ${JANERY_DB_SCHEMA:janery}
   jpa:
@@ -34,7 +37,8 @@ spring:
     clean-disabled: true
 
 server:
-  port: ${JANERY_SERVER_PORT:8080}
+  # PORT lo define el hosting (Render).
+  port: ${JANERY_SERVER_PORT:${PORT:8080}}
   # Comprime las respuestas JSON grandes (listados, informes). Los eventos en vivo no se comprimen.
   compression:
     enabled: true
