@@ -72,26 +72,17 @@ public class AuthController {
     public record RecuperarRequest(@NotBlank @Size(max = 254) String identificador) {
     }
 
-    /** CORREO: se le envió un enlace (si existe). PRESIDENCIA: el pedido le llegó a la presidencia. */
-    public record RecuperarResponse(RecuperacionService.Medio medio) {
-    }
-
-    public record RestablecerRequest(@NotBlank @Size(max = 100) String token, @NotBlank @Size(min = 8, max = 72) String nueva) {
-    }
-
     private static final String COOKIE = "janery_refresh";
     private static final String RUTA_COOKIE = "/api/v1/auth";
 
     private final AuthService service;
-    private final RecuperacionService recuperacion;
     private final FotoService fotos;
     private final JdbcClient jdbc;
     private final boolean cookieSegura;
 
-    AuthController(AuthService service, RecuperacionService recuperacion, FotoService fotos, JdbcClient jdbc,
+    AuthController(AuthService service, FotoService fotos, JdbcClient jdbc,
             @Value("${janery.cookie-segura}") boolean cookieSegura) {
         this.service = service;
-        this.recuperacion = recuperacion;
         this.fotos = fotos;
         this.jdbc = jdbc;
         this.cookieSegura = cookieSegura;
@@ -151,15 +142,8 @@ public class AuthController {
 
     @PostMapping("/recuperar")
     @ResponseStatus(HttpStatus.ACCEPTED)
-    public RecuperarResponse recuperar(@Valid @RequestBody RecuperarRequest r) {
-        return new RecuperarResponse(recuperacion.solicitar(r.identificador()));
-    }
-
-    /** Con el enlace del correo: elige la contraseña nueva y desbloquea el acceso. */
-    @PostMapping("/recuperar/confirmar")
-    @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void restablecer(@Valid @RequestBody RestablecerRequest r) {
-        recuperacion.restablecer(r.token(), r.nueva());
+    public void recuperar(@Valid @RequestBody RecuperarRequest r) {
+        service.solicitarRestablecimiento(r.identificador());
     }
 
     @GetMapping("/me")

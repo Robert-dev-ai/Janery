@@ -82,17 +82,3 @@ El plan gratuito de Render apaga el servicio tras 15 minutos sin visitas, y la s
 5. Crear la tarea en cron-job.org (cada 10 minutos) con la dirección de estado.
 
 Los planes gratuitos cambian: confirmar las condiciones vigentes de Render, Neon y cron-job.org antes de publicar.
-
-## 9. Recuperar la contraseña por correo (Brevo)
-
-Quien olvida su contraseña, o bloqueó su acceso, recibe un enlace en su correo; vence en 30 minutos y sirve una vez. Sin esta configuración, o si el envío falla, el pedido le llega a la presidencia como antes.
-
-El plan gratuito de Render bloquea la salida por SMTP (puertos 25, 465 y 587) desde el 26/09/2025, así que Gmail por SMTP no funciona publicado. Brevo envía por HTTPS y tiene plan gratuito (300 correos al día).
-
-1. Crear una cuenta en [brevo.com](https://www.brevo.com).
-2. En **Senders, Domains & Dedicated IPs → Senders**, agregar el correo remitente (por ejemplo el Gmail de la caja) y confirmarlo con el código que llega a ese correo.
-3. En **SMTP & API → API Keys**, generar una clave de API (empieza por `xkeysib-`). Se muestra una sola vez.
-4. En Render, en el servicio `janery` → **Environment**, escribir `JANERY_BREVO_API_KEY` (la clave), `JANERY_CORREO_REMITENTE` (el correo verificado) y `JANERY_URL_PUBLICA` (la dirección pública, por ejemplo `https://janery.onrender.com`). Guardar: Render vuelve a desplegar.
-5. Probar con «¿Olvidó su contraseña?». Si no llega, revisar spam; los envíos se ven en Brevo, en **Transactional → Logs**.
-
-Un remitente `@gmail.com` no se puede autenticar desde Brevo: para que llegue, Brevo cambia la dirección por una suya (algo como `caja@5000001.brevosend.com`), con el nombre «Janery». Llega, pero puede caer en spam. Con un dominio propio autenticado en Brevo (DKIM y DMARC) sale con la dirección propia y llega mejor.

@@ -48,14 +48,6 @@ public class Usuario {
         this.estado = "ACTIVO";
     }
 
-    /** Contraseña elegida por la persona con el enlace de su correo: la eligió ella, así que no hay que cambiarla otra vez. */
-    public void recuperar(String hashContrasena) {
-        this.hashContrasena = hashContrasena;
-        this.debeCambiarContrasena = false;
-        this.intentosFallidos = 0;
-        this.estado = "ACTIVO";
-    }
-
     public void cambiarCorreo(String correo) {
         this.correo = correo;
     }

@@ -6,7 +6,7 @@ import { environment } from '../../../environments/environment';
 import { AuthService } from './auth';
 
 /** Rutas públicas de la sesión: un 401 en ellas es la respuesta esperada, no un token vencido que renovar. */
-const RUTAS_SIN_TOKEN = ['/auth/login', '/auth/registro', '/auth/register', '/auth/refresh', '/auth/logout', '/auth/recuperar', '/auth/recuperar/confirmar'];
+const RUTAS_SIN_TOKEN = ['/auth/login', '/auth/registro', '/auth/register', '/auth/refresh', '/auth/logout', '/auth/recuperar'];
 
 function conToken(req: HttpRequest<unknown>, token: string | null) {
   return token ? req.clone({ setHeaders: { Authorization: `Bearer ${token}` } }) : req;

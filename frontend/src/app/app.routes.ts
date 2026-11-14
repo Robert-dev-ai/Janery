@@ -34,11 +34,6 @@ export const routes: Routes = [
         data: { publica: true },
         loadComponent: () => import('./features/auth/recuperar-contrasena').then((m) => m.RecuperarContrasena),
       },
-      {
-        path: 'restablecer-contrasena',
-        data: { publica: true },
-        loadComponent: () => import('./features/auth/restablecer-contrasena').then((m) => m.RestablecerContrasena),
-      },
     ],
   },
   {

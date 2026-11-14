@@ -70,13 +70,6 @@ janery:
   cookie-segura: ${JANERY_COOKIE_SEGURA:true}
   cors:
     allowed-origins: ${JANERY_CORS_ORIGINS:http://localhost:4200}
-  # Dirección pública de la página: va en los enlaces de los correos.
-  url-publica: ${JANERY_URL_PUBLICA:http://localhost:4200}
-  # Correos por la API HTTPS de Brevo (Render gratis bloquea SMTP). Vacíos: la recuperación llega a la presidencia.
-  correo:
-    brevo-api-key: ${JANERY_BREVO_API_KEY:}
-    remitente: ${JANERY_CORREO_REMITENTE:}
-    remitente-nombre: Janery
   admin-inicial:
     correo: ${JANERY_ADMIN_CORREO:}
     contrasena: ${JANERY_ADMIN_PASSWORD:}
