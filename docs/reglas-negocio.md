@@ -321,6 +321,7 @@ El propietario autorizó el 30/10/2026 usar valores provisionales de tasas, enca
 **Definido por el propietario (02/11/2026):**
 
 - **Acceso:** se entra con el correo o la cédula. Tres contraseñas incorrectas seguidas bloquean el acceso; la presidencia lo desbloquea dando una contraseña temporal. Quien olvida su contraseña la pide desde «¿Olvidó su contraseña?». La presidencia puede corregir un correo mal escrito.
+- **Cuenta creada por la presidencia (13/11/2026):** para quien no se registra solo, la presidencia (`ADMIN_USUARIOS`) la crea desde Usuarios con correo, nombres, apellidos, cédula, teléfono y dirección. Al crearla se registra el pago de apertura en efectivo y la cuenta principal queda activa de una vez, así que ya se le pueden tramitar o registrar créditos. Entra con una contraseña temporal, que se muestra una sola vez, y al entrar elige una nueva.
 - **Datos:** la cédula tiene 10 números. El teléfono lleva el prefijo del país, +593 por defecto: con 0 inicial caben 10 números y sin él 9, y el 0 no se guarda. La fecha de nacimiento exige mayoría de edad.
 - **Comprobantes:** todo dinero que llega de fuera (apertura y depósitos) se respalda con su comprobante.
 - **Retiros a banco:** Banco Pichincha y Banco Guayaquil sin costo. Otro banco o cooperativa cuesta USD 0,41 (`COSTO_TRANSFERENCIA_OTROS`), lo que cobra el banco.
@@ -373,9 +374,10 @@ El propietario autorizó el 30/10/2026 usar valores provisionales de tasas, enca
 
 ## 18. Créditos anteriores a Janery
 
-**Definido por el propietario (02/11/2026):** los créditos a letras dados antes de usar Janery tienen tasas y plazos distintos entre sí. Se registran uno por uno, con `REGISTRAR_CREDITOS_EXISTENTES` (presidencia), en la pantalla de créditos.
+**Definido por el propietario (02/11/2026):** los créditos a letras dados antes de usar Janery tienen tasas y plazos distintos entre sí. Se registran uno por uno, con `REGISTRAR_CREDITOS_EXISTENTES` (presidencia y, desde el 13/11/2026, tesorería), en la pantalla de créditos.
 
 - **Datos:** persona (con cuenta principal activa), modalidad, importe, plazo, interés y desgravamen en % mensual sobre el importe, fecha en que recibió el dinero, letras ya pagadas completas, encaje retenido en dólares y si llevaba ahorro letras. Con ahorro letras, las letras se calculan como en la sección 10; sin él, la letra es capital, interés y desgravamen, con centavos.
+- **Lo que debe hoy (13/11/2026):** opcionalmente, el capital que la persona debe hoy. Sin él, debe justo el capital de sus letras pendientes. Si debe menos porque abonó de más, la diferencia cuenta como capital ya pagado de las letras siguientes, desde la primera pendiente, como un pago parcial: esas letras siguen cobrando su interés, desgravamen y ahorro. No puede deber más capital que el de sus letras pendientes: eso significaría que pagó menos letras.
 - **Lo ya ocurrido no se repite:** no entra dinero a la cuenta, no se cobra el encaje y lo cobrado antes no se reparte como ganancia. Las letras pagadas quedan pagadas en su fecha de vencimiento.
 - **Balance:** entran solo los saldos del día del registro: el capital pendiente en 1.4 y el encaje retenido y el ahorro letras acumulado en 2.3. Hasta registrar también el dinero y los aportes que ya existían, el balance mostrará esa diferencia.
 - **Desde el registro** se cobra como cualquier crédito: pagos, mora, precancelación y devolución de encaje y ahorro letras al terminar. Las letras ya vencidas que no estén entre las pagadas cuentan como atrasadas; a un cliente le corre la mora desde cada vencimiento, con la tasa vigente al registrarlo.

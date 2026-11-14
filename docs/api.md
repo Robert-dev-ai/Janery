@@ -45,7 +45,8 @@
 - `POST /creditos/emergentes/solicitudes`
 - `POST /creditos/emergentes/{id}/disposiciones` (para cupo de socio, sujeto a reglas)
 - `POST /creditos/{id}/pagos`
-- Créditos anteriores a Janery (`REGISTRAR_CREDITOS_EXISTENTES`, reglas en `reglas-negocio.md`, sección 18): `GET /admin/creditos/existentes/personas?buscar=`, `POST /admin/creditos/existentes/personas/{usuarioId}/vista-previa` (sin guardar) y `POST /admin/creditos/existentes/personas/{usuarioId}` (requiere `Idempotency-Key`).
+- Créditos anteriores a Janery (`REGISTRAR_CREDITOS_EXISTENTES`, reglas en `reglas-negocio.md`, sección 18): `GET /admin/creditos/existentes/personas?buscar=`, `POST /admin/creditos/existentes/personas/{usuarioId}/vista-previa` (sin guardar) y `POST /admin/creditos/existentes/personas/{usuarioId}` (requiere `Idempotency-Key`). `capitalDebe` es opcional: el capital que debe hoy, si es menos que el de sus letras pendientes.
+- Crear la cuenta de una persona (`ADMIN_USUARIOS`): `POST /admin/usuarios` con `correo`, `nombres`, `apellidos`, `identificacion`, `telefono` y `direccion`. Abre su cuenta principal con la apertura cobrada en efectivo y responde `usuarioId`, `cuenta` y `contrasenaTemporal` (solo esta vez).
 
 ### Pagar
 - Reglas en `reglas-negocio.md`, sección 20. Requiere cuenta principal activa.

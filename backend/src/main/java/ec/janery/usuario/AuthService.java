@@ -95,6 +95,22 @@ public class AuthService {
         return id;
     }
 
+    /**
+     * El personal crea la cuenta de otra persona. Entra con una contraseña temporal, que se muestra una sola vez a quien
+     * la crea, y al entrar debe elegir una suya, como tras un restablecimiento.
+     */
+    @Transactional
+    public Creado crearConTemporal(String correo, PersonaController.PerfilRequest perfil) {
+        String temporal = contrasenaTemporal();
+        Long id = registrarConPerfil(correo, temporal, perfil);
+        Usuario usuario = usuarios.findById(id).orElseThrow();
+        usuario.restablecer(usuario.getHashContrasena());
+        return new Creado(id, temporal);
+    }
+
+    public record Creado(Long usuarioId, String contrasenaTemporal) {
+    }
+
     /** Sin transacción exterior: el intento fallido debe quedar auditado aunque se lance la excepción. */
     public Sesion iniciarSesion(String identificador, String contrasena) {
         // Un correo siempre lleva arroba; una cédula, nunca.

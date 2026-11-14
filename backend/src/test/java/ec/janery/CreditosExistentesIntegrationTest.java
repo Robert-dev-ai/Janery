@@ -126,7 +126,60 @@ class CreditosExistentesIntegrationTest {
                 .andExpect(status().isForbidden());
     }
 
+    @Test
+    void conLoQueDebeHoyLaDiferenciaQuedaComoCapitalAbonado() throws Exception {
+        Persona p = persona();
+        depositar(p, "1000.00");
+        // 1000 a 10 meses: letras de 126 (100 de capital). Con 2 pagadas faltan 800 de capital, pero debe 650:
+        // abonó 150, que cubren el capital de la letra 3 y la mitad del de la 4.
+        LocalDate inicio = LocalDate.now().minusMonths(3).plusDays(5);
+        String cuerpo = conDeuda(cuerpo("1000.00", 10, "2", "0.5", true, inicio, 2, "0"), "650.00");
+
+        mvc.perform(post(ruta(p) + "/vista-previa").header(HttpHeaders.AUTHORIZATION, bearer(presidente()))
+                        .contentType(MediaType.APPLICATION_JSON).content(cuerpo))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.capitalPendiente").value(650.00))
+                .andExpect(jsonPath("$.abonoCapital").value(150.00))
+                .andExpect(jsonPath("$.totalPendiente").value(858.00))
+                .andExpect(jsonPath("$.letrasAtrasadas").value(0));
+
+        // Debe más de lo que dicen sus letras: los datos no cuadran.
+        registrar(p, conDeuda(cuerpo("1000.00", 10, "2", "0.5", true, inicio, 2, "0"), "900.00"), UUID.randomUUID().toString())
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.codigo").value("DEUDA_MAYOR_QUE_LETRAS"));
+
+        long id = leer(registrar(p, cuerpo, UUID.randomUUID().toString()).andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString()).get("id").asLong();
+        assertThat(credito(p, id).get("capitalPendiente").decimalValue()).isEqualByComparingTo("650");
+        assertThat(jdbc.queryForObject("SELECT SUM(importe) FROM desembolsos_credito WHERE credito_id = ?", BigDecimal.class, id))
+                .isEqualByComparingTo("650");
+
+        // La letra 3 ya tiene su capital: solo le falta interés, desgravamen y ahorro (26).
+        pagar(p, id).andExpect(status().isOk());
+        assertThat(saldo(p)).isEqualByComparingTo("974");
+        assertThat(credito(p, id).get("capitalPendiente").decimalValue()).isEqualByComparingTo("650");
+    }
+
+    @Test
+    void tesoreriaTambienRegistraCreditosAntiguos() throws Exception {
+        Persona p = persona();
+        Persona tesorero = persona();
+        mvc.perform(post("/api/v1/admin/usuarios/" + tesorero.usuarioId() + "/cargos/TESORERIA")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(presidente())))
+                .andExpect(status().isNoContent());
+        String correo = jdbc.queryForObject("SELECT correo FROM usuarios WHERE id = ?", String.class, tesorero.usuarioId());
+        String token = login(correo, "Clave-Segura-1");
+        mvc.perform(post(ruta(p)).header(HttpHeaders.AUTHORIZATION, bearer(token)).header("Idempotency-Key", UUID.randomUUID().toString())
+                        .contentType(MediaType.APPLICATION_JSON).content(cuerpo("500.00", 5, "2", "0", true, LocalDate.now(), 0, "0")))
+                .andExpect(status().isCreated());
+    }
+
     // --- Apoyo
+
+    private String conDeuda(String cuerpo, String deuda) throws Exception {
+        com.fasterxml.jackson.databind.node.ObjectNode nodo = (com.fasterxml.jackson.databind.node.ObjectNode) json.readTree(cuerpo);
+        nodo.put("capitalDebe", new BigDecimal(deuda));
+        return json.writeValueAsString(nodo);
+    }
 
     private String cuerpo(String importe, int plazo, String interes, String desgravamen, boolean ahorro, LocalDate inicio,
             int pagadas, String encaje) throws Exception {

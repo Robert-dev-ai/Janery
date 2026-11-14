@@ -9,10 +9,11 @@ import { Paginador } from '../../shared/components/paginador';
 import { DialogoService } from '../../shared/components/dialogo';
 import { nombreCargo } from '../../shared/utils/etiquetas';
 import { mensajeDeError } from '../../shared/utils/errores';
+import { CrearCuentaForm } from './crear-cuenta';
 
 @Component({
   selector: 'app-admin-usuarios',
-  imports: [Estado, FormsModule, Paginador],
+  imports: [CrearCuentaForm, Estado, FormsModule, Paginador],
   template: `
     <h1>Usuarios</h1>
     <p class="suave">Lo que puede hacer cada cargo se define en Roles y permisos.</p>
@@ -24,10 +25,16 @@ import { mensajeDeError } from '../../shared/utils/errores';
         {{ nombresPendientes() }}.
       </p>
     }
+    @if (creando()) {
+      <app-crear-cuenta (creada)="cargar(0)" (cerrar)="creando.set(false)" />
+    }
     <div class="herramientas">
       <label>Buscar en esta página
         <input type="search" placeholder="Nombre, cédula, correo o cargo" [ngModel]="busqueda()" (ngModelChange)="busqueda.set($event)" />
       </label>
+      @if (!creando()) {
+        <button type="button" (click)="creando.set(true)">Crear cuenta</button>
+      }
     </div>
     @if (datos(); as d) {
       <div class="tabla">
@@ -130,6 +137,7 @@ export class AdminUsuarios implements OnInit {
   protected readonly temporal = signal<{ usuarioId: number; clave: string } | null>(null);
   protected readonly copiada = signal(false);
   protected readonly editando = signal<number | null>(null);
+  protected readonly creando = signal(false);
   protected nombres = '';
   protected apellidos = '';
 

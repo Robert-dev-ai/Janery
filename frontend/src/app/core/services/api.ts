@@ -232,6 +232,23 @@ export interface Credito {
   suministros: number | null;
 }
 
+export interface NuevoUsuario {
+  correo: string;
+  nombres: string;
+  apellidos: string;
+  identificacion: string;
+  telefono: string;
+  direccion: string;
+}
+
+export interface UsuarioCreado {
+  usuarioId: number;
+  /** Número de su cuenta principal, ya activa. */
+  cuenta: string;
+  /** Solo se recibe esta vez. */
+  contrasenaTemporal: string;
+}
+
 /** Tasas en % mensual sobre el importe; el encaje, en dólares; la fecha, AAAA-MM-DD. */
 export interface CreditoExistente {
   modalidad: string;
@@ -243,6 +260,8 @@ export interface CreditoExistente {
   fechaInicio: string;
   letrasPagadas: number;
   encaje: number;
+  /** Capital que debe hoy; null si es justo el de sus letras pendientes. */
+  capitalDebe: number | null;
   nota: string;
 }
 
@@ -252,6 +271,8 @@ export interface VistaCreditoExistente {
   letrasPagadas: number;
   letrasAtrasadas: number;
   capitalPendiente: number;
+  /** Capital que ya abonó además de sus letras completas. */
+  abonoCapital: number;
   ahorroAcumulado: number;
   encaje: number;
   tasaMora: number;
@@ -1076,6 +1097,11 @@ export class ApiService {
 
   recibirAporteCajaChica(socioId: number, periodos: string[], clave: string): Observable<unknown> {
     return this.http.post(`${this.base}/caja-chica/aportes`, { socioId, periodos }, conClave(clave));
+  }
+
+  /** Crea el usuario con su cuenta principal activa (apertura cobrada en efectivo) y una contraseña temporal. */
+  crearUsuario(datos: NuevoUsuario): Observable<UsuarioCreado> {
+    return this.http.post<UsuarioCreado>(`${this.base}/admin/usuarios`, datos);
   }
 
   restablecerContrasena(usuarioId: number): Observable<{ contrasenaTemporal: string }> {
