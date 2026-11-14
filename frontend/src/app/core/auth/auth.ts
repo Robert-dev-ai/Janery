@@ -158,9 +158,17 @@ export class AuthService {
     );
   }
 
-  /** Sin correo saliente: la petición le llega a la presidencia, que entrega una contraseña temporal. */
-  pedirRestablecimiento(identificador: string): Observable<void> {
-    return this.http.post<void>(`${this.api}/recuperar`, { identificador });
+  /**
+   * CORREO: si los datos existen, le llega un enlace a su correo. PRESIDENCIA: sin correo configurado, el pedido le llega
+   * a la presidencia, que entrega una contraseña temporal.
+   */
+  pedirRestablecimiento(identificador: string): Observable<{ medio: 'CORREO' | 'PRESIDENCIA' }> {
+    return this.http.post<{ medio: 'CORREO' | 'PRESIDENCIA' }>(`${this.api}/recuperar`, { identificador });
+  }
+
+  /** Con el enlace del correo: elige la contraseña nueva y desbloquea el acceso. */
+  restablecerConEnlace(token: string, nueva: string): Observable<void> {
+    return this.http.post<void>(`${this.api}/recuperar/confirmar`, { token, nueva });
   }
 
   foto(): Observable<Blob> {

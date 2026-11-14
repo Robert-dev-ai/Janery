@@ -35,6 +35,14 @@ services:
       # La dirección pública, por ejemplo https://janery.onrender.com
       - key: JANERY_CORS_ORIGINS
         sync: false
+      # Recuperar la contraseña por correo (docs/despliegue.md, sección 9). Sin ellos, el pedido llega a la presidencia.
+      # La dirección pública, la misma de JANERY_CORS_ORIGINS: va en el enlace del correo.
+      - key: JANERY_URL_PUBLICA
+        sync: false
+      - key: JANERY_BREVO_API_KEY
+        sync: false
+      - key: JANERY_CORREO_REMITENTE
+        sync: false
       - key: JANERY_COOKIE_SEGURA
         value: "true"
       - key: JANERY_FLYWAY_ENABLED

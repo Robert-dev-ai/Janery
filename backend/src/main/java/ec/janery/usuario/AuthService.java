@@ -325,7 +325,7 @@ public class AuthService {
         return new Sesion(access, expira, refresh, duracionRefresh);
     }
 
-    private static String hash(String valor) {
+    static String hash(String valor) {
         try {
             byte[] digest = MessageDigest.getInstance("SHA-256").digest(valor.getBytes(StandardCharsets.UTF_8));
             return HexFormat.of().formatHex(digest);

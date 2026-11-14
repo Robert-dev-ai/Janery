@@ -337,7 +337,8 @@ El propietario autorizó el 30/10/2026 usar valores provisionales de tasas, enca
 
 **Criterios del desarrollo, pendientes de confirmación:**
 
-- **Recuperar contraseña sin correo:** Janery no envía correos. El pedido le llega a la presidencia, que genera una contraseña temporal de 10 caracteres y se la entrega en persona o por mensaje. Al entrar con ella se obliga a elegir otra.
+- **Recuperar contraseña por correo (13/11/2026):** con el envío de correos configurado (`docs/despliegue.md`, sección 9), «¿Olvidó su contraseña?» envía al correo registrado un enlace que vence en 30 minutos y sirve una vez; con él se elige la contraseña nueva y se desbloquea el acceso, sin pasar por la presidencia. Cierra las sesiones abiertas. No se envía otro enlace a la misma persona en menos de 2 minutos, y la respuesta no revela si el correo o la cédula existen. Si el envío falla, el pedido llega a la presidencia.
+- **Recuperar contraseña sin correo:** sin el envío de correos configurado, Janery no envía correos. El pedido le llega a la presidencia, que genera una contraseña temporal de 10 caracteres y se la entrega en persona o por mensaje. Al entrar con ella se obliga a elegir otra.
 - **Cédula exacta:** se exigen exactamente 10 números (no «hasta 10»), como toda cédula ecuatoriana.
 - **Teléfono en Ecuador:** celular de 9 números sin el 0 (empieza con 9); fijo de 8. En otros países, de 6 a 12.
 - **Comprobante obligatorio solo en transferencias:** sin él no se puede confirmar. En efectivo es opcional, porque se entrega en mano. Se aceptan PDF, JPG, PNG y WEBP de hasta 10 MB, comprobados por su contenido.

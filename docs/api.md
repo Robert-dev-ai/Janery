@@ -46,6 +46,7 @@
 - `POST /creditos/emergentes/{id}/disposiciones` (para cupo de socio, sujeto a reglas)
 - `POST /creditos/{id}/pagos`
 - Créditos anteriores a Janery (`REGISTRAR_CREDITOS_EXISTENTES`, reglas en `reglas-negocio.md`, sección 18): `GET /admin/creditos/existentes/personas?buscar=`, `POST /admin/creditos/existentes/personas/{usuarioId}/vista-previa` (sin guardar) y `POST /admin/creditos/existentes/personas/{usuarioId}` (requiere `Idempotency-Key`). `capitalDebe` es opcional: el capital que debe hoy, si es menos que el de sus letras pendientes.
+- Recuperar la contraseña (público): `POST /auth/recuperar` con `identificador` (correo o cédula) responde 202 con `medio` (`CORREO`: se envió un enlace si existe; `PRESIDENCIA`: sin correo configurado). `POST /auth/recuperar/confirmar` con `token` (del enlace) y `nueva` responde 204, o 400 `ENLACE_INVALIDO` si se usó o venció.
 - Crear la cuenta de una persona (`ADMIN_USUARIOS`): `POST /admin/usuarios` con `correo`, `nombres`, `apellidos`, `identificacion`, `telefono` y `direccion`. Abre su cuenta principal con la apertura cobrada en efectivo y responde `usuarioId`, `cuenta` y `contrasenaTemporal` (solo esta vez).
 
 ### Pagar

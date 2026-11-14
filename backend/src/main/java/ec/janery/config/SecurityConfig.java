@@ -52,7 +52,8 @@ public class SecurityConfig {
                         .dispatcherTypeMatchers(DispatcherType.ASYNC).permitAll()
                         .requestMatchers("/actuator/health", "/api/v1/public/**").permitAll()
                         .requestMatchers("/api/v1/auth/register", "/api/v1/auth/registro", "/api/v1/auth/login",
-                                "/api/v1/auth/refresh", "/api/v1/auth/logout", "/api/v1/auth/recuperar").permitAll()
+                                "/api/v1/auth/refresh", "/api/v1/auth/logout", "/api/v1/auth/recuperar",
+                                "/api/v1/auth/recuperar/confirmar").permitAll()
                         // El frontend publicado en el mismo dominio (FrontendConfig): archivos públicos, sin datos.
                         .requestMatchers(SecurityConfig::esFrontend).permitAll()
                         .anyRequest().authenticated())
