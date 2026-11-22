@@ -43,7 +43,7 @@ public class ReporteService {
 
     private static final String ESTADO_CUENTA_SQL = """
             SELECT to_char(m.creado_en AT TIME ZONE 'America/Guayaquil', 'YYYY-MM-DD HH24:MI') AS "Fecha",
-                   c.numero AS "Cuenta", p.nombres || ' ' || p.apellidos AS "Titular", m.concepto AS "Concepto",
+                   c.numero AS "Cuenta", p.apellidos || ' ' || p.nombres AS "Titular", m.concepto AS "Concepto",
                    m.sentido AS "Sentido", m.importe AS "Importe", m.saldo_resultante AS "Saldo"
             FROM movimientos_cuenta m
             JOIN cuentas_principales c ON c.id = m.cuenta_id
@@ -69,7 +69,7 @@ public class ReporteService {
             new Reporte(new Definicion("ESTADO_CUENTAS", "Estado de cuentas", "Movimientos de todas las cuentas principales", true),
                     ESTADO_CUENTA_SQL + " ORDER BY m.id"),
             new Reporte(new Definicion("CONCILIACION", "Conciliación de saldos", "Saldo guardado de cada cuenta frente a la suma de su libro. La diferencia debe ser cero", false), """
-                    SELECT c.numero AS "Cuenta", p.nombres || ' ' || p.apellidos AS "Titular", c.estado AS "Estado",
+                    SELECT c.numero AS "Cuenta", p.apellidos || ' ' || p.nombres AS "Titular", c.estado AS "Estado",
                            c.saldo_disponible AS "Saldo guardado",
                            COALESCE(SUM(CASE WHEN m.sentido = 'ENTRADA' THEN m.importe ELSE -m.importe END), 0) AS "Saldo según libro",
                            c.saldo_disponible - COALESCE(SUM(CASE WHEN m.sentido = 'ENTRADA' THEN m.importe ELSE -m.importe END), 0) AS "Diferencia"
@@ -82,7 +82,7 @@ public class ReporteService {
             new Reporte(new Definicion("CREDITOS", "Créditos", "Todos los créditos y su saldo", false), """
                     SELECT CASE c.familia WHEN 'LETRAS' THEN 'CL-' WHEN 'EMERGENTE_CLIENTE' THEN 'CE-' WHEN 'EMERGENTE_SOCIO' THEN 'CS-'
                                 WHEN 'EMERGENTE_ESTACIONAL' THEN 'CP-' ELSE 'CR-' END || lpad(c.id::text, 5, '0') AS "Código",
-                           p.nombres || ' ' || p.apellidos AS "Titular", c.familia AS "Familia", c.modalidad AS "Modalidad",
+                           p.apellidos || ' ' || p.nombres AS "Titular", c.familia AS "Familia", c.modalidad AS "Modalidad",
                            c.perfil AS "Perfil", c.estado AS "Estado", c.importe AS "Importe", c.plazo_meses AS "Plazo (meses)",
                            c.tasa_interes AS "Tasa interés", c.tasa_desgravamen AS "Tasa desgravamen", c.unidad_tasa AS "Unidad",
                            c.capital_pendiente AS "Capital pendiente", c.fecha_inicio AS "Inicio"
@@ -90,7 +90,7 @@ public class ReporteService {
                     ORDER BY c.id
                     """),
             new Reporte(new Definicion("CUOTAS", "Cuotas de crédito", "Letras y su desglose, por fecha de vencimiento", true), """
-                    SELECT p.nombres || ' ' || p.apellidos AS "Titular", c.familia AS "Familia", q.numero AS "N.º",
+                    SELECT p.apellidos || ' ' || p.nombres AS "Titular", c.familia AS "Familia", q.numero AS "N.º",
                            q.vencimiento AS "Vencimiento", q.capital AS "Capital", q.interes AS "Interés",
                            q.fondo_desgravamen AS "Desgravamen", q.ahorro_letras AS "Ahorro letras", q.total AS "Total",
                            q.capital_pagado + q.interes_pagado + q.desgravamen_pagado + q.ahorro_pagado AS "Pagado",
@@ -113,13 +113,13 @@ public class ReporteService {
                     """),
             new Reporte(new Definicion("AHORROS", "Ahorros", "Ahorros normales y a plazo fijo", false), """
                     SELECT CASE WHEN a.tipo = 'PLAZO_FIJO' THEN 'PF-' ELSE 'AH-' END || lpad(a.id::text, 5, '0') AS "Código",
-                           p.nombres || ' ' || p.apellidos AS "Titular", a.tipo AS "Tipo", a.nombre AS "Nombre", a.estado AS "Estado",
+                           p.apellidos || ' ' || p.nombres AS "Titular", a.tipo AS "Tipo", a.nombre AS "Nombre", a.estado AS "Estado",
                            a.saldo AS "Saldo", a.tasa_anual AS "Tasa anual", a.plazo_meses AS "Plazo (meses)", a.vence_en AS "Vence"
                     FROM cuentas_ahorro a JOIN personas p ON p.id = a.persona_id
                     ORDER BY a.id
                     """),
             new Reporte(new Definicion("ENCAJES_LETRAS", "Encajes y ahorro letras", "Por cada crédito a letras aprobado", false), """
-                    SELECT p.nombres || ' ' || p.apellidos AS "Titular", c.modalidad AS "Modalidad", c.estado AS "Estado crédito",
+                    SELECT p.apellidos || ' ' || p.nombres AS "Titular", c.modalidad AS "Modalidad", c.estado AS "Estado crédito",
                            e.importe AS "Encaje", CASE WHEN e.devuelto_en IS NULL THEN 'RETENIDO' ELSE 'DEVUELTO' END AS "Estado encaje",
                            a.saldo AS "Ahorro letras"
                     FROM encajes_credito e
@@ -135,17 +135,17 @@ public class ReporteService {
                     SELECT nombre AS "Socio", tipo AS "Tipo", periodo AS "Periodo", importe AS "Importe",
                            to_char(creado_en AT TIME ZONE 'America/Guayaquil', 'YYYY-MM-DD') AS "Fecha"
                     FROM (
-                        SELECT p.nombres || ' ' || p.apellidos AS nombre, a.tipo, a.periodo, a.importe, a.creado_en
+                        SELECT p.apellidos || ' ' || p.nombres AS nombre, a.tipo, a.periodo, a.importe, a.creado_en
                         FROM aportes_socios a JOIN socios s ON s.id = a.socio_id JOIN personas p ON p.id = s.persona_id
                         UNION ALL
-                        SELECT p.nombres || ' ' || p.apellidos, 'CAJA_CHICA', a.periodo, a.importe, a.creado_en
+                        SELECT p.apellidos || ' ' || p.nombres, 'CAJA_CHICA', a.periodo, a.importe, a.creado_en
                         FROM aportes_caja_chica a JOIN socios s ON s.id = a.socio_id JOIN personas p ON p.id = s.persona_id
                     ) t
                     WHERE CAST(creado_en AT TIME ZONE 'America/Guayaquil' AS date) BETWEEN :desde AND :hasta
                     ORDER BY creado_en
                     """),
             new Reporte(new Definicion("PARTICIPACION_MENSUAL", "Evolución de la participación", "Por socio y mes con movimientos: valor inicial, variación y valor final", false), """
-                    SELECT p.nombres || ' ' || p.apellidos AS "Socio", t.mes AS "Mes",
+                    SELECT p.apellidos || ' ' || p.nombres AS "Socio", t.mes AS "Mes",
                            COALESCE(SUM(t.variacion) OVER w - t.variacion, 0) AS "Valor inicial",
                            t.variacion AS "Variación", SUM(t.variacion) OVER w AS "Valor final"
                     FROM (
@@ -155,10 +155,10 @@ public class ReporteService {
                     JOIN socios s ON s.id = t.socio_id
                     JOIN personas p ON p.id = s.persona_id
                     WINDOW w AS (PARTITION BY t.socio_id ORDER BY t.mes)
-                    ORDER BY "Socio", t.mes
+                    ORDER BY translate(lower(p.apellidos), 'áéíóúüñ', 'aeiouun'), translate(lower(p.nombres), 'áéíóúüñ', 'aeiouun'), p.id, t.mes
                     """),
             new Reporte(new Definicion("FONDO_PERSONAL", "Fondo personal por origen", "Valor de cada socio, separado en aportes iniciales, mensuales, personales y ganancias", false), """
-                    SELECT p.nombres || ' ' || p.apellidos AS "Socio",
+                    SELECT p.apellidos || ' ' || p.nombres AS "Socio",
                            COALESCE(SUM(v.importe) FILTER (WHERE v.tipo = 'APORTE_INICIAL'), 0) AS "Aportes iniciales",
                            COALESCE(SUM(v.importe) FILTER (WHERE v.tipo = 'APORTE_OBLIGATORIO'), 0) AS "Aportes mensuales",
                            COALESCE(SUM(v.importe) FILTER (WHERE v.tipo = 'APORTE_PERSONAL'), 0) AS "Aportes personales",
@@ -168,8 +168,8 @@ public class ReporteService {
                     FROM socios s
                     JOIN personas p ON p.id = s.persona_id
                     LEFT JOIN variaciones_participacion v ON v.socio_id = s.id
-                    GROUP BY s.id, p.nombres, p.apellidos
-                    ORDER BY "Socio"
+                    GROUP BY s.id, p.id, p.nombres, p.apellidos
+                    ORDER BY translate(lower(p.apellidos), 'áéíóúüñ', 'aeiouun'), translate(lower(p.nombres), 'áéíóúüñ', 'aeiouun'), p.id
                     """),
             new Reporte(new Definicion("RESERVA_DISTRIBUCION", "Cierres anuales", "Resultado, reserva separada y lo que llegó a los fondos personales en cada año cerrado", false), """
                     SELECT anio AS "Año", resultado_neto AS "Resultado neto", reserva AS "Reserva",

@@ -73,6 +73,12 @@ public final class HistorialSql {
         ACCIONES.put("CUPO_APROBADO", "Aprobó el retiro de cupo de");
         ACCIONES.put("CUPO_RECHAZADO", "Rechazó el retiro de cupo de");
         ACCIONES.put("APORTE_INICIAL", "Registró el aporte inicial de");
+        ACCIONES.put("CREDITO_EXISTENTE_REGISTRADO", "Registró un crédito anterior a Janery de");
+        ACCIONES.put("EMERGENTE_EXISTENTE_REGISTRADO", "Registró un emergente anterior a Janery de");
+        ACCIONES.put("CUPO_EXISTENTE_REGISTRADO", "Registró la deuda de cupo anterior a Janery de");
+        ACCIONES.put("AHORRO_ANTERIOR_REGISTRADO", "Registró un ahorro anterior a Janery de");
+        ACCIONES.put("APORTES_ANTERIORES_REGISTRADOS", "Registró los aportes anteriores a Janery de");
+        ACCIONES.put("SOCIO_DESDE_CORREGIDO", "Corrigió la fecha de ingreso como socio de");
         ACCIONES.put("APORTE_OBLIGATORIO", "Pagó su aporte mensual");
         ACCIONES.put("APORTE_PERSONAL", "Hizo un aporte personal");
         ACCIONES.put("APORTE_CAJA_CHICA", "Pagó su aporte a caja chica");

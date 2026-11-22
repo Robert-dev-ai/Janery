@@ -102,7 +102,7 @@ export class CrearCuentaForm {
     }
     const d = this.form.getRawValue();
     const datos = { ...d, correo: d.correo.trim(), nombres: d.nombres.trim(), apellidos: d.apellidos.trim(), direccion: d.direccion.trim() };
-    const nombre = `${datos.nombres} ${datos.apellidos}`;
+    const nombre = `${datos.apellidos} ${datos.nombres}`;
     const pregunta = `¿Crear la cuenta de ${nombre} (cédula ${datos.identificacion})? Se registra que pagó la apertura en efectivo y su cuenta principal queda activa.`;
     if (!(await this.dialogo.confirmar(pregunta, 'Crear cuenta'))) {
       return;

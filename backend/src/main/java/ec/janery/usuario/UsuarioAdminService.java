@@ -8,7 +8,6 @@ import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Sort;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -73,7 +72,7 @@ public class UsuarioAdminService implements ApplicationRunner {
     @Transactional(readOnly = true)
     public Pagina<UsuarioResumen> listar(int pagina, int tamano) {
         java.util.Set<Long> piden = restablecimientos.usuariosPendientes();
-        var page = usuarios.findAll(PageRequest.of(pagina, tamano, Sort.by("id")));
+        var page = usuarios.ordenados(PageRequest.of(pagina, tamano));
         // Cargos, personas y socios de toda la página de una vez: una consulta por tipo, no por usuario.
         List<Long> ids = page.getContent().stream().map(Usuario::getId).toList();
         java.util.Map<Long, List<String>> cargos = new java.util.HashMap<>();
@@ -88,7 +87,7 @@ public class UsuarioAdminService implements ApplicationRunner {
             var persona = java.util.Optional.ofNullable(porUsuario.get(u.getId()));
             return new UsuarioResumen(u.getId(), u.getCorreo(), u.getEstado(), u.getCreadoEn(),
                     cargos.getOrDefault(u.getId(), List.of()), persona.map(p -> sociosActivos.contains(p.getId())).orElse(false),
-                    persona.map(p -> p.getNombres() + " " + p.getApellidos()).orElse(null),
+                    persona.map(p -> ec.janery.common.OrdenPersonas.nombre(p.getNombres(), p.getApellidos())).orElse(null),
                     persona.map(ec.janery.persona.Persona::getIdentificacion).orElse(null), piden.contains(u.getId()),
                     persona.map(ec.janery.persona.Persona::getNombres).orElse(null),
                     persona.map(ec.janery.persona.Persona::getApellidos).orElse(null));

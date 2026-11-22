@@ -249,6 +249,56 @@ export interface UsuarioCreado {
   contrasenaTemporal: string;
 }
 
+/** Emergente de cliente anterior a Janery: tasas en % mensual sobre el importe. */
+export interface EmergenteAnterior {
+  importe: number;
+  fechaInicio: string;
+  tasaInteres: number;
+  tasaDesgravamen: number;
+  /** Capital que debe hoy; null si debe todo el importe. */
+  capitalDebe: number | null;
+  cargosPagados: boolean;
+  nota: string;
+}
+
+export interface CupoAnterior {
+  capitalDebe: number;
+  interesPendiente: number | null;
+  desgravamenPendiente: number | null;
+  nota: string;
+}
+
+/** Plazo fijo: fecha de apertura, plazo y tasa en % anual. */
+export interface AhorroAnterior {
+  tipo: 'NORMAL' | 'PLAZO_FIJO';
+  nombre: string;
+  saldo: number;
+  fechaApertura: string | null;
+  plazoMeses: number | null;
+  tasaAnual: number | null;
+}
+
+/** Meses en formato AAAA-MM. Lo vacío no se registra. */
+export interface AportesAnteriores {
+  socioDesde: string | null;
+  aporteInicial: number | null;
+  mensualesHasta: string | null;
+  importeMensual: number | null;
+  personales: number | null;
+  cajaChicaHasta: string | null;
+}
+
+export interface AportesRegistrados {
+  socioId: number;
+  socioDesde: string;
+  aporteInicial: number;
+  mesesAporte: number;
+  totalMensual: number;
+  personales: number;
+  mesesCajaChica: number;
+  totalCajaChica: number;
+}
+
 /** Tasas en % mensual sobre el importe; el encaje, en dólares; la fecha, AAAA-MM-DD. */
 export interface CreditoExistente {
   modalidad: string;
@@ -1427,6 +1477,27 @@ export class ApiService {
 
   registrarCreditoExistente(usuarioId: number, datos: CreditoExistente, clave: string): Observable<{ id: number }> {
     return this.http.post<{ id: number }>(`${this.base}/admin/creditos/existentes/personas/${usuarioId}`, datos, conClave(clave));
+  }
+
+  /** Valores vigentes para llenar los formularios de datos anteriores: tasas, aportes y plazos fijos. */
+  valoresAnteriores(): Observable<Record<string, number>> {
+    return this.http.get<Record<string, number>>(`${this.base}/admin/anteriores/valores`);
+  }
+
+  registrarEmergenteAnterior(usuarioId: number, datos: EmergenteAnterior, clave: string): Observable<{ id: number }> {
+    return this.http.post<{ id: number }>(`${this.base}/admin/anteriores/personas/${usuarioId}/emergente-cliente`, datos, conClave(clave));
+  }
+
+  registrarCupoAnterior(usuarioId: number, datos: CupoAnterior, clave: string): Observable<{ id: number }> {
+    return this.http.post<{ id: number }>(`${this.base}/admin/anteriores/personas/${usuarioId}/cupo-socio`, datos, conClave(clave));
+  }
+
+  registrarAhorroAnterior(usuarioId: number, datos: AhorroAnterior, clave: string): Observable<Ahorro> {
+    return this.http.post<Ahorro>(`${this.base}/admin/anteriores/personas/${usuarioId}/ahorros`, datos, conClave(clave));
+  }
+
+  registrarAportesAnteriores(usuarioId: number, datos: AportesAnteriores, clave: string): Observable<AportesRegistrados> {
+    return this.http.post<AportesRegistrados>(`${this.base}/admin/anteriores/personas/${usuarioId}/aportes`, datos, conClave(clave));
   }
 
   documentosTramite(creditoId: number, archivos: File[]): Observable<DocumentoCredito[]> {

@@ -46,6 +46,14 @@ public class CuentaService {
 
         Page<CuentaPrincipal> findByEstado(String estado, Pageable pageable);
 
+        /** Por titular: socios primero, luego las demás personas, en orden alfabético. Sin estado, todas. */
+        @Query(nativeQuery = true,
+                value = "SELECT c.* FROM cuentas_principales c JOIN personas p ON p.id = c.persona_id"
+                        + " WHERE CAST(:estado AS VARCHAR) IS NULL OR c.estado = :estado ORDER BY "
+                        + ec.janery.common.OrdenPersonas.ORDEN + ", c.id DESC",
+                countQuery = "SELECT COUNT(*) FROM cuentas_principales c WHERE CAST(:estado AS VARCHAR) IS NULL OR c.estado = :estado")
+        Page<CuentaPrincipal> porTitular(@Param("estado") String estado, Pageable pageable);
+
         @Query(value = "SELECT nextval('secuencia_numero_cuenta')", nativeQuery = true)
         long siguienteNumero();
     }
@@ -357,8 +365,7 @@ public class CuentaService {
 
     @Transactional(readOnly = true)
     public Page<CuentaVista> listar(String estado, int pagina, int tamano) {
-        Pageable pageable = PageRequest.of(pagina, tamano, Sort.by(Sort.Direction.DESC, "id"));
-        Page<CuentaPrincipal> page = estado == null ? cuentas.findAll(pageable) : cuentas.findByEstado(estado, pageable);
+        Page<CuentaPrincipal> page = cuentas.porTitular(estado, PageRequest.of(pagina, tamano));
         if (page.isEmpty()) {
             return page.map(this::vista);
         }

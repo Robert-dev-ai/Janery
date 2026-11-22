@@ -318,6 +318,126 @@ public class ParticipacionService {
         return operacion;
     }
 
+    // --- Aportes anteriores a Janery (22/11/2026)
+
+    /**
+     * Lo que un socio ya aportó antes de usar Janery. Fecha de ingreso: desde ahí se cuentan sus meses (vacía si ya figura
+     * como socio). Los meses de aporte mensual y de caja chica se marcan pagados desde el mes de ingreso hasta el indicado.
+     * Los personales van como un solo total. Lo vacío no se registra.
+     */
+    public record AportesAnteriores(Long usuarioId, LocalDate socioDesde, BigDecimal aporteInicial, YearMonth mensualesHasta,
+            BigDecimal importeMensual, BigDecimal personales, YearMonth cajaChicaHasta) {
+    }
+
+    public record AportesRegistrados(Long socioId, LocalDate socioDesde, BigDecimal aporteInicial, int mesesAporte,
+            BigDecimal totalMensual, BigDecimal personales, int mesesCajaChica, BigDecimal totalCajaChica) {
+    }
+
+    /**
+     * No mueve dinero: ese dinero ya está en Janery. El capital entra al fondo personal del socio y al balance (3.1 y 3.2);
+     * la caja chica solo marca los meses pagados, sin cambiar su saldo. Lo ya registrado en Janery no se repite.
+     */
+    @Transactional
+    public AportesRegistrados registrarAportesAnteriores(Long actorId, AportesAnteriores d, String clave) {
+        Long personaId = personas.dePorUsuario(d.usuarioId()).orElseThrow(() -> NegocioException.noEncontrado("Persona no encontrada"))
+                .getId();
+        cuentas.cuentaActivaBloqueada(personaId);
+        LocalDate hoy = hoy();
+        YearMonth actual = YearMonth.now(reloj);
+        if (d.socioDesde() != null && d.socioDesde().isAfter(hoy)) {
+            throw new NegocioException(HttpStatus.BAD_REQUEST, "FECHA_FUTURA", "La fecha de ingreso no puede ser posterior a hoy");
+        }
+        if (d.socioDesde() == null && !socios.esSocio(personaId)) {
+            throw new NegocioException(HttpStatus.BAD_REQUEST, "FECHA_INGRESO_REQUERIDA", "Indique desde cuándo es socio");
+        }
+        for (YearMonth hasta : java.util.Arrays.asList(d.mensualesHasta(), d.cajaChicaHasta())) {
+            if (hasta != null && hasta.isAfter(actual)) {
+                throw new NegocioException(HttpStatus.BAD_REQUEST, "PERIODO_FUTURO", "No se pueden marcar pagados meses que aún no llegan");
+            }
+        }
+        Optional<Long> previa = cuentas.operacionPrevia(clave, "SALDO_ANTERIOR", null, actorId);
+        SocioService.Socio socio = d.socioDesde() == null ? socios.deUsuario(d.usuarioId())
+                : socios.registrarAnterior(actorId, personaId, d.socioDesde().atStartOfDay(reloj.getZone()).toInstant());
+        LocalDate desde = socio.getDesde().atZone(reloj.getZone()).toLocalDate();
+        if (previa.isPresent()) {
+            return resumenAnterior(socio.getId(), desde, previa.get());
+        }
+
+        BigDecimal mensual = d.importeMensual() == null ? dinero(parametros.valorVigente("APORTE_OBLIGATORIO")) : d.importeMensual().setScale(2);
+        BigDecimal cuotaCaja = dinero(parametros.valorVigente("APORTE_CAJA_CHICA"));
+        BigDecimal inicial = positivo(d.aporteInicial());
+        if (inicial.signum() > 0 && aportes.findBySocioIdIn(List.of(socio.getId())).stream().anyMatch(a -> INICIAL.equals(a.getTipo()))) {
+            throw NegocioException.conflicto("APORTE_INICIAL_REGISTRADO", "Este socio ya tiene registrado su aporte inicial");
+        }
+        BigDecimal personales = positivo(d.personales());
+        List<YearMonth> mesesAporte = mesesSinPagar(desde, d.mensualesHasta(),
+                p -> aportes.existsBySocioIdAndTipoAndPeriodo(socio.getId(), OBLIGATORIO, p));
+        List<YearMonth> mesesCaja = mesesSinPagar(desde, d.cajaChicaHasta(),
+                p -> aportesCajaChica.existsBySocioIdAndPeriodo(socio.getId(), p));
+        BigDecimal totalMensual = mensual.multiply(BigDecimal.valueOf(mesesAporte.size()));
+        BigDecimal totalCaja = cuotaCaja.multiply(BigDecimal.valueOf(mesesCaja.size()));
+        BigDecimal total = inicial.add(totalMensual).add(personales).add(totalCaja);
+        if (total.signum() == 0) {
+            return new AportesRegistrados(socio.getId(), desde, inicial, 0, totalMensual, personales, 0, totalCaja);
+        }
+
+        Instant ahora = Instant.now(reloj);
+        Long operacion = cuentas.crearOperacionInterna("SALDO_ANTERIOR", total, clave, actorId);
+        if (inicial.signum() > 0) {
+            aporteAnterior(socio.getId(), INICIAL, inicial, YearMonth.from(desde), desde, operacion, ahora);
+        }
+        for (YearMonth mes : mesesAporte) {
+            LocalDate fecha = mes.atDay(1).isBefore(desde) ? desde : mes.atDay(1);
+            aporteAnterior(socio.getId(), OBLIGATORIO, mensual, mes, fecha, operacion, ahora);
+        }
+        // Sin fecha conocida: cuentan desde hoy, como cualquier aporte personal.
+        if (personales.signum() > 0) {
+            aporteAnterior(socio.getId(), PERSONAL, personales, actual, hoy, operacion, ahora);
+        }
+        for (YearMonth mes : mesesCaja) {
+            aportesCajaChica.save(new AporteCajaChica(null, socio.getId(), cuotaCaja, mes.toString(), operacion, ahora));
+        }
+        auditoria.registrar(actorId, "APORTES_ANTERIORES_REGISTRADOS", MODULO, "socio", socio.getId(), null,
+                "inicial " + inicial.toPlainString() + ", " + mesesAporte.size() + " meses de aporte, personales "
+                        + personales.toPlainString() + ", " + mesesCaja.size() + " meses de caja chica", null);
+        return new AportesRegistrados(socio.getId(), desde, inicial, mesesAporte.size(), totalMensual, personales, mesesCaja.size(),
+                totalCaja);
+    }
+
+    private void aporteAnterior(Long socioId, String tipo, BigDecimal importe, YearMonth periodo, LocalDate fecha, Long operacion,
+            Instant ahora) {
+        AporteSocio aporte = aportes.save(new AporteSocio(null, socioId, tipo, importe, periodo.toString(), operacion, ahora));
+        variaciones.save(new VariacionParticipacion(null, socioId, "APORTE_" + tipo, importe, fecha, aporte.getId(), null, null, ahora));
+    }
+
+    /** Meses desde el de ingreso hasta el indicado, sin los ya pagados. Vacío si no se indicó hasta cuándo. */
+    private static List<YearMonth> mesesSinPagar(LocalDate desde, YearMonth hasta, java.util.function.Predicate<String> pagado) {
+        List<YearMonth> meses = new ArrayList<>();
+        if (hasta == null) {
+            return meses;
+        }
+        for (YearMonth mes = YearMonth.from(desde); !mes.isAfter(hasta); mes = mes.plusMonths(1)) {
+            if (!pagado.test(mes.toString())) {
+                meses.add(mes);
+            }
+        }
+        return meses;
+    }
+
+    /** Un reintento con la misma clave recibe lo que ya quedó registrado con ella. */
+    private AportesRegistrados resumenAnterior(Long socioId, LocalDate desde, Long operacion) {
+        List<AporteSocio> propios = aportes.findBySocioIdIn(List.of(socioId)).stream().filter(a -> operacion.equals(a.getOperacionId())).toList();
+        List<AporteCajaChica> caja = aportesCajaChica.findBySocioIdIn(List.of(socioId)).stream()
+                .filter(a -> operacion.equals(a.getOperacionId())).toList();
+        List<AporteSocio> mensuales = propios.stream().filter(a -> OBLIGATORIO.equals(a.getTipo())).toList();
+        return new AportesRegistrados(socioId, desde, suma(propios, INICIAL), mensuales.size(), suma(propios, OBLIGATORIO),
+                suma(propios, PERSONAL), caja.size(), caja.stream().map(AporteCajaChica::getImporte).reduce(BigDecimal.ZERO, BigDecimal::add));
+    }
+
+    private static BigDecimal positivo(BigDecimal valor) {
+        return valor == null || valor.signum() <= 0 ? BigDecimal.ZERO.setScale(2) : valor.setScale(2);
+    }
+
     /** El dinero pasa de la caja principal a caja chica. No aumenta la participación. */
     @Transactional
     public Long aportarCajaChica(Long usuarioId, String periodoTexto, String clave) {
@@ -383,7 +503,7 @@ public class ParticipacionService {
 
     @Transactional(readOnly = true)
     public List<SocioCajaChica> sociosCajaChica() {
-        List<SocioService.Socio> activos = socios.activos();
+        List<SocioService.Socio> activos = socios.activosParaMostrar();
         if (activos.isEmpty()) {
             return List.of();
         }
@@ -505,7 +625,7 @@ public class ParticipacionService {
 
     @Transactional(readOnly = true)
     public List<ResumenSocio> listarSocios() {
-        return resumenes(socios.activos());
+        return resumenes(socios.activosParaMostrar());
     }
 
     @Transactional(readOnly = true)

@@ -24,6 +24,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import ec.janery.common.Codigos;
 import ec.janery.common.NegocioException;
+import ec.janery.common.OrdenPersonas;
 import ec.janery.credito.CreditoService;
 import ec.janery.cuenta.ComprobanteService;
 import ec.janery.cuenta.DepositoService;
@@ -98,11 +99,10 @@ public class PagoService {
             return List.of();
         }
         return jdbc.sql("""
-                SELECT p.usuario_id, p.nombres || ' ' || p.apellidos
+                SELECT p.usuario_id, p.apellidos || ' ' || p.nombres
                 FROM personas p JOIN cuentas_principales c ON c.persona_id = p.id AND c.estado = 'ACTIVA'
-                WHERE lower(p.nombres || ' ' || p.apellidos) LIKE :filtro OR p.identificacion = :exacto
-                ORDER BY p.apellidos, p.nombres LIMIT 10
-                """).param("filtro", "%" + limpio + "%").param("exacto", limpio)
+                """ + " WHERE " + OrdenPersonas.NOMBRE_BUSCABLE + " LIKE :filtro OR p.identificacion = :exacto"
+                + " ORDER BY " + OrdenPersonas.ORDEN + " LIMIT 10").param("filtro", "%" + limpio + "%").param("exacto", limpio)
                 .query((rs, n) -> new Persona(rs.getLong(1), rs.getString(2))).list();
     }
 
@@ -313,7 +313,7 @@ public class PagoService {
     private Map<Long, Info> info(Collection<Long> usuarioIds) {
         Map<Long, Info> resultado = new HashMap<>();
         jdbc.sql("""
-                SELECT p.usuario_id, p.id, p.nombres || ' ' || p.apellidos, s.id,
+                SELECT p.usuario_id, p.id, p.apellidos || ' ' || p.nombres, s.id,
                        EXISTS (SELECT 1 FROM cuentas_principales c WHERE c.persona_id = p.id AND c.estado = 'ACTIVA')
                 FROM personas p LEFT JOIN socios s ON s.persona_id = p.id AND s.estado = 'ACTIVO'
                 WHERE p.usuario_id IN (:usuarios)

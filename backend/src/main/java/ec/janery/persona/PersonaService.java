@@ -61,9 +61,9 @@ public class PersonaService {
     public void corregirNombre(Long actorId, Long usuarioId, String nombres, String apellidos) {
         Persona persona = repository.findByUsuarioId(usuarioId)
                 .orElseThrow(() -> NegocioException.noEncontrado("La persona aún no tiene datos personales"));
-        String antes = persona.getNombres() + " " + persona.getApellidos();
+        String antes = ec.janery.common.OrdenPersonas.nombre(persona.getNombres(), persona.getApellidos());
         persona.corregirNombre(nombres, apellidos);
-        String despues = persona.getNombres() + " " + persona.getApellidos();
+        String despues = ec.janery.common.OrdenPersonas.nombre(persona.getNombres(), persona.getApellidos());
         if (!antes.equals(despues)) {
             auditoria.registrar(actorId, "NOMBRE_CAMBIADO", "PERSONA", "persona", persona.getId(), antes, despues, null);
         }
@@ -113,7 +113,7 @@ public class PersonaService {
 
     @Transactional(readOnly = true)
     public String nombreCompleto(Long personaId) {
-        return repository.findById(personaId).map(p -> p.getNombres() + " " + p.getApellidos()).orElse(null);
+        return repository.findById(personaId).map(p -> ec.janery.common.OrdenPersonas.nombre(p.getNombres(), p.getApellidos())).orElse(null);
     }
 
     @Transactional(readOnly = true)

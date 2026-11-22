@@ -169,6 +169,8 @@
   .pestanas { @apply mb-5 flex flex-wrap gap-x-5 gap-y-1 border-b border-borde; }
   .pestanas a { @apply -mb-px border-b-2 border-transparent pb-2 text-sm font-medium text-suave hover:text-texto hover:no-underline; }
   .pestanas a.activo { @apply border-primario text-primario; }
+  .pestanas button { @apply -mb-px rounded-none border-0 border-b-2 border-transparent bg-transparent px-0 pt-0 pb-2 text-sm font-medium text-suave hover:border-transparent hover:bg-transparent hover:text-texto active:scale-100; }
+  .pestanas button.activo { @apply border-primario text-primario hover:border-primario; }
 
   /* Tarjetas e indicadores */
   .tarjeta { @apply mb-4 rounded-xl border border-borde bg-superficie p-5 shadow-sm; }
