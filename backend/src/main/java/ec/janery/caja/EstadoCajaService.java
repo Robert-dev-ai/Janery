@@ -57,7 +57,9 @@ public class EstadoCajaService {
 
         List<SaldoCaja> saldos = jdbc.query("""
                 SELECT c.codigo, COALESCE(SUM(CASE WHEN m.sentido = 'ENTRADA' THEN m.importe ELSE -m.importe END), 0) AS saldo
-                FROM cajas c LEFT JOIN movimientos_caja m ON m.caja_id = c.id GROUP BY c.codigo ORDER BY c.codigo
+                FROM cajas c LEFT JOIN movimientos_caja m ON m.caja_id = c.id
+                WHERE c.codigo <> 'FONDO_RESERVA'
+                GROUP BY c.codigo ORDER BY c.codigo
                 """, (r, i) -> new SaldoCaja(r.getString("codigo"), r.getBigDecimal("saldo")));
 
         Map<String, BigDecimal[]> caja = new HashMap<>();

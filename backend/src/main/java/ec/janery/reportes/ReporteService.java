@@ -130,7 +130,15 @@ public class ReporteService {
                     """),
             new Reporte(new Definicion("CAJA_PRINCIPAL", "Caja principal", "Movimientos y saldo acumulado", true), caja("PRINCIPAL")),
             new Reporte(new Definicion("CAJA_CHICA", "Caja chica", "Movimientos y saldo acumulado", true), caja("CHICA")),
-            new Reporte(new Definicion("FONDO_RESERVA", "Fondo de reserva", "Movimientos y saldo acumulado", true), caja("FONDO_RESERVA")),
+            // Desde el 22/11/2026 la reserva no es una caja: es la parte del patrimonio del grupo, prestada desde la principal.
+            new Reporte(new Definicion("FONDO_RESERVA", "Fondo de reserva", "Lo que pertenece al grupo y saldo acumulado", true), """
+                    SELECT to_char(r.creado_en AT TIME ZONE 'America/Guayaquil', 'YYYY-MM-DD HH24:MI') AS "Fecha",
+                           r.concepto AS "Concepto", r.detalle AS "Detalle", r.importe AS "Importe",
+                           SUM(r.importe) OVER (ORDER BY r.id) AS "Saldo"
+                    FROM movimientos_reserva r
+                    WHERE CAST(r.creado_en AT TIME ZONE 'America/Guayaquil' AS date) BETWEEN :desde AND :hasta
+                    ORDER BY r.id
+                    """),
             new Reporte(new Definicion("APORTES_SOCIOS", "Aportes por socio", "Obligatorios, personales y de caja chica, por separado", true), """
                     SELECT nombre AS "Socio", tipo AS "Tipo", periodo AS "Periodo", importe AS "Importe",
                            to_char(creado_en AT TIME ZONE 'America/Guayaquil', 'YYYY-MM-DD') AS "Fecha"

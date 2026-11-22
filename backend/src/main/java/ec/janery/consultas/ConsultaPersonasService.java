@@ -64,8 +64,7 @@ public class ConsultaPersonasService {
         return jdbc.sql("""
                 SELECT (SELECT COALESCE(SUM(CASE WHEN m.sentido = 'ENTRADA' THEN m.importe ELSE -m.importe END), 0) FROM movimientos_caja m
                         JOIN cajas c ON c.id = m.caja_id WHERE c.codigo = 'PRINCIPAL') AS principal,
-                       (SELECT COALESCE(SUM(CASE WHEN m.sentido = 'ENTRADA' THEN m.importe ELSE -m.importe END), 0) FROM movimientos_caja m
-                        JOIN cajas c ON c.id = m.caja_id WHERE c.codigo = 'FONDO_RESERVA') AS reserva,
+                       (SELECT COALESCE(SUM(importe), 0) FROM movimientos_reserva) AS reserva,
                        (SELECT COUNT(*) FROM cuentas_principales WHERE estado IN ('ACTIVA', 'PENDIENTE_CIERRE')) AS personas,
                        (SELECT COUNT(*) FROM creditos WHERE estado = 'ACTIVO') AS creditos,
                        (SELECT COALESCE(SUM(capital_pendiente), 0) FROM creditos WHERE estado = 'ACTIVO') AS prestado,

@@ -256,6 +256,7 @@ public class ParticipacionService {
     private final SocioService socios;
     private final CuentaService cuentas;
     private final CajaService cajas;
+    private final ReservaService reservas;
     private final CreditoService creditos;
     private final ec.janery.credito.PagoCreditoService pagosCredito;
     private final CompraventaRepository compraventas;
@@ -731,7 +732,7 @@ public class ParticipacionService {
         return repartir(tipo, aplicable, concepto, hoy(), actorId, valores, ganancia);
     }
 
-    /** El reverso de un ingreso: devuelve a la caja la reserva que separó y quita a los fondos el resto. */
+    /** El reverso de un ingreso: quita a la reserva lo que separó y a los fondos el resto. */
     @Transactional
     public void revertirGanancia(BigDecimal importe, BigDecimal reserva, String concepto, Long actorId) {
         if (!repartoAutomatico) {
@@ -739,8 +740,7 @@ public class ParticipacionService {
         }
         if (reserva.signum() > 0) {
             Long op = cuentas.crearOperacionInterna("RESERVA", reserva, null, actorId);
-            cajas.registrar(CajaService.FONDO_RESERVA, op, SALIDA, reserva, "REVERSO_DE_RESERVA", concepto);
-            cajas.registrar(CajaService.PRINCIPAL, op, ENTRADA, reserva, "REVERSO_DE_RESERVA", concepto);
+            reservas.registrar(op, reserva.negate(), "REVERSO_DE_RESERVA", concepto);
         }
         repartirAutomatico("PERDIDA", importe.subtract(reserva), concepto, actorId);
     }
@@ -777,10 +777,10 @@ public class ParticipacionService {
         Instant ahora = Instant.now(reloj);
         Resultado resultado = resultados.save(new Resultado(null, tipo, importe, concepto, fecha, reserva, porcentaje,
                 actorId, ahora));
+        // El dinero no se mueve: sigue en la caja principal y se presta. Solo cambia a quién pertenece.
         if (reserva.signum() > 0) {
             Long op = cuentas.crearOperacionInterna("RESERVA", reserva, null, actorId);
-            cajas.registrar(CajaService.PRINCIPAL, op, SALIDA, reserva, "TRASPASO_A_RESERVA", concepto);
-            cajas.registrar(CajaService.FONDO_RESERVA, op, ENTRADA, reserva, "RESERVA_DE_GANANCIA", concepto);
+            reservas.registrar(op, reserva, "RESERVA_DE_GANANCIA", concepto);
         }
         RepartoProporcional.repartir(aRepartir, valores).forEach((socioId, parte) -> {
             if (parte.signum() > 0) {
@@ -791,6 +791,29 @@ public class ParticipacionService {
         auditoria.registrar(actorId, "RESULTADO_" + tipo, MODULO, "resultado", resultado.getId(), null,
                 importe.toPlainString(), concepto);
         return reserva;
+    }
+
+    /**
+     * Decisión del propietario (22/11/2026), al reiniciar los datos: las ganancias acumuladas antes del reinicio separan la
+     * reserva vigente y el resto se reparte según los aportes de cada socio activo (inicial, mensuales y personales), no
+     * según la base del mes, porque esos aportes se acaban de cargar. Como toda ganancia, se puede retirar desde el 1 de
+     * enero siguiente. Devuelve lo separado a la reserva.
+     */
+    @Transactional
+    public BigDecimal repartirGananciasAnteriores(Long actorId, BigDecimal importe, String concepto) {
+        Map<Long, BigDecimal> aportesPorSocio = new LinkedHashMap<>();
+        Set<Long> activos = new java.util.HashSet<>();
+        socios.activos().forEach(s -> activos.add(s.getId()));
+        variaciones.findAll().stream()
+                .filter(v -> v.getTipo().equals("APORTE_INICIAL") || v.getTipo().equals("APORTE_OBLIGATORIO")
+                        || v.getTipo().equals("APORTE_PERSONAL"))
+                .filter(v -> activos.contains(v.getSocioId()))
+                .sorted(java.util.Comparator.comparing(VariacionParticipacion::getSocioId))
+                .forEach(v -> aportesPorSocio.merge(v.getSocioId(), v.getImporte(), BigDecimal::add));
+        if (aportesPorSocio.values().stream().noneMatch(v -> v.signum() > 0)) {
+            throw NegocioException.conflicto("SIN_CAPITAL", "No hay aportes de socios sobre los que repartir");
+        }
+        return repartir(GANANCIA, importe, concepto, hoy(), actorId, aportesPorSocio, true);
     }
 
     /** Centavos de resultados registrados que aún no se pudieron repartir entre los socios. */

@@ -210,7 +210,8 @@ class SociosIntegrationTest {
 
         resultado("GANANCIA", "120.00", fecha).andExpect(status().isNoContent());
         assertThat(reserva()).isEqualByComparingTo(reservaAntes.add(new BigDecimal("12")));
-        assertThat(saldoDe("/api/v1/tesoreria")).isEqualByComparingTo(principalAntes.subtract(new BigDecimal("12")));
+        // La reserva no sale de la caja principal: su dinero se sigue prestando.
+        assertThat(saldoDe("/api/v1/tesoreria")).isEqualByComparingTo(principalAntes);
         resultado("PERDIDA", "20.00", fecha).andExpect(status().isNoContent());
 
         BigDecimal valorA = resumen(a).get("valorActual").decimalValue();
@@ -677,8 +678,7 @@ class SociosIntegrationTest {
 
     private BigDecimal reserva() {
         return jdbc.queryForObject("""
-                select coalesce(sum(case when m.sentido = 'ENTRADA' then m.importe else -m.importe end), 0)
-                from movimientos_caja m join cajas c on c.id = m.caja_id where c.codigo = 'FONDO_RESERVA'
+                select coalesce(sum(importe), 0) from movimientos_reserva
                 """, BigDecimal.class);
     }
 

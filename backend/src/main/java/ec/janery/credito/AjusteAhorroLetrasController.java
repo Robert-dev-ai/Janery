@@ -71,6 +71,12 @@ public class AjusteAhorroLetrasController {
     @PutMapping("/creditos/{creditoId}/ahorro-letras")
     @Transactional
     public AhorroCredito corregir(@AuthenticationPrincipal Jwt jwt, @PathVariable Long creditoId, @Valid @RequestBody AjusteRequest r) {
+        return ajustar(actor(jwt), creditoId, r.ahorro(), r.motivo());
+    }
+
+    /** También lo usa el reinicio de datos, para dejar el ahorro letras real de cada crédito. */
+    @Transactional
+    public AhorroCredito ajustar(Long actorId, Long creditoId, BigDecimal ahorro, String motivo) {
         List<Map<String, Object>> filas = jdbc.queryForList("""
                 SELECT a.saldo, a.liberado_en IS NOT NULL AS liberado, pe.usuario_id
                 FROM ahorro_letras_credito a JOIN creditos c ON c.id = a.credito_id JOIN personas pe ON pe.id = c.persona_id
@@ -83,7 +89,7 @@ public class AjusteAhorroLetrasController {
             throw NegocioException.conflicto("AHORRO_LIBERADO", "Ese ahorro letras ya pasó a la cuenta principal: no se puede corregir aquí");
         }
         BigDecimal actual = (BigDecimal) filas.get(0).get("saldo");
-        BigDecimal nuevo = r.ahorro().setScale(2);
+        BigDecimal nuevo = ahorro.setScale(2);
         BigDecimal diferencia = nuevo.subtract(actual);
 
         List<Map<String, Object>> pagos = jdbc.queryForList("""
@@ -104,7 +110,7 @@ public class AjusteAhorroLetrasController {
                 Long operacion = jdbc.queryForObject("""
                         INSERT INTO operaciones_financieras (tipo, importe, metodo_pago, actor_id, creado_en)
                         SELECT 'PAGO_CREDITO', ?, 'INTERNO', ?, creado_en FROM creditos WHERE id = ? RETURNING id""",
-                        Long.class, nuevoInicial, actor(jwt), creditoId);
+                        Long.class, nuevoInicial, actorId, creditoId);
                 Long pago = jdbc.queryForObject("""
                         INSERT INTO pagos_credito (credito_id, cuota_id, operacion_id, importe, creado_en)
                         SELECT id, NULL, ?, ?, creado_en FROM creditos WHERE id = ? RETURNING id""",
@@ -123,8 +129,8 @@ public class AjusteAhorroLetrasController {
                 }
             }
             jdbc.update("UPDATE ahorro_letras_credito SET saldo = ? WHERE credito_id = ?", nuevo, creditoId);
-            auditoria.registrar(actor(jwt), "AHORRO_LETRAS_CORREGIDO", "CREDITO", "credito", creditoId, actual.toPlainString(),
-                    nuevo.toPlainString(), r.motivo() == null || r.motivo().isBlank() ? null : r.motivo().trim());
+            auditoria.registrar(actorId, "AHORRO_LETRAS_CORREGIDO", "CREDITO", "credito", creditoId, actual.toPlainString(),
+                    nuevo.toPlainString(), motivo == null || motivo.isBlank() ? null : motivo.trim());
         }
         Long usuarioId = ((Number) filas.get(0).get("usuario_id")).longValue();
         return listar(usuarioId).stream().filter(a -> a.id().equals(creditoId)).findFirst().orElseThrow();

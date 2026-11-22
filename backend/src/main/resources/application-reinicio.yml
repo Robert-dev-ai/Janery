@@ -1,0 +1,6 @@
+# TEMPORAL: perfil del reinicio de datos (ReinicioRunner). Corre una vez desde la consola y termina, sin servidor web.
+spring:
+  main:
+    web-application-type: none
+janery:
+  reparto-automatico: true

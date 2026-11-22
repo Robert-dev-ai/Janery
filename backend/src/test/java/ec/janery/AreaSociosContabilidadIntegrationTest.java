@@ -129,12 +129,13 @@ class AreaSociosContabilidadIntegrationTest {
     }
 
     @Test
-    void elEstadoDeCajaTraeDoceMesesYLasTresCajas() throws Exception {
+    void elEstadoDeCajaTraeDoceMesesYLasDosCajas() throws Exception {
         JsonNode estado = json.readTree(mvc.perform(get("/api/v1/tesoreria/estado").header(HttpHeaders.AUTHORIZATION, bearer(presidente())))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
         assertThat(estado.get("caja").get("meses")).hasSize(12);
         assertThat(estado.get("caja").get("resultados")).hasSize(12);
-        assertThat(estado.get("caja").get("saldos")).hasSize(3);
+        // Principal y chica: el fondo de reserva ya no es una caja, se presta desde la principal.
+        assertThat(estado.get("caja").get("saldos")).hasSize(2);
         assertThat(estado.get("enEspera").has("ganancia")).isTrue();
         // Sin permiso de caja, no se consulta.
         mvc.perform(get("/api/v1/tesoreria/estado").header(HttpHeaders.AUTHORIZATION, bearer(persona("100.00").token())))
@@ -148,8 +149,7 @@ class AreaSociosContabilidadIntegrationTest {
 
     private BigDecimal reserva() {
         return jdbc.queryForObject("""
-                select coalesce(sum(case when m.sentido = 'ENTRADA' then m.importe else -m.importe end), 0)
-                from movimientos_caja m join cajas c on c.id = m.caja_id where c.codigo = 'FONDO_RESERVA'
+                select coalesce(sum(importe), 0) from movimientos_reserva
                 """, BigDecimal.class);
     }
 

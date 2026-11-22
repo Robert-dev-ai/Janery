@@ -201,7 +201,7 @@ El propietario autorizó el 30/10/2026 usar valores provisionales de tasas, enca
 - **Cierre anual:** solo años terminados y una vez por año. Totaliza y bloquea nuevos resultados en ese año; no mueve dinero.
 - **Aportes iniciales:** los registra Presidencia como dinero recibido fuera del sistema; entran a la caja principal y al fondo personal.
 - **Caja chica:** el aporte de USD 2,50 sale de la cuenta del socio y pasa de la caja principal a caja chica. No aumenta la participación.
-- **Fondo de reserva:** caja propia; recibe el traspaso desde la caja principal.
+- **Fondo de reserva** (decisión del propietario, 22/11/2026): no es una caja aparte. Es la parte del patrimonio que pertenece al grupo y no a un socio; su dinero queda en la caja principal y se presta como el resto. Recibe el 10 % de cada ganancia, sin participar en el reparto ni en las pérdidas, y se lleva en `movimientos_reserva`. Lo que había en la caja del fondo de reserva volvió a la principal (V30).
 - **Aportes mensuales y personales:** los paga el socio desde su cuenta principal, y puede ponerse al día con meses pasados.
 - **Cierre de cuenta:** un socio activo no puede cerrar su cuenta principal.
 
@@ -220,14 +220,14 @@ El propietario autorizó el 30/10/2026 usar valores provisionales de tasas, enca
 
 | Línea | Qué contiene |
 |---|---|
-| 1.1 Caja | Caja principal y fondo de reserva, más los depósitos de apertura aún no devueltos |
+| 1.1 Caja | Caja principal, más los depósitos de apertura aún no devueltos |
 | 1.4 Créditos por cobrar | Capital desembolsado menos capital cobrado. 1.42: crédito con alguna letra vencida; 1.41: el resto |
 | 2.1 Ahorros captados | Ahorros normales, saldos de cuenta principal y retiros apartados sin entregar |
 | 2.2 Plazo fijo | Plazos fijos |
 | 2.3 Cuentas por pagar | Encajes, ahorro letras y depósitos de USD 5 |
 | 2.5 Fondo de desgravamen | Desgravamen cobrado: se debe, no es ganancia |
 | 3.1 y 3.2 | Aportes iniciales; aportes mensuales y personales |
-| 3.5 Reservas | Fondo de reserva |
+| 3.5 Reservas | Fondo de reserva: lo que pertenece al grupo, prestado desde la caja principal |
 | 3.6 Resultado del mes | Ganancias menos gastos del mes |
 | 3.7 Resultado acumulado | Resultado de meses anteriores, menos reservas separadas y ganancias retiradas o descontadas |
 | 4.1 / 4.7 / 4.8 / 5.1 | Intereses cobrados / USD 15 de apertura / suministros de créditos / intereses de ahorros |
