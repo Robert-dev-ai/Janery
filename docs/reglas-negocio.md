@@ -193,6 +193,7 @@ El propietario autorizó el 30/10/2026 usar valores provisionales de tasas, enca
 - **Destino del retiro:** la cuenta principal del socio.
 - **Una pérdida de este año** reduce lo disponible aunque la ganancia sea de años anteriores.
 - **Compraventa:** la registra Presidencia cuando ambos socios la acordaron. Se vende solo capital, no ganancias, al precio que acuerden. El comprador paga al vendedor entre sus cuentas principales; la caja no cambia.
+- **Transferencia de capital** (decisión del propietario, 22/11/2026): la registra Presidencia cuando el capital pasa de un socio a otro sin pago dentro de Janery (un regalo, una herencia o una venta pagada por fuera). Exige un motivo, no mueve cuentas ni cajas y, como la compraventa, pasa solo capital, no ganancias. Se guarda como una compraventa de precio cero (`POST /admin/socios/transferencias`, permiso `GESTIONAR_RESULTADOS`).
 
 - **Participación:** fondo personal del socio dividido entre la suma de los fondos de todos los socios activos.
 - **Registro de ganancias y pérdidas a mano:** por quien tenga `GESTIONAR_RESULTADOS`, solo para lo extraordinario; lo demás se reparte solo (sección 14). Una pérdida no puede superar el capital total.

@@ -119,6 +119,9 @@ final class Entidades {
         private Long operacionId;
         private Long actorId;
         private Instant creadoEn;
+        /** Solo en las transferencias: precio cero y sin operación de dinero. */
+        private String motivo;
+        private String clave;
     }
 
     @Entity(name = "VariacionParticipacion")

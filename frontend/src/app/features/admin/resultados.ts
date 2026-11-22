@@ -81,6 +81,24 @@ import { mensajeDeError } from '../../shared/utils/errores';
         <label>Precio acordado (USD) <input type="number" min="0" step="1" name="precio" [(ngModel)]="precioVenta" /></label>
         <button type="submit" [disabled]="enviando() || !vendedor || !comprador || vendedor === comprador || !capitalVenta || !precioVenta">Registrar</button>
       </form>
+
+      <form class="tarjeta estrecho" (ngSubmit)="registrarTransferencia()">
+        <h2>Transferencia de capital entre socios</h2>
+        <p class="suave">Pasa capital de un socio a otro <strong>sin mover dinero en Janery</strong>: un regalo, una herencia o una venta ya pagada por fuera. Las ganancias de quien entrega no pasan.</p>
+        <label>Entrega
+          <select name="origen" [(ngModel)]="origen">
+            @for (s of socios(); track s.socioId) { <option [ngValue]="s.socioId">{{ s.nombre }}</option> }
+          </select>
+        </label>
+        <label>Recibe
+          <select name="destino" [(ngModel)]="destino">
+            @for (s of socios(); track s.socioId) { <option [ngValue]="s.socioId">{{ s.nombre }}</option> }
+          </select>
+        </label>
+        <label>Capital que se transfiere (USD) <input type="number" min="0" step="0.01" name="capitalTransferido" [(ngModel)]="capitalTransferido" /></label>
+        <label>Motivo <input name="motivoTransferencia" maxlength="200" placeholder="Ej.: regalo, herencia, pagado en efectivo" [(ngModel)]="motivoTransferencia" /></label>
+        <button type="submit" [disabled]="enviando() || !origen || !destino || origen === destino || !capitalTransferido || capitalTransferido <= 0 || !motivoTransferencia.trim()">Registrar</button>
+      </form>
     }
     }
 
@@ -189,6 +207,12 @@ export class AdminResultados implements OnInit {
   // Una clave por intento: se renueva solo tras un éxito, para que reintentar no duplique.
   private claveInicial: string = crypto.randomUUID();
   private claveVenta: string = crypto.randomUUID();
+  private claveTransferencia: string = crypto.randomUUID();
+
+  protected origen: number | null = null;
+  protected destino: number | null = null;
+  protected capitalTransferido: number | null = null;
+  protected motivoTransferencia = '';
 
   protected vendedor: number | null = null;
   protected comprador: number | null = null;
@@ -210,6 +234,23 @@ export class AdminResultados implements OnInit {
         this.claveVenta = crypto.randomUUID();
         this.capitalVenta = null;
         this.precioVenta = null;
+      });
+  }
+
+  protected async registrarTransferencia(): Promise<void> {
+    const entrega = this.socios().find((s) => s.socioId === this.origen)?.nombre;
+    const recibe = this.socios().find((s) => s.socioId === this.destino)?.nombre;
+    const texto = `¿Transferir ${this.capitalTransferido} USD de capital de ${entrega} a ${recibe}? No mueve dinero y no se puede deshacer.`;
+    if (!(await this.dialogo.confirmar(texto, 'Transferir'))) {
+      return;
+    }
+    this.ejecutar(
+      this.api.registrarTransferencia(this.origen!, this.destino!, this.capitalTransferido!, this.motivoTransferencia.trim(),
+        this.claveTransferencia),
+      'Transferencia registrada.', () => {
+        this.claveTransferencia = crypto.randomUUID();
+        this.capitalTransferido = null;
+        this.motivoTransferencia = '';
       });
   }
 

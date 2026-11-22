@@ -527,6 +527,48 @@ class SociosIntegrationTest {
     }
 
     @Test
+    void transferenciaPasaCapitalSinMoverCuentasNiCaja() throws Exception {
+        Persona o = socio("100.00");
+        Persona d = socio("20.00");
+        aportar(o, "{\"tipo\":\"PERSONAL\",\"importe\":100.00}").andExpect(status().isOk());
+        long origen = resumen(o).get("socioId").asLong();
+        long destino = resumen(d).get("socioId").asLong();
+        BigDecimal caja = saldoDe("/api/v1/tesoreria");
+
+        transferencia(origen, destino, "100.01", "Regalo", UUID.randomUUID().toString())
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.codigo").value("CAPITAL_INSUFICIENTE"));
+        transferencia(origen, origen, "1.00", "Regalo", UUID.randomUUID().toString()).andExpect(status().isBadRequest());
+        transferencia(origen, destino, "1.00", " ", UUID.randomUUID().toString()).andExpect(status().isBadRequest());
+
+        String clave = UUID.randomUUID().toString();
+        transferencia(origen, destino, "30.00", "Pagado fuera de Janery", clave).andExpect(status().isOk());
+        // La misma clave no la registra dos veces.
+        transferencia(origen, destino, "30.00", "Pagado fuera de Janery", clave).andExpect(status().isOk());
+
+        assertThat(resumen(o).get("valorActual").decimalValue()).isEqualByComparingTo("70");
+        assertThat(resumen(d).get("valorActual").decimalValue()).isEqualByComparingTo("30");
+        assertThat(resumen(d).get("compraventas").decimalValue()).isEqualByComparingTo("30");
+        assertThat(saldo(o)).isEqualByComparingTo("0");
+        assertThat(saldo(d)).isEqualByComparingTo("20");
+        assertThat(saldoDe("/api/v1/tesoreria")).isEqualByComparingTo(caja);
+        assertThat(jdbc.queryForObject("select motivo from compraventas_capital where clave = ?", String.class, clave))
+                .isEqualTo("Pagado fuera de Janery");
+    }
+
+    @Test
+    void transferenciaExigePermiso() throws Exception {
+        Persona a = socio("0");
+        conClave(a.token(), "/api/v1/admin/socios/transferencias",
+                "{\"origenId\":1,\"destinoId\":2,\"capital\":1.00,\"motivo\":\"x\"}").andExpect(status().isForbidden());
+    }
+
+    private ResultActions transferencia(long origen, long destino, String capital, String motivo, String clave) throws Exception {
+        return mvc.perform(post("/api/v1/admin/socios/transferencias").header(HttpHeaders.AUTHORIZATION, bearer(presidente()))
+                .header("Idempotency-Key", clave).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"origenId\":" + origen + ",\"destinoId\":" + destino + ",\"capital\":" + capital + ",\"motivo\":\"" + motivo + "\"}"));
+    }
+
+    @Test
     void anioEnCursoNoSeCierra() throws Exception {
         mvc.perform(post("/api/v1/admin/cierres").header(HttpHeaders.AUTHORIZATION, bearer(presidente()))
                         .contentType(MediaType.APPLICATION_JSON).content("{\"anio\":" + (ANIO_ANTERIOR + 1) + "}"))

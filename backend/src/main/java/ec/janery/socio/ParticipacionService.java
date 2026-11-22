@@ -69,6 +69,7 @@ public class ParticipacionService {
     }
 
     interface CompraventaRepository extends JpaRepository<CompraventaCapital, Long> {
+        Optional<CompraventaCapital> findByClave(String clave);
     }
 
     interface AutorizacionRepository extends JpaRepository<AutorizacionRetiro, Long> {
@@ -1072,12 +1073,41 @@ public class ParticipacionService {
         cuentas.mover(cuentaComprador, operacion, SALIDA, precio, "COMPRA_DE_CAPITAL");
         cuentas.mover(cuentaVendedor, operacion, ENTRADA, precio, "VENTA_DE_CAPITAL");
         CompraventaCapital venta = compraventas.save(new CompraventaCapital(null, vendedorId, compradorId, capital, precio,
-                operacion, actorId, Instant.now(reloj)));
+                operacion, actorId, Instant.now(reloj), null, null));
         variacion(vendedorId, "APORTE_VENTA", capital.negate(), null);
         variacion(compradorId, "APORTE_COMPRA", capital, null);
         auditoria.registrar(actorId, "COMPRAVENTA_CAPITAL", MODULO, "compraventa", venta.getId(), null,
                 capital.toPlainString() + " por " + precio.toPlainString(), null);
         return operacion;
+    }
+
+    /**
+     * Decisión del propietario (22/11/2026): un socio pasa capital a otro sin pago dentro de Janery (regalo, herencia o
+     * pago hecho por fuera). Ninguna cuenta ni caja se mueve; el capital cambia de manos igual que en una compraventa y
+     * las ganancias del que lo entrega tampoco pasan. Devuelve el id de la transferencia.
+     */
+    @Transactional
+    public Long registrarTransferencia(Long actorId, Long origenId, Long destinoId, BigDecimal capital, String motivo, String clave) {
+        if (origenId.equals(destinoId)) {
+            throw new NegocioException(HttpStatus.BAD_REQUEST, "MISMO_SOCIO", "Quien entrega y quien recibe deben ser distintos");
+        }
+        Optional<CompraventaCapital> previa = compraventas.findByClave(clave);
+        if (previa.isPresent()) {
+            return previa.get().getId();
+        }
+        socios.personaDe(origenId);
+        socios.personaDe(destinoId);
+        // El mismo candado que los repartos: dos transferencias del mismo socio a la vez podrían pasar más de lo que tiene.
+        cajas.saldoBloqueado(CajaService.FONDO_RESERVA);
+        if (capital.compareTo(variaciones.capital(origenId)) > 0) {
+            throw NegocioException.conflicto("CAPITAL_INSUFICIENTE", "El socio que entrega no tiene ese capital");
+        }
+        CompraventaCapital t = compraventas.save(new CompraventaCapital(null, origenId, destinoId, capital, BigDecimal.ZERO.setScale(2),
+                null, actorId, Instant.now(reloj), motivo, clave));
+        variacion(origenId, "APORTE_VENTA", capital.negate(), null);
+        variacion(destinoId, "APORTE_COMPRA", capital, null);
+        auditoria.registrar(actorId, "TRANSFERENCIA_CAPITAL", MODULO, "compraventa", t.getId(), null, capital.toPlainString(), motivo);
+        return t.getId();
     }
 
     // --- Cierre anual
