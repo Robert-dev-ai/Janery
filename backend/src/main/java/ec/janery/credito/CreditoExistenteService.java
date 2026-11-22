@@ -46,12 +46,15 @@ public class CreditoExistenteService {
 
     public record Datos(Long usuarioId, String modalidad, BigDecimal importe, int plazoMeses, BigDecimal tasaInteres,
             BigDecimal tasaDesgravamen, boolean conAhorroLetras, LocalDate fechaInicio, int letrasPagadas, BigDecimal encaje,
-            String nota) {
+            BigDecimal capitalDebe, String nota) {
     }
 
-    /** Cómo quedaría el crédito, sin guardar. Atrasadas: letras ya vencidas que no están entre las pagadas. */
+    /**
+     * Cómo quedaría el crédito, sin guardar. Atrasadas: letras ya vencidas que no están entre las pagadas. Abono: capital
+     * que ya pagó además de sus letras completas, cuando debe menos de lo que dicen sus letras pendientes.
+     */
     public record Vista(String perfil, List<Letra> cuotas, int letrasPagadas, int letrasAtrasadas, BigDecimal capitalPendiente,
-            BigDecimal ahorroAcumulado, BigDecimal encaje, BigDecimal tasaMora, BigDecimal totalPendiente) {
+            BigDecimal abonoCapital, BigDecimal ahorroAcumulado, BigDecimal encaje, BigDecimal tasaMora, BigDecimal totalPendiente) {
     }
 
     private static final String LETRAS = "LETRAS";
@@ -115,6 +118,8 @@ public class CreditoExistenteService {
         c.setCreadoEn(ahora);
         creditos.save(c);
 
+        // El abono cuenta como capital adelantado: cubre desde la primera letra pendiente hacia adelante, como un pago parcial.
+        BigDecimal abono = v.abonoCapital();
         for (Letra l : v.cuotas()) {
             CuotaCredito q = new CuotaCredito(c.getId(), l.numero(), l.vencimiento(), l.capital(), l.ahorroLetras(),
                     l.fondoDesgravamen(), l.interes(), l.total());
@@ -125,6 +130,10 @@ public class CreditoExistenteService {
                 q.setAhorroPagado(l.ahorroLetras());
                 q.setMoraHasta(l.vencimiento());
                 q.setPagadaEn(l.vencimiento().atStartOfDay(ZONA).toInstant());
+            } else if (abono.signum() > 0) {
+                BigDecimal aEsta = abono.min(l.capital());
+                q.setCapitalPagado(aEsta);
+                abono = abono.subtract(aEsta);
             }
             cuotas.save(q);
         }
@@ -141,7 +150,8 @@ public class CreditoExistenteService {
             movimientosAhorro.save(new MovimientoAhorroLetras(null, c.getId(), null, "ACUMULACION", v.ahorroAcumulado(), ahora));
         }
         auditoria.registrar(actorId, "CREDITO_EXISTENTE_REGISTRADO", MODULO, "credito", c.getId(), null,
-                d.importe().toPlainString() + " desde " + d.fechaInicio() + ", " + d.letrasPagadas() + " de " + d.plazoMeses() + " letras pagadas",
+                d.importe().toPlainString() + " desde " + d.fechaInicio() + ", " + d.letrasPagadas() + " de " + d.plazoMeses()
+                        + " letras pagadas, debe " + v.capitalPendiente().toPlainString() + " de capital",
                 d.nota());
         return c.getId();
     }
@@ -156,12 +166,20 @@ public class CreditoExistenteService {
         List<Letra> pendientes = letras.subList(d.letrasPagadas(), letras.size());
         LocalDate hoy = LocalDate.now(reloj);
         int atrasadas = (int) pendientes.stream().filter(l -> l.vencimiento().isBefore(hoy)).count();
-        BigDecimal capitalPendiente = pendientes.stream().map(Letra::capital).reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal segunLetras = pendientes.stream().map(Letra::capital).reduce(BigDecimal.ZERO.setScale(2), BigDecimal::add);
+        // Sin el dato, debe justo el capital de sus letras pendientes.
+        BigDecimal capitalPendiente = d.capitalDebe() == null ? segunLetras : d.capitalDebe().setScale(2);
+        if (capitalPendiente.compareTo(segunLetras) > 0) {
+            throw new NegocioException(HttpStatus.BAD_REQUEST, "DEUDA_MAYOR_QUE_LETRAS", "Con " + d.letrasPagadas()
+                    + " letras pagadas, el capital que falta es " + segunLetras.toPlainString()
+                    + " USD: no puede deber más. Si debe más, es que pagó menos letras");
+        }
+        BigDecimal abono = segunLetras.subtract(capitalPendiente);
         BigDecimal ahorro = pagadas.stream().map(Letra::ahorroLetras).reduce(BigDecimal.ZERO.setScale(2), BigDecimal::add);
-        BigDecimal total = pendientes.stream().map(Letra::total).reduce(BigDecimal.ZERO.setScale(2), BigDecimal::add);
+        BigDecimal total = pendientes.stream().map(Letra::total).reduce(BigDecimal.ZERO.setScale(2), BigDecimal::add).subtract(abono);
         // Como en los demás créditos: la mora es solo de clientes y usa la tasa vigente al registrarlo.
         BigDecimal mora = "CLIENTE".equals(perfil) ? parametros.valorVigente("MORA_DIARIA") : BigDecimal.ZERO;
-        return new Vista(perfil, letras, d.letrasPagadas(), atrasadas, capitalPendiente, ahorro, d.encaje().setScale(2), mora, total);
+        return new Vista(perfil, letras, d.letrasPagadas(), atrasadas, capitalPendiente, abono, ahorro, d.encaje().setScale(2), mora, total);
     }
 
     private void validar(Datos d) {
@@ -173,6 +191,9 @@ public class CreditoExistenteService {
         }
         if (d.letrasPagadas() >= d.plazoMeses()) {
             throw NegocioException.conflicto("CREDITO_TERMINADO", "Si ya pagó todas las letras, el crédito está terminado: no hace falta registrarlo");
+        }
+        if (d.capitalDebe() != null && d.capitalDebe().signum() <= 0) {
+            throw NegocioException.conflicto("CREDITO_TERMINADO", "Si ya no debe capital, el crédito está terminado: no hace falta registrarlo");
         }
         if (d.encaje().compareTo(d.importe()) > 0) {
             throw new NegocioException(HttpStatus.BAD_REQUEST, "ENCAJE_INVALIDO", "El encaje no puede superar el importe del crédito");

@@ -54,6 +54,10 @@ import { mensajeDeError } from '../../shared/utils/errores';
           <label>Desgravamen (% mensual sobre el importe, vacío si no tenía) <input type="number" min="0" step="any" name="desgravamen" placeholder="0" [(ngModel)]="datos.tasaDesgravamen" /></label>
           <label>Fecha en que recibió el dinero <input type="date" name="inicio" [max]="hoy" [(ngModel)]="datos.fechaInicio" /></label>
           <label>Letras ya pagadas completas (vacío si ninguna) <input type="number" min="0" step="1" name="pagadas" placeholder="0" [(ngModel)]="datos.letrasPagadas" /></label>
+          <label>Capital que debe hoy, sin intereses (USD, vacío si es justo el de sus letras pendientes)
+            <input type="number" min="0" step="any" name="debe" placeholder="Según sus letras" [(ngModel)]="datos.capitalDebe" />
+          </label>
+          <p class="suave">Si debe menos de lo que dicen sus letras porque abonó de más, ponga aquí lo que debe: la diferencia cuenta como capital ya pagado de las letras siguientes.</p>
           <label>Encaje que se le retuvo (USD, vacío si no tuvo) <input type="number" min="0" step="any" name="encaje" placeholder="0" [(ngModel)]="datos.encaje" /></label>
           <div class="fila-opcion">
             <label><input type="checkbox" name="ahorro" [(ngModel)]="datos.conAhorroLetras" /> Llevaba ahorro letras (letra redondeada a dólares enteros)</label>
@@ -67,7 +71,10 @@ import { mensajeDeError } from '../../shared/utils/errores';
             <div><dt>Perfil</dt><dd>{{ v.perfil === 'SOCIO' ? 'Socio' : 'Cliente' }}</dd></div>
             <div><dt>Letra mensual</dt><dd>{{ v.cuotas[0]?.total | currency: 'USD' }}</dd></div>
             <div><dt>Letras pagadas</dt><dd>{{ v.letrasPagadas }} de {{ v.cuotas.length }}</dd></div>
-            <div><dt>Capital pendiente</dt><dd>{{ v.capitalPendiente | currency: 'USD' }}</dd></div>
+            <div><dt>Capital que debe</dt><dd>{{ v.capitalPendiente | currency: 'USD' }}</dd></div>
+            @if (v.abonoCapital > 0) {
+              <div><dt>Capital abonado aparte de sus letras</dt><dd>{{ v.abonoCapital | currency: 'USD' }}</dd></div>
+            }
             <div><dt>Falta por pagar (sin mora)</dt><dd>{{ v.totalPendiente | currency: 'USD' }}</dd></div>
             <div><dt>Encaje retenido</dt><dd>{{ v.encaje | currency: 'USD' }}</dd></div>
             <div><dt>Ahorro letras acumulado</dt><dd>{{ v.ahorroAcumulado | currency: 'USD' }}</dd></div>
@@ -94,6 +101,7 @@ import { mensajeDeError } from '../../shared/utils/errores';
                       @if (l.numero <= v.letrasPagadas) { <span class="estado estado-neutro">Pagada</span> }
                       @else if (l.vencimiento < hoy) { <span class="negativo">Atrasada</span> }
                       @else { Pendiente }
+                      @if (abonado(v, l.numero); as a) { <br /><small class="suave">Capital abonado: {{ a | currency: 'USD' }}</small> }
                     </td>
                   </tr>
                 }
@@ -153,13 +161,31 @@ export class CreditoExistenteForm {
     const d = this.datos;
     const valido = (n: number | null) => n === null || n >= 0;
     return (d.importe ?? 0) > 0 && (d.plazoMeses ?? 0) > 0 && d.tasaInteres !== null && d.tasaInteres >= 0 && !!d.fechaInicio
-      && valido(d.tasaDesgravamen) && valido(d.letrasPagadas) && valido(d.encaje);
+      && valido(d.tasaDesgravamen) && valido(d.letrasPagadas) && valido(d.encaje) && valido(d.capitalDebe);
+  }
+
+  /** Lo que el abono cubre del capital de una letra pendiente: se reparte desde la primera hacia adelante. */
+  protected abonado(v: VistaCreditoExistente, numero: number): number {
+    let resto = v.abonoCapital;
+    for (const l of v.cuotas) {
+      if (l.numero <= v.letrasPagadas) {
+        continue;
+      }
+      const aEsta = Math.min(resto, l.capital);
+      if (l.numero === numero) {
+        return aEsta;
+      }
+      resto = Math.round((resto - aEsta) * 100) / 100;
+    }
+    return 0;
   }
 
   private envio(): CreditoExistente {
     const d = this.datos;
+    // Un campo numérico borrado llega como null o como texto vacío: los dos significan «según sus letras».
+    const debe = d.capitalDebe === null || (d.capitalDebe as unknown) === '' ? null : d.capitalDebe;
     return { ...d, importe: d.importe!, plazoMeses: d.plazoMeses!, tasaInteres: d.tasaInteres!, tasaDesgravamen: d.tasaDesgravamen ?? 0,
-      letrasPagadas: d.letrasPagadas ?? 0, encaje: d.encaje ?? 0 };
+      letrasPagadas: d.letrasPagadas ?? 0, encaje: d.encaje ?? 0, capitalDebe: debe };
   }
 
   protected previsualizar(): void {
@@ -172,7 +198,7 @@ export class CreditoExistenteForm {
 
   protected async registrar(v: VistaCreditoExistente): Promise<void> {
     const p = this.persona()!;
-    const pregunta = `¿Registrar el crédito de ${p.nombre} por ${this.datos.importe} USD, con ${v.letrasPagadas} de ${v.cuotas.length} letras pagadas? Queda activo de inmediato y no se puede borrar.`;
+    const pregunta = `¿Registrar el crédito de ${p.nombre} por ${this.datos.importe} USD, con ${v.letrasPagadas} de ${v.cuotas.length} letras pagadas y ${v.capitalPendiente} USD de capital por pagar? Queda activo de inmediato y no se puede borrar.`;
     if (!(await this.dialogo.confirmar(pregunta, 'Registrar'))) {
       return;
     }
@@ -195,7 +221,7 @@ export class CreditoExistenteForm {
 
   /** Los números empiezan vacíos: con un 0 escrito, al teclear quedaba «010». */
   private vacio(): Formulario {
-    return { modalidad: 'NORMAL', importe: null, plazoMeses: null, tasaInteres: null, tasaDesgravamen: null, conAhorroLetras: false, fechaInicio: '', letrasPagadas: null, encaje: null, nota: '' };
+    return { modalidad: 'NORMAL', importe: null, plazoMeses: null, tasaInteres: null, tasaDesgravamen: null, conAhorroLetras: false, fechaInicio: '', letrasPagadas: null, encaje: null, capitalDebe: null, nota: '' };
   }
 }
 

@@ -38,8 +38,30 @@ public class UsuarioAdminController {
     public record TemporalResponse(String contrasenaTemporal) {
     }
 
+    /** Los mismos datos que pide el registro, sin contraseña: se genera una temporal. */
+    public record CrearRequest(@jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Email
+            @jakarta.validation.constraints.Size(max = 254) String correo,
+            @jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Size(max = 100) String nombres,
+            @jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Size(max = 100) String apellidos,
+            @jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Pattern(
+                    regexp = ec.janery.persona.PersonaController.CEDULA, message = "debe tener 10 números") String identificacion,
+            @jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Pattern(
+                    regexp = ec.janery.persona.PersonaController.TELEFONO, message = "solo admite números") String telefono,
+            @jakarta.validation.constraints.Size(max = 200) String direccion) {
+    }
+
     private final AuthService auth;
+    private final AltaPersonaService altas;
     private final ec.janery.persona.PersonaService personas;
+
+    /** Crea la cuenta de una persona con su cuenta principal activa. La contraseña temporal se muestra una sola vez. */
+    @PostMapping
+    @ResponseStatus(HttpStatus.CREATED)
+    public AltaPersonaService.Alta crear(@AuthenticationPrincipal Jwt jwt,
+            @jakarta.validation.Valid @RequestBody CrearRequest r) {
+        return altas.crear(Long.valueOf(jwt.getSubject()), r.correo(), new ec.janery.persona.PersonaController.PerfilRequest(
+                r.nombres(), r.apellidos(), r.identificacion(), r.telefono(), r.direccion()));
+    }
 
     /** La contraseña temporal se muestra una sola vez: quien la genera se la entrega a la persona. */
     @PostMapping("/{id}/restablecer-contrasena")

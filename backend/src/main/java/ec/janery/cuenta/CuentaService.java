@@ -141,6 +141,13 @@ public class CuentaService {
         return new CuentaVista(cuenta, personas.nombreCompleto(cuenta.getPersonaId()), reembolsable);
     }
 
+    /** Apertura en ventanilla: quien atiende recibe el pago de apertura en efectivo y la cuenta queda activa de una vez. */
+    @Transactional
+    public CuentaVista abrirEnVentanilla(Long actorId, Long usuarioId) {
+        CuentaVista solicitada = solicitarApertura(usuarioId, "EFECTIVO", null);
+        return confirmarApertura(actorId, solicitada.cuenta().getId());
+    }
+
     @Transactional
     public void rechazarApertura(Long actorId, Long cuentaId, String motivo) {
         CuentaPrincipal cuenta = bloquear(cuentaId);

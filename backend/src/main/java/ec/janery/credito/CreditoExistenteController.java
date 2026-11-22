@@ -47,11 +47,12 @@ public class CreditoExistenteController {
             @NotNull LocalDate fechaInicio,
             @Min(0) int letrasPagadas,
             @NotNull @DecimalMin("0") @Digits(integer = 12, fraction = 2) BigDecimal encaje,
+            @DecimalMin("0") @Digits(integer = 12, fraction = 2) BigDecimal capitalDebe,
             @Size(max = 300) String nota) {
 
         CreditoExistenteService.Datos datos(Long usuarioId) {
             return new CreditoExistenteService.Datos(usuarioId, modalidad, importe, plazoMeses, tasaInteres, tasaDesgravamen,
-                    conAhorroLetras, fechaInicio, letrasPagadas, encaje, nota == null || nota.isBlank() ? null : nota.trim());
+                    conAhorroLetras, fechaInicio, letrasPagadas, encaje, capitalDebe, nota == null || nota.isBlank() ? null : nota.trim());
         }
     }
 
