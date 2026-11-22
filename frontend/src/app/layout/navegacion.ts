@@ -121,6 +121,8 @@ const PORTAL: GrupoMenu[] = [
     titulo: 'Área de socios',
     enlaces: [
       { titulo: 'Estado general', ruta: '/app/socios/general', icono: Users, visible: esSocio },
+      { titulo: 'Cartera de créditos', ruta: '/app/socios/cartera', icono: HandCoins, visible: esSocio },
+      { titulo: 'Ahorros y aportes', ruta: '/app/socios/ahorros', icono: PiggyBank, visible: esSocio },
       { titulo: 'Balance general', ruta: '/app/socios/balance', icono: Scale, visible: esSocio },
       { titulo: 'Libro diario', ruta: '/app/socios/diario', icono: BookOpen, visible: esSocio },
       { titulo: 'Tesorería', ruta: '/app/socios/tesoreria', icono: Landmark, visible: esSocio },

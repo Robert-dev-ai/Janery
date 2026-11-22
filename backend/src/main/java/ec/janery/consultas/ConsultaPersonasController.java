@@ -24,6 +24,7 @@ public class ConsultaPersonasController {
 
     private final ConsultaPersonasService service;
     private final SocioService socios;
+    private final CarteraSociosService cartera;
 
     // --- Área general: exclusiva de socios activos. No depende de un cargo o permiso, sino de ser socio.
 
@@ -45,6 +46,18 @@ public class ConsultaPersonasController {
     public ConsultaPersonasService.DetalleFinanciero persona(@AuthenticationPrincipal Jwt jwt, @PathVariable Long id) {
         exigirSocio(jwt);
         return service.detalleFinanciero(id);
+    }
+
+    @GetMapping("/socios/general/cartera")
+    public List<CarteraSociosService.PersonaCartera> cartera(@AuthenticationPrincipal Jwt jwt) {
+        exigirSocio(jwt);
+        return cartera.cartera();
+    }
+
+    @GetMapping("/socios/general/ahorros")
+    public List<CarteraSociosService.PersonaAhorros> ahorros(@AuthenticationPrincipal Jwt jwt) {
+        exigirSocio(jwt);
+        return cartera.ahorros();
     }
 
     @GetMapping("/socios/general/movimientos")

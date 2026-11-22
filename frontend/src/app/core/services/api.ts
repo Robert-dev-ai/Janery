@@ -680,6 +680,63 @@ export interface ResumenGeneral {
   ahorros: number;
 }
 
+/** En los créditos a letras, letra y su desglose son de la próxima letra por pagar; en los emergentes van en null. */
+export interface CreditoCartera {
+  id: number;
+  codigo: string;
+  familia: string;
+  modalidad: string | null;
+  existente: boolean;
+  saldoInicial: number;
+  saldoActual: number;
+  plazoMeses: number | null;
+  letra: number | null;
+  letraCapital: number | null;
+  letraInteres: number | null;
+  letraDesgravamen: number | null;
+  letraAhorro: number | null;
+  /** Interés y desgravamen corridos en los emergentes; mora en los créditos a letras. */
+  cargosPorPagar: number;
+  letrasPagadas: number;
+  letras: number;
+  letrasAtrasadas: number;
+  ahorroLetras: number | null;
+  encaje: number | null;
+  totalDeuda: number;
+}
+
+export interface PersonaCartera {
+  id: number;
+  nombre: string;
+  socio: boolean;
+  creditos: CreditoCartera[];
+  saldoActual: number;
+  cargosPorPagar: number;
+  totalDeuda: number;
+  letrasAtrasadas: number;
+}
+
+export interface PersonaAhorros {
+  id: number;
+  nombre: string;
+  socio: boolean;
+  cuenta: number;
+  apertura: number;
+  ahorrosNormales: number;
+  plazosFijos: number;
+  ahorroLetras: number;
+  encajes: number;
+  totalAhorros: number;
+  aporteInicial: number;
+  aportesMensuales: number;
+  mesesAportados: number;
+  aportesPersonales: number;
+  compraventas: number;
+  ganancias: number;
+  fondoPersonal: number;
+  cajaChica: number;
+}
+
 export interface PersonaFinanciera {
   id: number;
   nombre: string;
@@ -1340,6 +1397,14 @@ export class ApiService {
 
   personasGeneral(buscar: string, pagina: number): Observable<Pagina<PersonaFinanciera>> {
     return this.http.get<Pagina<PersonaFinanciera>>(`${this.base}/socios/general/personas`, { params: consulta({ buscar, pagina }) });
+  }
+
+  carteraGeneral(): Observable<PersonaCartera[]> {
+    return this.http.get<PersonaCartera[]>(`${this.base}/socios/general/cartera`);
+  }
+
+  ahorrosGeneral(): Observable<PersonaAhorros[]> {
+    return this.http.get<PersonaAhorros[]>(`${this.base}/socios/general/ahorros`);
   }
 
   detalleGeneral(id: number): Observable<DetalleFinanciero> {

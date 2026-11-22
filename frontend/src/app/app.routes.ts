@@ -88,6 +88,8 @@ export const routes: Routes = [
             path: 'socios',
             canActivate: [socioGuard],
             children: [
+              { path: 'cartera', loadComponent: () => import('./features/socios/cartera').then((m) => m.Cartera) },
+              { path: 'ahorros', loadComponent: () => import('./features/socios/ahorros-aportes').then((m) => m.AhorrosAportes) },
               { path: 'balance', loadComponent: () => import('./features/contabilidad/balance').then((m) => m.Balance) },
               { path: 'diario', loadComponent: () => import('./features/contabilidad/libro-diario').then((m) => m.LibroDiarioPagina) },
               { path: 'tesoreria', loadComponent: () => import('./features/admin/tesoreria').then((m) => m.AreaTesoreria) },

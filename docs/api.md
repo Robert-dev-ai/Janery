@@ -117,6 +117,8 @@ Depósitos (`Idempotency-Key` obligatoria al solicitar):
 Área general, solo socios activos (403 `SOLO_SOCIOS` para los demás):
 
 - `GET /socios/general/resumen`, `/personas`, `/personas/{id}`, `/movimientos`
+- `GET /socios/general/cartera`: cada persona con sus créditos activos (saldo inicial y actual, próxima letra desglosada, letras pagadas y atrasadas, ahorro letras, encaje, interés o mora por pagar y total de la deuda)
+- `GET /socios/general/ahorros`: cada persona con su ahorro a la vista, plazo fijo, ahorro letras, encaje, saldo en cuenta y apertura; de los socios, sus aportes inicial, mensuales (y meses), personales, compraventas, ganancias, fondo personal y caja chica
 
 Gestión:
 

@@ -302,6 +302,10 @@
   .tabla { @apply overflow-x-auto rounded-xl border border-borde bg-superficie shadow-xs; }
   .tabla .acciones { @apply items-center; }
   .num { @apply text-right whitespace-nowrap tabular-nums; }
+  /* Hojas con muchas columnas, como la cartera o los ahorros de todas las personas. */
+  .tabla-compacta th, .tabla-compacta td { @apply px-3 py-2; }
+  .tabla-compacta td:first-child { @apply whitespace-nowrap; }
+  tfoot td { @apply border-t-2 border-b-0 border-borde bg-fondo font-semibold tabular-nums; }
   .positivo { @apply font-medium text-exito; }
   .negativo { @apply font-medium text-peligro; }
   .paginador { @apply mt-3 flex flex-wrap items-center gap-3 text-sm; }
