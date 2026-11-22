@@ -259,7 +259,7 @@ class ConfiguracionIntegrationTest {
         assertThat(jdbc.queryForObject("select identificacion from personas where usuario_id = ?", String.class, id)).isEqualTo(cedula);
         assertThat(jdbc.queryForObject("""
                 select count(*) from auditoria_eventos a join personas p on a.entidad_id = p.id::text
-                where p.usuario_id = ? and a.accion = 'NOMBRE_CAMBIADO' and a.antes = 'Ana Ruiz'""", Integer.class, id))
+                where p.usuario_id = ? and a.accion = 'NOMBRE_CAMBIADO' and a.antes = 'Ruiz Ana'""", Integer.class, id))
                 .isEqualTo(1);
     }
 
