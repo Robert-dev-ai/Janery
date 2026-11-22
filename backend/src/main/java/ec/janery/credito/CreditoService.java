@@ -60,6 +60,8 @@ public class CreditoService {
 
         Page<Credito> findByEstado(String estado, Pageable pageable);
 
+        List<Credito> findByEstadoOrderByIdAsc(String estado);
+
         Optional<Credito> findByPersonaIdAndFamilia(Long personaId, String familia);
 
         Optional<Credito> findByPersonaIdAndFamiliaAndModalidadAndAnioPromocion(Long personaId, String familia,
@@ -764,6 +766,18 @@ public class CreditoService {
         Page<Credito> page = estado == null ? creditos.findAll(pageable) : creditos.findByEstado(estado, pageable);
         // Toda la página de una vez: vista() de uno en uno repetiría cinco consultas por crédito.
         return new org.springframework.data.domain.PageImpl<>(vistas(page.getContent()), pageable, page.getTotalElements());
+    }
+
+    /** Todos los créditos activos, con sus cargos al día, agrupados por persona: la cartera que ven los socios. */
+    @Transactional(readOnly = true)
+    public Map<Long, List<CreditoVista>> activosPorPersona() {
+        List<Credito> activos = creditos.findByEstadoOrderByIdAsc(ACTIVO);
+        List<CreditoVista> lista = vistas(activos);
+        Map<Long, List<CreditoVista>> resultado = new java.util.HashMap<>();
+        for (int i = 0; i < activos.size(); i++) {
+            resultado.computeIfAbsent(activos.get(i).getPersonaId(), k -> new java.util.ArrayList<>()).add(lista.get(i));
+        }
+        return resultado;
     }
 
     private CreditoVista vista(Credito c) {

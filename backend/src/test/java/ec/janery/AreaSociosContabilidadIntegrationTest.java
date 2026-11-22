@@ -255,7 +255,7 @@ class AreaSociosContabilidadIntegrationTest {
         String socioAuth = bearer(login(correoDe(socio)));
         String otroAuth = bearer(noSocio.token());
 
-        for (String ruta : new String[] { "resumen", "personas", "movimientos", "personas/" + noSocio.personaId() }) {
+        for (String ruta : new String[] { "resumen", "personas", "movimientos", "cartera", "ahorros", "personas/" + noSocio.personaId() }) {
             mvc.perform(get("/api/v1/socios/general/" + ruta).header(HttpHeaders.AUTHORIZATION, otroAuth))
                     .andExpect(status().isForbidden()).andExpect(jsonPath("$.codigo").value("SOLO_SOCIOS"));
             mvc.perform(get("/api/v1/socios/general/" + ruta).header(HttpHeaders.AUTHORIZATION, socioAuth)).andExpect(status().isOk());
@@ -263,6 +263,64 @@ class AreaSociosContabilidadIntegrationTest {
         String cuerpo = mvc.perform(get("/api/v1/socios/general/personas/" + noSocio.personaId()).header(HttpHeaders.AUTHORIZATION, socioAuth))
                 .andReturn().getResponse().getContentAsString();
         assertThat(cuerpo).doesNotContain("identificacion", "telefono", "direccion", "correo");
+        for (String ruta : new String[] { "cartera", "ahorros" }) {
+            String lista = mvc.perform(get("/api/v1/socios/general/" + ruta).header(HttpHeaders.AUTHORIZATION, socioAuth))
+                    .andReturn().getResponse().getContentAsString();
+            assertThat(lista).doesNotContain("identificacion", "telefono", "direccion", "correo");
+        }
+    }
+
+    /** Las hojas de cartera y de ahorros: cada persona con sus créditos activos, y con sus ahorros y aportes. */
+    @Test
+    void carteraYAhorrosMuestranATodasLasPersonas() throws Exception {
+        Persona p = persona("500.00");
+        String auth = bearer(p.token());
+        JsonNode ahorro = json.readTree(mvc.perform(post("/api/v1/ahorros/normales").header("Idempotency-Key", UUID.randomUUID().toString()).header(HttpHeaders.AUTHORIZATION, auth)
+                .contentType(MediaType.APPLICATION_JSON).content("{\"nombre\":\"Meta\"}")).andReturn().getResponse().getContentAsString());
+        conClave(auth, "/api/v1/ahorros/" + ahorro.get("id").asLong() + "/depositos", "{\"importe\":50.00}").andExpect(status().isOk());
+        conClave(auth, "/api/v1/ahorros/plazo-fijo", "{\"nombre\":\"Fijo\",\"importe\":40.00,\"plazoMeses\":6}").andExpect(status().is2xxSuccessful());
+        long credito = json.readTree(mvc.perform(post("/api/v1/creditos/letras/solicitudes").header("Idempotency-Key", UUID.randomUUID().toString()).header(HttpHeaders.AUTHORIZATION, auth)
+                .contentType(MediaType.APPLICATION_JSON).content("{\"modalidad\":\"NORMAL\",\"importe\":300.00,\"plazoMeses\":6,\"origenEncaje\":\"CREDITO\"}"))
+                .andReturn().getResponse().getContentAsString()).get("id").asLong();
+        mvc.perform(post("/api/v1/admin/creditos/" + credito + "/aprobar").header(HttpHeaders.AUTHORIZATION, bearer(presidente())))
+                .andExpect(status().is2xxSuccessful());
+        conClave(auth, "/api/v1/creditos/" + credito + "/pagos", "{}").andExpect(status().isOk());
+
+        Persona socio = persona("10.00");
+        mvc.perform(post("/api/v1/admin/usuarios/" + socio.usuario() + "/socio").header(HttpHeaders.AUTHORIZATION, bearer(presidente())))
+                .andExpect(status().isNoContent());
+        String socioAuth = bearer(login(correoDe(socio)));
+
+        JsonNode cartera = json.readTree(mvc.perform(get("/api/v1/socios/general/cartera").header(HttpHeaders.AUTHORIZATION, socioAuth))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+        JsonNode deudor = buscarPersona(cartera, p.personaId());
+        assertThat(deudor.get("creditos")).hasSize(1);
+        JsonNode c = deudor.get("creditos").get(0);
+        assertThat(c.get("id").asLong()).isEqualTo(credito);
+        assertThat(c.get("saldoInicial").decimalValue()).isEqualByComparingTo("300.00");
+        assertThat(c.get("letrasPagadas").asInt()).isEqualTo(1);
+        assertThat(c.get("letras").asInt()).isEqualTo(6);
+        assertThat(c.get("saldoActual").decimalValue()).isLessThan(new BigDecimal("300.00"));
+        assertThat(c.get("letra").decimalValue().signum()).isPositive();
+        assertThat(deudor.get("totalDeuda").decimalValue()).isEqualByComparingTo(c.get("totalDeuda").decimalValue());
+
+        JsonNode ahorros = json.readTree(mvc.perform(get("/api/v1/socios/general/ahorros").header(HttpHeaders.AUTHORIZATION, socioAuth))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+        JsonNode dueno = buscarPersona(ahorros, p.personaId());
+        assertThat(dueno.get("ahorrosNormales").decimalValue()).isEqualByComparingTo("50.00");
+        assertThat(dueno.get("plazosFijos").decimalValue()).isEqualByComparingTo("40.00");
+        assertThat(dueno.get("ahorroLetras").decimalValue().signum()).isPositive();
+        assertThat(dueno.get("socio").asBoolean()).isFalse();
+        assertThat(buscarPersona(ahorros, socio.personaId()).get("socio").asBoolean()).isTrue();
+    }
+
+    private static JsonNode buscarPersona(JsonNode lista, long personaId) {
+        for (JsonNode n : lista) {
+            if (n.get("id").asLong() == personaId) {
+                return n;
+            }
+        }
+        throw new AssertionError("La persona " + personaId + " no aparece en la lista");
     }
 
     @Test

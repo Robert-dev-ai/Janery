@@ -28,6 +28,15 @@ describe('navegación', () => {
     expect(titulos(menuPortal(yo({ esSocio: true })))).toContain('Estado general');
   });
 
+  it('la cartera y los ahorros de todas las personas son solo para socios', () => {
+    const otro = titulos(menuPortal(yo({ permisos: ['ADMIN_USUARIOS', 'APROBAR_CREDITOS'] })));
+    expect(otro).not.toContain('Cartera de créditos');
+    expect(otro).not.toContain('Ahorros y aportes');
+    const socio = titulos(menuPortal(yo({ esSocio: true })));
+    expect(socio).toContain('Cartera de créditos');
+    expect(socio).toContain('Ahorros y aportes');
+  });
+
   it('el fondo personal es solo para socios', () => {
     expect(titulos(menuPortal(yo({})))).not.toContain('Fondo y aportes');
     expect(titulos(menuPortal(yo({ esSocio: true })))).toContain('Fondo y aportes');

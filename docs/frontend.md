@@ -35,6 +35,8 @@ Usa `LayoutPanel` con lateral claro. El menú está en `layout/navegacion.ts`.
 - `/app/depositos` avisar un depósito en efectivo o por transferencia
 - `/app/retiros` pedir dinero en efectivo o al banco
 - `/app/socios/general` estado general, exclusivo de socios
+- `/app/socios/cartera` cartera de créditos de todas las personas, por persona y por tipo de crédito, exclusiva de socios
+- `/app/socios/ahorros` ahorros de todas las personas y aportes de cada socio, exclusivo de socios
 - `/mis-cargos` solo para quien tiene cargo
 
 ### Configuración (menú de perfil del header)
