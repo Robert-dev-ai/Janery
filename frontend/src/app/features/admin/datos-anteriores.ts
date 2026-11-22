@@ -5,9 +5,11 @@ import { FormsModule } from '@angular/forms';
 import { ApiService, EstadoAportes, PersonaTramite } from '../../core/services/api';
 import { DialogoService } from '../../shared/components/dialogo';
 import { mensajeDeError } from '../../shared/utils/errores';
+import { AjusteAhorroLetras } from './ajuste-ahorro-letras';
 import { CreditoExistenteForm } from './credito-existente';
 
-type Pestana = 'LETRAS' | 'EMERGENTE' | 'CUPO' | 'AHORRO' | 'APORTES';
+// AJUSTE_AHORRO es temporal: se quita junto con ajuste-ahorro-letras.ts.
+type Pestana = 'LETRAS' | 'EMERGENTE' | 'CUPO' | 'AHORRO' | 'APORTES' | 'AJUSTE_AHORRO';
 
 /**
  * Todo lo que una persona ya tenía antes de usar Janery: se elige a la persona una vez y se registra, uno por uno, su
@@ -15,7 +17,7 @@ type Pestana = 'LETRAS' | 'EMERGENTE' | 'CUPO' | 'AHORRO' | 'APORTES';
  */
 @Component({
   selector: 'app-datos-anteriores',
-  imports: [CreditoExistenteForm, CurrencyPipe, FormsModule],
+  imports: [AjusteAhorroLetras, CreditoExistenteForm, CurrencyPipe, FormsModule],
   template: `
     <h1>Datos anteriores a Janery</h1>
     <p class="suave">Para cargar lo que cada persona ya tenía antes de usar Janery. No entra ni sale dinero de la caja ni de su cuenta: ese dinero ya se movió. Se registra lo que tiene o debe hoy y, desde ahí, todo funciona como cualquier otro producto.</p>
@@ -51,6 +53,9 @@ type Pestana = 'LETRAS' | 'EMERGENTE' | 'CUPO' | 'AHORRO' | 'APORTES';
       @switch (pestana()) {
         @case ('LETRAS') {
           <app-credito-existente [fija]="persona()" (registrado)="registrado('Crédito a letras registrado.')" />
+        }
+        @case ('AJUSTE_AHORRO') {
+          <app-ajuste-ahorro-letras [usuarioId]="persona()!.usuarioId" />
         }
         @case ('EMERGENTE') {
           <form class="tarjeta" (ngSubmit)="registrarEmergente()">
@@ -147,6 +152,7 @@ export class DatosAnteriores implements OnInit {
     { id: 'CUPO', titulo: 'Cupo de socio' },
     { id: 'AHORRO', titulo: 'Ahorros' },
     { id: 'APORTES', titulo: 'Aportes de socio' },
+    { id: 'AJUSTE_AHORRO', titulo: 'Corregir ahorro letras' },
   ];
 
   protected readonly resultados = signal<PersonaTramite[]>([]);
