@@ -119,6 +119,11 @@ public class DatosAnterioresController {
                 r.fechaApertura(), r.plazoMeses(), r.tasaAnual()), clave);
     }
 
+    @GetMapping("/personas/{usuarioId}/aportes")
+    public ParticipacionService.EstadoAportes estadoAportes(@PathVariable Long usuarioId) {
+        return participacion.estadoAportes(usuarioId);
+    }
+
     @PostMapping("/personas/{usuarioId}/aportes")
     @ResponseStatus(HttpStatus.CREATED)
     public ParticipacionService.AportesRegistrados aportes(@AuthenticationPrincipal Jwt jwt, @PathVariable Long usuarioId,

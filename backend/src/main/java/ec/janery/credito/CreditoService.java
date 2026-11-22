@@ -72,6 +72,12 @@ public class CreditoService {
         BigDecimal cupoUtilizado(@Param("personaId") Long personaId);
 
         @Query("""
+                select c from Credito c where c.personaId in :personaIds and c.estado = 'ACTIVO'
+                and c.familia in ('EMERGENTE_SOCIO', 'EMERGENTE_ESTACIONAL') order by c.id
+                """)
+        List<Credito> lineasDe(@Param("personaIds") java.util.Collection<Long> personaIds);
+
+        @Query("""
                 select count(c) from Credito c where c.personaId = :personaId and c.familia = 'EMERGENTE_CLIENTE'
                 and c.fechaInicio >= :desde and c.fechaInicio <= :hasta
                 """)
@@ -689,6 +695,35 @@ public class CreditoService {
 
     /** Cuotas sin pagar con el vencimiento ya pasado, la más antigua primero. El cupo de socio no tiene vencimiento. */
     @Transactional(readOnly = true)
+    /** Interés y desgravamen corridos de un cupo de socio que aún no se pagan, redondeados como al cobrarlos. */
+    public record CargoCupo(Long creditoId, String familia, String modalidad, BigDecimal interes, BigDecimal desgravamen) {
+        public BigDecimal total() {
+            return interes.add(desgravamen);
+        }
+    }
+
+    /**
+     * Decisión del propietario (22/11/2026): para estar al día, el socio no puede deber intereses de su cupo emergente.
+     * El capital del cupo no vence y no cuenta.
+     */
+    @Transactional(readOnly = true)
+    public Map<Long, List<CargoCupo>> cargosCupo(java.util.Collection<Long> personaIds) {
+        Map<Long, List<CargoCupo>> resultado = new java.util.HashMap<>();
+        if (personaIds.isEmpty()) {
+            return resultado;
+        }
+        LocalDate hoy = hoy();
+        for (Credito c : creditos.lineasDe(personaIds)) {
+            BigDecimal interes = c.interesHasta(hoy).setScale(2, java.math.RoundingMode.HALF_UP);
+            BigDecimal desgravamen = c.desgravamenHasta(hoy).setScale(2, java.math.RoundingMode.HALF_UP);
+            if (interes.add(desgravamen).signum() > 0) {
+                resultado.computeIfAbsent(c.getPersonaId(), k -> new java.util.ArrayList<>())
+                        .add(new CargoCupo(c.getId(), c.getFamilia(), c.getModalidad(), interes, desgravamen));
+            }
+        }
+        return resultado;
+    }
+
     public List<CuotaVencida> cuotasVencidas(Long personaId) {
         // Cuotas y créditos en una consulta: leer el crédito de cada cuota sería un viaje a la base por cuota.
         return cuotasVencidas(List.of(personaId)).getOrDefault(personaId, List.of());

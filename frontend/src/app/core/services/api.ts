@@ -288,6 +288,15 @@ export interface AportesAnteriores {
   cajaChicaHasta: string | null;
 }
 
+/** Lo que el socio ya tiene registrado; meses en formato AAAA-MM. */
+export interface EstadoAportes {
+  socio: boolean;
+  socioDesde: string | null;
+  aporteInicial: boolean;
+  mesesAporte: string[];
+  mesesCajaChica: string[];
+}
+
 export interface AportesRegistrados {
   socioId: number;
   socioDesde: string;
@@ -1494,6 +1503,10 @@ export class ApiService {
 
   registrarAhorroAnterior(usuarioId: number, datos: AhorroAnterior, clave: string): Observable<Ahorro> {
     return this.http.post<Ahorro>(`${this.base}/admin/anteriores/personas/${usuarioId}/ahorros`, datos, conClave(clave));
+  }
+
+  estadoAportes(usuarioId: number): Observable<EstadoAportes> {
+    return this.http.get<EstadoAportes>(`${this.base}/admin/anteriores/personas/${usuarioId}/aportes`);
   }
 
   registrarAportesAnteriores(usuarioId: number, datos: AportesAnteriores, clave: string): Observable<AportesRegistrados> {

@@ -2,7 +2,7 @@ import { CurrencyPipe } from '@angular/common';
 import { Component, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
-import { ApiService, PersonaTramite } from '../../core/services/api';
+import { ApiService, EstadoAportes, PersonaTramite } from '../../core/services/api';
 import { DialogoService } from '../../shared/components/dialogo';
 import { mensajeDeError } from '../../shared/utils/errores';
 import { CreditoExistenteForm } from './credito-existente';
@@ -107,13 +107,28 @@ type Pestana = 'LETRAS' | 'EMERGENTE' | 'CUPO' | 'AHORRO' | 'APORTES';
         @case ('APORTES') {
           <form class="tarjeta" (ngSubmit)="registrarAportes()">
             <h2 class="seccion-titulo">Aportes de socio</h2>
-            <p class="suave">Lo que el socio ya aportó. Los meses se marcan pagados desde su mes de ingreso hasta el que indique; los ya registrados se saltan. Deje vacío lo que no aplique.</p>
+            <p class="suave">Los meses se marcan pagados <strong>desde el mes en que entró como socio</strong> hasta el mes que indique, y se pueden adelantar hasta diciembre de este año. Los ya pagados se saltan. Deje vacío lo que no aplique.</p>
+            @if (estado(); as e) {
+              @if (e.socio) {
+                <dl class="ficha-datos">
+                  <div><dt>Socio desde</dt><dd>{{ e.socioDesde }}</dd></div>
+                  <div><dt>Aporte inicial</dt><dd>{{ e.aporteInicial ? 'Registrado' : 'Sin registrar' }}</dd></div>
+                  <div><dt>Aportes mensuales pagados</dt><dd>{{ rango(e.mesesAporte) }}</dd></div>
+                  <div><dt>Caja chica pagada</dt><dd>{{ rango(e.mesesCajaChica) }}</dd></div>
+                </dl>
+                <p class="suave">Si es socio desde antes del {{ e.socioDesde }}, escriba su fecha real en «Socio desde»: los meses se cuentan desde ahí.</p>
+              } @else {
+                <p class="suave">Aún no figura como socio: indique desde cuándo lo es.</p>
+              }
+            }
             <label>Socio desde {{ persona()!.socio ? '(vacío para mantener la fecha que tiene)' : '' }} <input type="date" name="desde" [max]="hoy" [(ngModel)]="aportes.socioDesde" /></label>
             <label>Aporte inicial (USD) <input type="number" min="0" step="any" name="inicial" [(ngModel)]="aportes.aporteInicial" /></label>
-            <label>Aporte mensual pagado hasta el mes <input type="month" name="mensuales" [max]="mesActual" [(ngModel)]="aportes.mensualesHasta" /></label>
+            <label>Aporte mensual pagado hasta el mes <input type="month" name="mensuales" [max]="finDeAnio" [(ngModel)]="aportes.mensualesHasta" /></label>
+            @if (aportes.mensualesHasta) { <p class="suave">{{ meses('aporte mensual', aportes.mensualesHasta, estado()?.mesesAporte ?? []) }}</p> }
             <label>Valor de cada aporte mensual (USD) <input type="number" min="0" step="any" name="mensual" [(ngModel)]="aportes.importeMensual" /></label>
             <label>Aportes personales, en total (USD) <input type="number" min="0" step="any" name="personales" [(ngModel)]="aportes.personales" /></label>
-            <label>Caja chica pagada hasta el mes <input type="month" name="caja" [max]="mesActual" [(ngModel)]="aportes.cajaChicaHasta" /></label>
+            <label>Caja chica pagada hasta el mes <input type="month" name="caja" [max]="finDeAnio" [(ngModel)]="aportes.cajaChicaHasta" /></label>
+            @if (aportes.cajaChicaHasta) { <p class="suave">{{ meses('caja chica', aportes.cajaChicaHasta, estado()?.mesesCajaChica ?? []) }}</p> }
             @if (valores()['APORTE_CAJA_CHICA']; as caja) { <p class="suave">Cada mes de caja chica se registra por {{ caja | currency: 'USD' }}, el valor vigente.</p> }
             <button type="submit" [disabled]="enviando() || (!persona()!.socio && !aportes.socioDesde)">Registrar aportes</button>
           </form>
@@ -144,7 +159,9 @@ export class DatosAnteriores implements OnInit {
   protected readonly aviso = signal<string | null>(null);
 
   protected readonly hoy = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Guayaquil' });
-  protected readonly mesActual = this.hoy.slice(0, 7);
+  /** Decisión del propietario: se pueden adelantar los meses que faltan del año. */
+  protected readonly finDeAnio = `${this.hoy.slice(0, 4)}-12`;
+  protected readonly estado = signal<EstadoAportes | null>(null);
   protected texto = '';
   protected emergente = this.emergenteVacio();
   protected cupo = this.cupoVacio();
@@ -180,6 +197,57 @@ export class DatosAnteriores implements OnInit {
     this.pestana.set('LETRAS');
     this.aviso.set(null);
     this.error.set(null);
+    this.cargarEstado();
+  }
+
+  private cargarEstado(): void {
+    this.estado.set(null);
+    this.api.estadoAportes(this.persona()!.usuarioId).subscribe({
+      next: (e) => this.estado.set(e),
+      error: (e) => this.error.set(mensajeDeError(e)),
+    });
+  }
+
+  /** Meses pagados de forma legible: «2025-01 a 2026-11», con los huecos separados. */
+  protected rango(meses: string[]): string {
+    if (!meses.length) {
+      return 'Ninguno';
+    }
+    const tramos: string[] = [];
+    let inicio = meses[0];
+    let anterior = meses[0];
+    for (const mes of [...meses.slice(1), '']) {
+      if (mes !== siguiente(anterior)) {
+        tramos.push(inicio === anterior ? inicio : `${inicio} a ${anterior}`);
+        inicio = mes;
+      }
+      anterior = mes;
+    }
+    return tramos.join(', ');
+  }
+
+  /** Qué meses marcará el registro: desde el ingreso (el más antiguo entre el que tiene y el escrito) hasta el elegido. */
+  protected meses(que: string, hasta: string, pagados: string[]): string {
+    const actual = this.estado()?.socioDesde?.slice(0, 7);
+    const escrito = this.aportes.socioDesde ? this.aportes.socioDesde.slice(0, 7) : undefined;
+    const desde = [actual, escrito].filter((m): m is string => !!m).sort()[0];
+    if (!desde) {
+      return 'Indique en «Socio desde» cuándo entró: los meses se cuentan desde ahí.';
+    }
+    if (hasta < desde) {
+      return `Ese mes es anterior a su ingreso (${desde}): no se marcará ningún mes.`;
+    }
+    let nuevos = 0;
+    let yaPagados = 0;
+    for (let m = desde; m <= hasta; m = siguiente(m)) {
+      if (pagados.includes(m)) {
+        yaPagados++;
+      } else {
+        nuevos++;
+      }
+    }
+    const saltan = yaPagados ? ` (${yaPagados} ya pagado${yaPagados === 1 ? '' : 's'} se salta${yaPagados === 1 ? '' : 'n'})` : '';
+    return `Se marcarán ${nuevos} mes${nuevos === 1 ? '' : 'es'} de ${que}, de ${desde} a ${hasta}${saltan}.`;
   }
 
   protected reiniciar(): void {
@@ -288,6 +356,7 @@ export class DatosAnteriores implements OnInit {
     }, this.clave), (r) => {
       this.persona.update((p) => (p ? { ...p, socio: true } : p));
       this.aportes = this.aportesVacio();
+      this.cargarEstado();
       this.registrado(`Aportes registrados: ${r.mesesAporte} meses de aporte mensual y ${r.mesesCajaChica} de caja chica.`);
     });
   }
@@ -336,6 +405,15 @@ export class DatosAnteriores implements OnInit {
     return { socioDesde: '', aporteInicial: null as number | null, mensualesHasta: '', importeMensual: v['APORTE_OBLIGATORIO'] ?? null as number | null,
       personales: null as number | null, cajaChicaHasta: '' };
   }
+}
+
+/** El mes siguiente, en formato AAAA-MM. */
+function siguiente(mes: string): string {
+  if (!mes) {
+    return '';
+  }
+  const [anio, m] = mes.split('-').map(Number);
+  return m === 12 ? `${anio + 1}-01` : `${anio}-${String(m + 1).padStart(2, '0')}`;
 }
 
 /** Un campo numérico borrado llega como null o como texto vacío. */

@@ -333,6 +333,26 @@ public class ParticipacionService {
             BigDecimal totalMensual, BigDecimal personales, int mesesCajaChica, BigDecimal totalCajaChica) {
     }
 
+    /** Lo que ya tiene registrado: para ver desde qué mes se cuentan sus aportes y cuáles ya están pagados. */
+    public record EstadoAportes(boolean socio, LocalDate socioDesde, boolean aporteInicial, List<String> mesesAporte,
+            List<String> mesesCajaChica) {
+    }
+
+    @Transactional(readOnly = true)
+    public EstadoAportes estadoAportes(Long usuarioId) {
+        Long personaId = personas.dePorUsuario(usuarioId).orElseThrow(() -> NegocioException.noEncontrado("Persona no encontrada"))
+                .getId();
+        if (!socios.esSocio(personaId)) {
+            return new EstadoAportes(false, null, false, List.of(), List.of());
+        }
+        SocioService.Socio socio = socios.deUsuario(usuarioId);
+        List<AporteSocio> propios = aportes.findBySocioIdIn(List.of(socio.getId()));
+        return new EstadoAportes(true, socio.getDesde().atZone(reloj.getZone()).toLocalDate(),
+                propios.stream().anyMatch(a -> INICIAL.equals(a.getTipo())),
+                propios.stream().filter(a -> OBLIGATORIO.equals(a.getTipo())).map(AporteSocio::getPeriodo).sorted().toList(),
+                aportesCajaChica.findBySocioIdIn(List.of(socio.getId())).stream().map(AporteCajaChica::getPeriodo).sorted().toList());
+    }
+
     /**
      * No mueve dinero: ese dinero ya está en Janery. El capital entra al fondo personal del socio y al balance (3.1 y 3.2);
      * la caja chica solo marca los meses pagados, sin cambiar su saldo. Lo ya registrado en Janery no se repite.
@@ -351,8 +371,8 @@ public class ParticipacionService {
             throw new NegocioException(HttpStatus.BAD_REQUEST, "FECHA_INGRESO_REQUERIDA", "Indique desde cuándo es socio");
         }
         for (YearMonth hasta : java.util.Arrays.asList(d.mensualesHasta(), d.cajaChicaHasta())) {
-            if (hasta != null && hasta.isAfter(actual)) {
-                throw new NegocioException(HttpStatus.BAD_REQUEST, "PERIODO_FUTURO", "No se pueden marcar pagados meses que aún no llegan");
+            if (hasta != null && hasta.getYear() > actual.getYear()) {
+                throw new NegocioException(HttpStatus.BAD_REQUEST, "PERIODO_FUTURO", "Solo se pueden adelantar los meses de este año");
             }
         }
         Optional<Long> previa = cuentas.operacionPrevia(clave, "SALDO_ANTERIOR", null, actorId);
@@ -867,6 +887,7 @@ public class ParticipacionService {
                 case "APORTE_MENSUAL" -> descontarAporte(actorId, socio, d.periodo(), claveLibre);
                 case "CAJA_CHICA" -> descontarCajaChica(actorId, socio, d.periodo(), claveLibre);
                 case "CUOTA" -> descontarCuota(actorId, socio, cuenta, d, claveLibre);
+                case "INTERES_CUPO" -> descontarInteresCupo(actorId, socio, cuenta, d, claveLibre);
                 default -> throw new NegocioException(HttpStatus.BAD_REQUEST, "TIPO_INVALIDO", "Tipo de obligación no válido");
             }
             claveLibre = null;
@@ -925,6 +946,32 @@ public class ParticipacionService {
         auditoria.registrar(actorId, "DESCUENTO_CUOTA", MODULO, "socio", socioId, null, importe.toPlainString(), cuota.cuotaId().toString());
     }
 
+    /**
+     * Intereses del cupo de socio. En la obligación, cuotaId lleva el id del cupo. El pago del cupo cobra primero los
+     * cargos, así que un importe que no los supera no toca el capital. Admite importe parcial.
+     */
+    private void descontarInteresCupo(Long actorId, SocioService.Socio socio, CuentaPrincipal cuenta, Descuento d, String clave) {
+        Long socioId = socio.getId();
+        CreditoService.CargoCupo cargo = creditos.cargosCupo(List.of(socio.getPersonaId())).getOrDefault(socio.getPersonaId(), List.of())
+                .stream().filter(c -> c.creditoId().equals(d.cuotaId())).findFirst()
+                .orElseThrow(() -> NegocioException.conflicto("OBLIGACION_INEXISTENTE", "Ese cupo no tiene intereses pendientes"));
+        BigDecimal importe = d.importe() == null ? cargo.total() : d.importe();
+        if (importe.signum() <= 0 || importe.compareTo(cargo.total()) > 0) {
+            throw NegocioException.conflicto("PAGO_EXCEDIDO", "El importe supera los intereses que debe del cupo");
+        }
+        if (cuenta == null) {
+            throw NegocioException.conflicto("CUENTA_INACTIVA", "El socio necesita una cuenta principal activa");
+        }
+        exigirGanancias(socioId, importe);
+        Long operacion = cuentas.crearOperacionInterna("RETIRO_GANANCIA", importe, clave, actorId);
+        cuentas.mover(cuenta, operacion, ENTRADA, importe, "DESCUENTO_DE_GANANCIAS");
+        variacion(socioId, "DESCUENTO_OBLIGACION", importe.negate(), null);
+        pagosCredito.pagar(personas.usuarioDe(socio.getPersonaId()), cargo.creditoId(), importe, false, false,
+                "descuento-" + java.util.UUID.randomUUID());
+        auditoria.registrar(actorId, "DESCUENTO_INTERES_CUPO", MODULO, "socio", socioId, null, importe.toPlainString(),
+                cargo.creditoId().toString());
+    }
+
     private void exigirGanancias(Long socioId, BigDecimal importe) {
         if (importe.compareTo(gananciasDisponibles(socioId)) > 0) {
             throw NegocioException.conflicto("GANANCIAS_INSUFICIENTES", "Las ganancias liberadas no alcanzan para lo elegido");
@@ -941,11 +988,13 @@ public class ParticipacionService {
         Map<String, BigDecimal> aportesDelMes = parametros.valoresVigentes(List.of("APORTE_OBLIGATORIO", "APORTE_CAJA_CHICA"));
         return obligaciones(socio, dinero(aportesDelMes.get("APORTE_OBLIGATORIO")), dinero(aportesDelMes.get("APORTE_CAJA_CHICA")),
                 aportes.periodosObligatorios(socio.getId()), aportesCajaChica.periodos(socio.getId()),
-                creditos.cuotasVencidas(socio.getPersonaId()));
+                creditos.cuotasVencidas(socio.getPersonaId()),
+                creditos.cargosCupo(List.of(socio.getPersonaId())).getOrDefault(socio.getPersonaId(), List.of()));
     }
 
     private List<Obligacion> obligaciones(SocioService.Socio socio, BigDecimal mensual, BigDecimal cajaChica,
-            Set<String> obligatoriosPagados, Set<String> cajaChicaPagados, List<CreditoService.CuotaVencida> cuotasVencidas) {
+            Set<String> obligatoriosPagados, Set<String> cajaChicaPagados, List<CreditoService.CuotaVencida> cuotasVencidas,
+            List<CreditoService.CargoCupo> cargosCupo) {
         List<Obligacion> lista = new ArrayList<>();
         mesesVencidos(socio, obligatoriosPagados).forEach(p ->
                 lista.add(new Obligacion("APORTE_MENSUAL", p, null, "Aporte mensual de " + p, mensual)));
@@ -954,6 +1003,11 @@ public class ParticipacionService {
         cuotasVencidas.forEach(q -> lista.add(new Obligacion("CUOTA", null, q.cuotaId(),
                 "Letra " + q.numero() + " de " + (q.modalidad() == null ? q.familia() : q.modalidad()) + ", venció el " + q.vencimiento(),
                 q.total())));
+        // En la obligación del cupo, cuotaId lleva el id del cupo: es lo que se descuenta.
+        cargosCupo.forEach(c -> lista.add(new Obligacion("INTERES_CUPO", null, c.creditoId(),
+                (c.modalidad() == null ? "Intereses del cupo emergente" : "Intereses del emergente " + c.modalidad().toLowerCase())
+                        + " (interés " + c.interes().toPlainString() + ", desgravamen " + c.desgravamen().toPlainString() + ")",
+                c.total())));
         return lista;
     }
 
@@ -1095,6 +1149,7 @@ public class ParticipacionService {
         BigDecimal total = valorTotal();
         List<Long> personaIds = lista.stream().map(SocioService.Socio::getPersonaId).toList();
         Map<Long, List<CreditoService.CuotaVencida>> vencidas = creditos.cuotasVencidas(personaIds);
+        Map<Long, List<CreditoService.CargoCupo>> cargosCupo = creditos.cargosCupo(personaIds);
         personas.precargar(personaIds);
         return lista.stream().map(s -> {
             Cifras c = cifras.getOrDefault(s.getId(), Cifras.CERO);
@@ -1106,7 +1161,7 @@ public class ParticipacionService {
             BigDecimal porcentaje = total.signum() > 0 && c.valor().signum() > 0
                     ? c.valor().multiply(CIEN).divide(total, 4, RoundingMode.HALF_UP) : BigDecimal.ZERO;
             BigDecimal pendientes = obligaciones(s, dinero(mensual), dinero(cajaChica), obligatoriosPagados, cajaChicaPagados,
-                    vencidas.getOrDefault(s.getPersonaId(), List.of()))
+                    vencidas.getOrDefault(s.getPersonaId(), List.of()), cargosCupo.getOrDefault(s.getPersonaId(), List.of()))
                     .stream().map(Obligacion::importe).reduce(BigDecimal.ZERO, BigDecimal::add);
             return new ResumenSocio(s.getId(), personas.nombreCompleto(s.getPersonaId()), s.getDesde(),
                     suma(propios, INICIAL), suma(propios, OBLIGATORIO), suma(propios, PERSONAL), c.compraventas(), c.resultados(),

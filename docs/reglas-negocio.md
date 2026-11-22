@@ -188,8 +188,8 @@ El propietario autorizó el 30/10/2026 usar valores provisionales de tasas, enca
 
 **Criterios del desarrollo, pendientes de confirmación:**
 
-- **Obligaciones:** aporte mensual y caja chica de meses ya terminados desde que entró el socio, y cuotas de crédito vencidas. El cupo emergente no cuenta porque no tiene vencimiento.
-- **Menú del presidente:** aportes y caja chica se descuentan por mes completo; las letras, completas o en parte, empezando por la más antigua de cada crédito. Si lo elegido supera las ganancias liberadas no se aplica nada. La autorización vale para el año en curso, exige que el socio esté al día y puede quitarse.
+- **Obligaciones:** aporte mensual y caja chica de meses ya terminados desde que entró el socio, cuotas de crédito vencidas y, desde el 22/11/2026 por decisión del propietario, los intereses y el desgravamen ya corridos de su cupo emergente (general o de promoción). El capital del cupo no cuenta, porque no tiene vencimiento.
+- **Menú del presidente:** aportes y caja chica se descuentan por mes completo; las letras, completas o en parte, empezando por la más antigua de cada crédito; los intereses del cupo, completos o en parte, sin tocar su capital. Si lo elegido supera las ganancias liberadas no se aplica nada. La autorización vale para el año en curso, exige que el socio esté al día y puede quitarse.
 - **Destino del retiro:** la cuenta principal del socio.
 - **Una pérdida de este año** reduce lo disponible aunque la ganancia sea de años anteriores.
 - **Compraventa:** la registra Presidencia cuando ambos socios la acordaron. Se vende solo capital, no ganancias, al precio que acuerden. El comprador paga al vendedor entre sus cuentas principales; la caja no cambia.

@@ -445,6 +445,45 @@ class SociosIntegrationTest {
     }
 
     @Test
+    void losInteresesDelCupoSonObligacionYSeDescuentanSinTocarElCapital() throws Exception {
+        Persona a = socio("100.00");
+        aportar(a, "{\"tipo\":\"PERSONAL\",\"importe\":100.00}").andExpect(status().isOk());
+        long socioId = resumen(a).get("socioId").asLong();
+        resultado("GANANCIA", "1000.00", ANIO_ANTERIOR + "-06-30").andExpect(status().isNoContent());
+        long usuarioId = jdbc.queryForObject("select id from usuarios where correo = ?", Long.class, a.correo());
+        // Debe 150 de su cupo y 2,50 + 0,50 de cargos ya corridos.
+        String r = mvc.perform(post("/api/v1/admin/anteriores/personas/" + usuarioId + "/cupo-socio")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(presidente())).header("Idempotency-Key", UUID.randomUUID().toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"capitalDebe\":150.00,\"interesPendiente\":2.50,\"desgravamenPendiente\":0.50}"))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        long cupo = json.readTree(r).get("id").asLong();
+
+        JsonNode linea = menu(socioId).get("obligaciones").get(0);
+        assertThat(linea.get("tipo").asText()).isEqualTo("INTERES_CUPO");
+        assertThat(linea.get("cuotaId").asLong()).isEqualTo(cupo);
+        assertThat(linea.get("importe").decimalValue()).isEqualByComparingTo("3.00");
+        assertThat(resumen(a).get("obligacionesPendientes").decimalValue()).isEqualByComparingTo("3.00");
+        BigDecimal saldoAntes = saldo(a);
+
+        descontar(socioId, "{\"descuentos\":[{\"tipo\":\"INTERES_CUPO\",\"cuotaId\":" + cupo + ",\"importe\":1.00}]}", UUID.randomUUID().toString())
+                .andExpect(status().isNoContent());
+        assertThat(jdbc.queryForObject("select interes_acumulado from creditos where id = ?", BigDecimal.class, cupo)).isEqualByComparingTo("1.50");
+        assertThat(menu(socioId).get("obligaciones").get(0).get("importe").decimalValue()).isEqualByComparingTo("2.00");
+
+        // No se puede descontar más de lo que debe de intereses: el capital del cupo no vence.
+        descontar(socioId, "{\"descuentos\":[{\"tipo\":\"INTERES_CUPO\",\"cuotaId\":" + cupo + ",\"importe\":5.00}]}", UUID.randomUUID().toString())
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.codigo").value("PAGO_EXCEDIDO"));
+        descontar(socioId, "{\"descuentos\":[{\"tipo\":\"INTERES_CUPO\",\"cuotaId\":" + cupo + "}]}", UUID.randomUUID().toString())
+                .andExpect(status().isNoContent());
+
+        assertThat(menu(socioId).get("obligaciones").size()).isZero();
+        assertThat(jdbc.queryForObject("select capital_pendiente from creditos where id = ?", BigDecimal.class, cupo)).isEqualByComparingTo("150");
+        assertThat(resumen(a).get("gananciasDisponibles").decimalValue()).isEqualByComparingTo("897.00");
+        assertThat(saldo(a)).isEqualByComparingTo(saldoAntes);
+    }
+
+    @Test
     void decidirRetirosExigePermiso() throws Exception {
         Persona a = socio("0");
         long socioId = resumen(a).get("socioId").asLong();

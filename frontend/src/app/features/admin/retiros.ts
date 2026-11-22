@@ -52,14 +52,14 @@ import { mensajeDeError } from '../../shared/utils/errores';
                   <input type="checkbox" name="o{{ $index }}" [(ngModel)]="elegidas[$index]" />
                   {{ o.descripcion }}: {{ o.importe | currency: 'USD' }}
                 </label>
-                @if (o.tipo === 'CUOTA' && elegidas[$index]) {
-                  <input type="number" min="0" step="1" name="i{{ $index }}"
-                    aria-label="Importe a descontar de esta letra; vacío, completa" placeholder="Completa"
+                @if ((o.tipo === 'CUOTA' || o.tipo === 'INTERES_CUPO') && elegidas[$index]) {
+                  <input type="number" min="0" step="any" name="i{{ $index }}"
+                    aria-label="Importe a descontar; vacío, completo" placeholder="Completa"
                     [(ngModel)]="importes[$index]" />
                 }
               </div>
             }
-            <p class="suave">Una letra puede cubrirse en parte: lo primero que se cobra es el capital.</p>
+            <p class="suave">Una letra o los intereses del cupo pueden cubrirse en parte. En la letra lo primero que se cobra es el capital; en el cupo se descuentan solo los intereses, sin tocar su capital.</p>
             <button type="submit" [disabled]="enviando() || !hayElegidas()">Descontar lo elegido</button>
           </form>
         } @else {

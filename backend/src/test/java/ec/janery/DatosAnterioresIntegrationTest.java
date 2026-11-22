@@ -195,11 +195,38 @@ class DatosAnterioresIntegrationTest {
     }
 
     @Test
+    void corregirLaFechaDeIngresoMarcaLosMesesAnterioresYSePuedeAdelantarHastaDiciembre() throws Exception {
+        Persona p = persona();
+        YearMonth actual = YearMonth.now();
+        // Primero figura como socio desde hoy: marcar «hasta este mes» marca solo este mes.
+        registrar(p, "aportes", Map.of("socioDesde", LocalDate.now().toString()), UUID.randomUUID().toString())
+                .andExpect(status().isCreated());
+        assertThat(leer(registrar(p, "aportes", Map.of("mensualesHasta", actual.toString()), UUID.randomUUID().toString())
+                .andExpect(status().isCreated())).get("mesesAporte").asInt()).isEqualTo(1);
+
+        // Con su fecha real de ingreso se marcan los meses anteriores, y se adelanta hasta diciembre.
+        LocalDate desde = actual.minusMonths(3).atDay(1);
+        YearMonth diciembre = actual.withMonth(12);
+        int esperados = 3 + (diciembre.getMonthValue() - actual.getMonthValue());
+        JsonNode r = leer(registrar(p, "aportes", Map.of("socioDesde", desde.toString(), "mensualesHasta", diciembre.toString(),
+                "cajaChicaHasta", diciembre.toString()), UUID.randomUUID().toString()).andExpect(status().isCreated()));
+        assertThat(r.get("socioDesde").asText()).isEqualTo(desde.toString());
+        assertThat(r.get("mesesAporte").asInt()).isEqualTo(esperados);
+
+        JsonNode estado = leer(mvc.perform(get(ruta(p, "aportes")).header(HttpHeaders.AUTHORIZATION, bearer(presidente())))
+                .andExpect(status().isOk()));
+        assertThat(estado.get("socioDesde").asText()).isEqualTo(desde.toString());
+        assertThat(estado.get("mesesAporte").size()).isEqualTo(esperados + 1);
+        assertThat(estado.get("mesesAporte").get(0).asText()).isEqualTo(YearMonth.from(desde).toString());
+        assertThat(estado.get("mesesCajaChica").get(estado.get("mesesCajaChica").size() - 1).asText()).isEqualTo(diciembre.toString());
+    }
+
+    @Test
     void rechazaDatosImposiblesYAQuienNoTienePermiso() throws Exception {
         Persona p = persona();
         registrar(p, "aportes", Map.of("aporteInicial", 50), UUID.randomUUID().toString())
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.codigo").value("FECHA_INGRESO_REQUERIDA"));
-        registrar(p, "aportes", Map.of("socioDesde", LocalDate.now().toString(), "mensualesHasta", YearMonth.now().plusMonths(1).toString()),
+        registrar(p, "aportes", Map.of("socioDesde", LocalDate.now().toString(), "mensualesHasta", YearMonth.now().plusYears(1).withMonth(1).toString()),
                 UUID.randomUUID().toString())
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.codigo").value("PERIODO_FUTURO"));
         registrar(p, "emergente-cliente", Map.of("importe", 100, "fechaInicio", LocalDate.now().plusDays(1).toString(),
