@@ -46,6 +46,11 @@ public class SocioService {
 
         java.util.List<Socio> findByEstadoOrderById(String estado);
 
+        @org.springframework.data.jpa.repository.Query(nativeQuery = true, value = "SELECT s.* FROM socios s "
+                + "JOIN personas p ON p.id = s.persona_id WHERE s.estado = 'ACTIVO' ORDER BY "
+                + ec.janery.common.OrdenPersonas.ALFABETICO)
+        java.util.List<Socio> activosAlfabetico();
+
         @org.springframework.data.jpa.repository.Query(
                 "select s.personaId from Socio s where s.personaId in :personaIds and s.estado = 'ACTIVO'")
         java.util.Set<Long> personasActivas(
@@ -89,6 +94,12 @@ public class SocioService {
         return repository.findByEstadoOrderById("ACTIVO");
     }
 
+    /** Los mismos socios, en el orden en que se muestran: por apellidos y nombres. El reparto sigue usando {@link #activos()}. */
+    @Transactional(readOnly = true)
+    java.util.List<Socio> activosParaMostrar() {
+        return repository.activosAlfabetico();
+    }
+
     @Transactional(readOnly = true)
     Socio porId(Long socioId) {
         return repository.findById(socioId).orElseThrow(() -> NegocioException.noEncontrado("Socio no encontrado"));
@@ -104,6 +115,28 @@ public class SocioService {
     Long personaDe(Long socioId) {
         return repository.findById(socioId).map(Socio::getPersonaId)
                 .orElseThrow(() -> NegocioException.noEncontrado("Socio no encontrado"));
+    }
+
+    /**
+     * Socio que ya lo era antes de usar Janery, con su fecha real de ingreso. Si ya figura como socio con una fecha
+     * posterior (por ejemplo, porque se registró hoy), se corrige a la real: desde ahí se cuentan sus meses de aporte.
+     */
+    @Transactional
+    Socio registrarAnterior(Long actorId, Long personaId, Instant desde) {
+        java.util.Optional<Socio> actual = repository.findByPersonaIdAndEstado(personaId, "ACTIVO");
+        if (actual.isEmpty()) {
+            Socio socio = repository.save(new Socio(null, personaId, desde, "ACTIVO"));
+            auditoria.registrar(actorId, "SOCIO_REGISTRADO", "SOCIO", "socio", socio.getId(), null, "ACTIVO", "Socio anterior a Janery");
+            return socio;
+        }
+        Socio socio = actual.get();
+        if (socio.getDesde().isAfter(desde)) {
+            auditoria.registrar(actorId, "SOCIO_DESDE_CORREGIDO", "SOCIO", "socio", socio.getId(), socio.getDesde().toString(),
+                    desde.toString(), null);
+            socio.desde = desde;
+            repository.save(socio);
+        }
+        return socio;
     }
 
     @Transactional

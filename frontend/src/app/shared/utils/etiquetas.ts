@@ -17,6 +17,7 @@ const CONCEPTOS: Record<string, string> = {
   LIBERACION_AHORRO_LETRAS: 'Ahorro letras devuelto',
   DEVOLUCION_ENCAJE: 'Encaje devuelto',
   APERTURA_PLAZO_FIJO: 'Apertura de plazo fijo',
+  SALDO_ANTERIOR: 'Saldo anterior a Janery',
   DEPOSITO_AHORRO: 'Depósito a ahorro',
   RETIRO_AHORRO: 'Retiro de ahorro',
   LIQUIDACION_PLAZO_FIJO: 'Liquidación de plazo fijo',

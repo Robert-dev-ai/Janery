@@ -19,6 +19,13 @@ final class Repositorios {
 
         boolean existsByCorreo(String correo);
 
+        /** Socios primero, luego las demás personas, en orden alfabético; al final quien aún no tiene datos personales. */
+        @org.springframework.data.jpa.repository.Query(nativeQuery = true,
+                value = "SELECT u.* FROM usuarios u LEFT JOIN personas p ON p.usuario_id = u.id ORDER BY (p.id IS NULL), "
+                        + ec.janery.common.OrdenPersonas.ORDEN + ", u.id",
+                countQuery = "SELECT COUNT(*) FROM usuarios")
+        org.springframework.data.domain.Page<Usuario> ordenados(org.springframework.data.domain.Pageable pageable);
+
         @org.springframework.data.jpa.repository.Query(value = """
                 SELECT u.* FROM usuarios u JOIN personas p ON p.usuario_id = u.id WHERE p.identificacion = :identificacion
                 """, nativeQuery = true)

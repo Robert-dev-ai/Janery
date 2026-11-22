@@ -41,6 +41,7 @@ const ADMIN: GrupoMenu[] = [
     enlaces: [
       { titulo: 'Personas', ruta: '/admin/personas', icono: Contact, visible: conPermiso('ADMIN_USUARIOS') },
       { titulo: 'Usuarios', ruta: '/admin/usuarios', icono: Users, visible: conPermiso('ADMIN_USUARIOS') },
+      { titulo: 'Datos anteriores', ruta: '/admin/datos-anteriores', icono: History, visible: conPermiso('REGISTRAR_CREDITOS_EXISTENTES') },
       { titulo: 'Roles y permisos', ruta: '/admin/roles-permisos', icono: ShieldCheck, visible: conPermiso('ADMIN_USUARIOS') },
       { titulo: 'Socios y retiros', ruta: '/admin/retiros', icono: UserCog, visible: conPermiso('GESTIONAR_RESULTADOS') },
     ],

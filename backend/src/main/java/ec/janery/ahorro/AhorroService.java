@@ -377,6 +377,53 @@ public class AhorroService {
                 PLAZOS.stream().map(p -> new PlazoVista(p, tasas.get(codigos.get(p)))).toList());
     }
 
+    /**
+     * Decisión del propietario (22/11/2026): ahorro que ya existía antes de usar Janery. Entra su saldo de hoy sin mover
+     * dinero: ese dinero ya está en la caja o prestado. El normal gana interés desde hoy; el plazo fijo conserva su fecha
+     * de apertura, su plazo y su tasa, y paga su interés al vencer como cualquier otro.
+     */
+    public record Anterior(Long usuarioId, String tipo, String nombre, BigDecimal saldo, LocalDate fechaApertura,
+            Integer plazoMeses, BigDecimal tasaAnual) {
+    }
+
+    @Transactional
+    public AhorroVista registrarAnterior(Long actorId, Anterior d, String clave) {
+        Long personaId = personaDe(d.usuarioId());
+        cuentas.cuentaActivaBloqueada(personaId);
+        BigDecimal saldo = d.saldo().setScale(2);
+        Optional<Long> previa = cuentas.operacionPrevia(clave, "SALDO_ANTERIOR", saldo, actorId);
+        if (previa.isPresent()) {
+            return movimientos.findFirstByOperacionId(previa.get()).flatMap(m -> ahorros.findById(m.getCuentaAhorroId()))
+                    .filter(a -> a.getPersonaId().equals(personaId)).map(this::vista)
+                    .orElseThrow(() -> NegocioException.conflicto("CLAVE_REUTILIZADA", "La clave de idempotencia ya se usó en otra operación"));
+        }
+        LocalDate hoy = LocalDate.now(reloj);
+        LocalDate apertura = d.fechaApertura() == null ? hoy : d.fechaApertura();
+        if (apertura.isAfter(hoy)) {
+            throw new NegocioException(org.springframework.http.HttpStatus.BAD_REQUEST, "FECHA_FUTURA",
+                    "La fecha de apertura no puede ser posterior a hoy");
+        }
+        Instant abierta = apertura.atStartOfDay(reloj.getZone()).toInstant();
+        CuentaAhorro a;
+        if (PLAZO_FIJO.equals(d.tipo())) {
+            if (d.plazoMeses() == null || d.plazoMeses() < 1 || d.tasaAnual() == null || d.fechaApertura() == null) {
+                throw new NegocioException(org.springframework.http.HttpStatus.BAD_REQUEST, "DATOS_PLAZO_FIJO",
+                        "Indique la fecha de apertura, el plazo y la tasa del plazo fijo");
+            }
+            a = new CuentaAhorro(null, personaId, PLAZO_FIJO, d.nombre(), ACTIVA, saldo, d.tasaAnual(), d.plazoMeses(),
+                    apertura.plusMonths(d.plazoMeses()), abierta, null, CERO, CERO, null, null);
+        } else {
+            a = new CuentaAhorro(null, personaId, NORMAL, d.nombre(), ACTIVA, saldo, null, null, null, abierta, null, CERO, CERO,
+                    hoy, null);
+        }
+        ahorros.save(a);
+        Long operacion = cuentas.crearOperacionInterna("SALDO_ANTERIOR", saldo, clave, actorId);
+        asiento(a, operacion, ENTRADA, saldo, "SALDO_ANTERIOR", null, null);
+        auditoria.registrar(actorId, "AHORRO_ANTERIOR_REGISTRADO", MODULO, "ahorro", a.getId(), null,
+                a.getTipo() + " " + saldo.toPlainString(), null);
+        return vista(a);
+    }
+
     private static String parametroPlazo(int meses) {
         return "PLAZO_FIJO_TASA_%d_MESES".formatted(meses);
     }

@@ -98,7 +98,7 @@ public class EstadoCajaService {
     private List<DuenoDinero> duenos() {
         return jdbc.query("""
                 SELECT * FROM (
-                    SELECT p.nombres || ' ' || p.apellidos AS nombre,
+                    SELECT p.id, p.nombres, p.apellidos, p.apellidos || ' ' || p.nombres AS nombre,
                         (SELECT COALESCE(SUM(d.importe_reembolsable), 0) FROM depositos_apertura d
                          JOIN cuentas_principales c ON c.id = d.cuenta_id WHERE c.persona_id = p.id AND d.devuelto_en IS NULL) AS apertura,
                         (SELECT COALESCE(SUM(c.saldo_disponible), 0) FROM cuentas_principales c WHERE c.persona_id = p.id) AS cuenta,
@@ -109,8 +109,8 @@ public class EstadoCajaService {
                         (SELECT COALESCE(SUM(l.saldo), 0) FROM ahorro_letras_credito l
                          JOIN creditos c ON c.id = l.credito_id WHERE c.persona_id = p.id) AS letras
                     FROM personas p
-                ) x WHERE apertura + cuenta + normales + plazos + encajes + letras > 0 ORDER BY nombre
-                """, (r, i) -> new DuenoDinero(r.getString("nombre"), r.getBigDecimal("apertura"), r.getBigDecimal("cuenta"),
+                ) p WHERE apertura + cuenta + normales + plazos + encajes + letras > 0
+                """ + " ORDER BY " + ec.janery.common.OrdenPersonas.ORDEN, (r, i) -> new DuenoDinero(r.getString("nombre"), r.getBigDecimal("apertura"), r.getBigDecimal("cuenta"),
                 r.getBigDecimal("normales"), r.getBigDecimal("plazos"), r.getBigDecimal("encajes"), r.getBigDecimal("letras")));
     }
 

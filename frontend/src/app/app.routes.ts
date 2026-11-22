@@ -178,6 +178,11 @@ export const routes: Routes = [
         loadComponent: () => import('./features/admin/parametros').then((m) => m.AdminParametros),
       },
       {
+        path: 'admin/datos-anteriores',
+        canActivate: [permisoGuard('REGISTRAR_CREDITOS_EXISTENTES')],
+        loadComponent: () => import('./features/admin/datos-anteriores').then((m) => m.DatosAnteriores),
+      },
+      {
         path: 'admin/usuarios',
         canActivate: [permisoGuard('ADMIN_USUARIOS')],
         loadComponent: () => import('./features/admin/usuarios').then((m) => m.AdminUsuarios),

@@ -381,7 +381,15 @@ El propietario autorizó el 30/10/2026 usar valores provisionales de tasas, enca
 - **Lo ya ocurrido no se repite:** no entra dinero a la cuenta, no se cobra el encaje y lo cobrado antes no se reparte como ganancia. Las letras pagadas quedan pagadas en su fecha de vencimiento.
 - **Balance:** entran solo los saldos del día del registro: el capital pendiente en 1.4 y el encaje retenido y el ahorro letras acumulado en 2.3. Hasta registrar también el dinero y los aportes que ya existían, el balance mostrará esa diferencia.
 - **Desde el registro** se cobra como cualquier crédito: pagos, mora, precancelación y devolución de encaje y ahorro letras al terminar. Las letras ya vencidas que no estén entre las pagadas cuentan como atrasadas; a un cliente le corre la mora desde cada vencimiento, con la tasa vigente al registrarlo.
-- No se registra un crédito con todas sus letras pagadas: ya terminó. Los emergentes y cupos anteriores no se registran por esta vía. Tampoco se les cobra suministros (sección 19).
+- No se registra un crédito con todas sus letras pagadas: ya terminó. Tampoco se les cobra suministros (sección 19).
+
+**Emergentes, cupos, ahorros y aportes anteriores (22/11/2026):** se registran en la pantalla «Datos anteriores», con el mismo permiso y la misma regla: entra lo que la persona tiene o debe hoy, sin mover dinero de la caja ni de su cuenta.
+
+- **Emergente de cliente:** importe, fecha en que recibió el dinero, interés y desgravamen en % mensual, capital que debe hoy y si ya pagó los cargos. Un solo pago que vence un mes después; desde ahí se cobra como cualquier emergente, con mora si es cliente. No se puede tener dos abiertos.
+- **Cupo de socio:** solo socios. Capital que debe hoy y los cargos ya corridos sin pagar. Se suma a su cupo con la tasa diaria vigente y baja su cupo disponible.
+- **Ahorros:** el normal entra con su saldo de hoy y gana interés desde hoy. El plazo fijo conserva su fecha de apertura, plazo y tasa (sugerida la vigente si el plazo es de los habituales) y paga su interés al vencer. En el balance: 2.1 y 2.2.
+- **Aportes de socio:** fecha de ingreso (si ya figuraba con una posterior, se corrige), aporte inicial (una sola vez), meses de aporte mensual y de caja chica pagados desde el ingreso hasta el mes indicado, y el total de aportes personales. Los meses ya registrados se saltan. El capital entra al fondo personal y al balance (3.1 y 3.2) con la fecha de cada mes; los personales, sin fecha conocida, cuentan desde hoy. Caja chica solo marca los meses: su saldo no cambia.
+- **Pendiente:** las ganancias acumuladas de años anteriores en el fondo personal y los emergentes estacionales no se registran por esta vía. Hasta registrar el dinero que ya existía en la caja, el balance mostrará esa diferencia.
 
 ## 19. Suministros de los créditos a letras
 

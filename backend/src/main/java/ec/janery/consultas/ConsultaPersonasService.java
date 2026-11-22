@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import ec.janery.common.NegocioException;
+import ec.janery.common.OrdenPersonas;
 import ec.janery.common.Pagina;
 import lombok.RequiredArgsConstructor;
 
@@ -53,7 +54,7 @@ public class ConsultaPersonasService {
             BigDecimal capitalPendiente, long cuotasVencidas, long cuotasPagadasConRetraso) {
     }
 
-    private static final String FILTRO = "(:texto = '' OR lower(p.nombres || ' ' || p.apellidos) LIKE '%' || :texto || '%')";
+    private static final String FILTRO = "(:texto = '' OR " + OrdenPersonas.NOMBRE_BUSCABLE + " LIKE '%' || :texto || '%')";
 
     private final JdbcClient jdbc;
     private final Clock reloj;
@@ -79,7 +80,7 @@ public class ConsultaPersonasService {
         String t = normalizar(texto);
         long total = jdbc.sql("SELECT COUNT(*) FROM personas p JOIN cuentas_principales c ON c.persona_id = p.id AND c.estado IN ('ACTIVA', 'PENDIENTE_CIERRE') WHERE " + FILTRO)
                 .param("texto", t).query(Long.class).single();
-        List<PersonaFinanciera> filas = jdbc.sql(FINANCIERA + " WHERE " + FILTRO + " ORDER BY p.apellidos, p.nombres LIMIT :limite OFFSET :salto")
+        List<PersonaFinanciera> filas = jdbc.sql(FINANCIERA + " WHERE " + FILTRO + " ORDER BY " + OrdenPersonas.ORDEN + " LIMIT :limite OFFSET :salto")
                 .param("texto", t).param("hoy", java.sql.Date.valueOf(LocalDate.now(reloj))).param("limite", tamano).param("salto", pagina * tamano)
                 .query((rs, n) -> financiera(rs)).list();
         return new Pagina<>(filas, pagina, tamano, total);
@@ -115,7 +116,7 @@ public class ConsultaPersonasService {
                        (SELECT c.estado FROM cuentas_principales c WHERE c.persona_id = p.id AND c.estado NOT IN ('CERRADA', 'RECHAZADA') LIMIT 1) AS estado_cuenta,
                        EXISTS (SELECT 1 FROM socios s WHERE s.persona_id = p.id AND s.estado = 'ACTIVO') AS socio
                 FROM personas p JOIN usuarios u ON u.id = p.usuario_id
-                """ + " WHERE (" + FILTRO + " OR p.identificacion LIKE '%' || :texto || '%' OR lower(u.correo) LIKE '%' || :texto || '%') ORDER BY p.apellidos, p.nombres LIMIT :limite OFFSET :salto")
+                """ + " WHERE (" + FILTRO + " OR p.identificacion LIKE '%' || :texto || '%' OR lower(u.correo) LIKE '%' || :texto || '%') ORDER BY " + OrdenPersonas.ORDEN + " LIMIT :limite OFFSET :salto")
                 .param("texto", t).param("limite", tamano).param("salto", pagina * tamano)
                 .query((rs, n) -> new PersonaContacto(rs.getLong("id"), rs.getString("nombres"), rs.getString("apellidos"), rs.getString("identificacion"),
                         rs.getString("telefono"), rs.getString("direccion"), rs.getString("correo"), rs.getString("estado_cuenta"), rs.getBoolean("socio"),
@@ -129,7 +130,7 @@ public class ConsultaPersonasService {
         long total = jdbc.sql("SELECT COUNT(*) FROM personas p WHERE EXISTS (SELECT 1 FROM creditos c WHERE c.persona_id = p.id) AND " + FILTRO)
                 .param("texto", t).query(Long.class).single();
         List<HistorialCrediticio> filas = jdbc.sql("""
-                SELECT p.id, p.nombres || ' ' || p.apellidos AS nombre, COUNT(*) AS total,
+                SELECT p.id, p.apellidos || ' ' || p.nombres AS nombre, COUNT(*) AS total,
                        COUNT(*) FILTER (WHERE c.estado = 'ACTIVO') AS activos,
                        COUNT(*) FILTER (WHERE c.estado = 'FINALIZADO') AS finalizados,
                        COUNT(*) FILTER (WHERE c.estado = 'RECHAZADO') AS rechazados,
@@ -139,7 +140,7 @@ public class ConsultaPersonasService {
                        (SELECT COUNT(*) FROM cuotas_credito q JOIN creditos x ON x.id = q.credito_id
                         WHERE x.persona_id = p.id AND CAST(q.pagada_en AT TIME ZONE 'America/Guayaquil' AS date) > q.vencimiento) AS con_retraso
                 FROM personas p JOIN creditos c ON c.persona_id = p.id
-                """ + " WHERE " + FILTRO + " GROUP BY p.id, p.nombres, p.apellidos, p.apellidos ORDER BY p.apellidos, p.nombres LIMIT :limite OFFSET :salto")
+                """ + " WHERE " + FILTRO + " GROUP BY p.id, p.nombres, p.apellidos ORDER BY " + OrdenPersonas.ORDEN + " LIMIT :limite OFFSET :salto")
                 .param("texto", t).param("hoy", java.sql.Date.valueOf(LocalDate.now(reloj))).param("limite", tamano).param("salto", pagina * tamano)
                 .query((rs, n) -> new HistorialCrediticio(rs.getLong("id"), rs.getString("nombre"), rs.getLong("total"), rs.getLong("activos"),
                         rs.getLong("finalizados"), rs.getLong("rechazados"), rs.getBigDecimal("capital"), rs.getLong("vencidas"), rs.getLong("con_retraso"))).list();
@@ -188,7 +189,7 @@ public class ConsultaPersonasService {
     }
 
     private static final String FINANCIERA = """
-            SELECT p.id, p.nombres || ' ' || p.apellidos AS nombre, c.numero, COALESCE(c.saldo_disponible, 0) AS saldo,
+            SELECT p.id, p.apellidos || ' ' || p.nombres AS nombre, c.numero, COALESCE(c.saldo_disponible, 0) AS saldo,
                    (SELECT COALESCE(SUM(a.saldo), 0) FROM cuentas_ahorro a WHERE a.persona_id = p.id AND a.estado = 'ACTIVA') AS ahorros,
                    (SELECT COUNT(*) FROM creditos x WHERE x.persona_id = p.id AND x.estado = 'ACTIVO') AS creditos,
                    (SELECT COALESCE(SUM(x.capital_pendiente), 0) FROM creditos x WHERE x.persona_id = p.id AND x.estado = 'ACTIVO') AS capital,
@@ -199,7 +200,7 @@ public class ConsultaPersonasService {
             """;
 
     private static final String MOVIMIENTOS = """
-            SELECT m.id, m.creado_en, p.nombres || ' ' || p.apellidos AS persona, m.concepto, m.sentido, m.importe
+            SELECT m.id, m.creado_en, p.apellidos || ' ' || p.nombres AS persona, m.concepto, m.sentido, m.importe
             FROM movimientos_cuenta m JOIN cuentas_principales c ON c.id = m.cuenta_id JOIN personas p ON p.id = c.persona_id
             """;
 

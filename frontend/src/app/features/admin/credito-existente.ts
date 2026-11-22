@@ -1,5 +1,5 @@
 import { CurrencyPipe, DatePipe, DecimalPipe } from '@angular/common';
-import { Component, inject, output, signal } from '@angular/core';
+import { Component, computed, inject, input, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
 import { ApiService, CreditoExistente, PersonaTramite, VistaCreditoExistente } from '../../core/services/api';
@@ -20,7 +20,7 @@ import { mensajeDeError } from '../../shared/utils/errores';
       @if (error()) { <p class="error" role="alert">{{ error() }}</p> }
       @if (aviso()) { <p class="exito" role="status">{{ aviso() }}</p> }
 
-      @if (!persona()) {
+      @if (!actual()) {
         <form class="herramientas" (ngSubmit)="buscar()">
           <label>Persona <input type="search" name="buscar" placeholder="Nombre, cédula o número de cuenta" [(ngModel)]="texto" /></label>
           <button type="submit">Buscar</button>
@@ -35,8 +35,8 @@ import { mensajeDeError } from '../../shared/utils/errores';
         }
       } @else {
         <div class="encabezado-tarjeta">
-          <p class="m-0"><strong>{{ persona()!.nombre }}</strong> · {{ persona()!.identificacion }} · {{ persona()!.socio ? 'Socio' : 'Cliente' }}</p>
-          <button type="button" class="secundario" (click)="reiniciar()">Elegir a otra persona</button>
+          <p class="m-0"><strong>{{ actual()!.nombre }}</strong> · {{ actual()!.identificacion }} · {{ actual()!.socio ? 'Socio' : 'Cliente' }}</p>
+          @if (!fija()) { <button type="button" class="secundario" (click)="reiniciar()">Elegir a otra persona</button> }
         </div>
 
         <form class="tarjeta" (ngSubmit)="previsualizar()" (input)="vista.set(null)" (change)="vista.set(null)">
@@ -116,6 +116,8 @@ import { mensajeDeError } from '../../shared/utils/errores';
 })
 export class CreditoExistenteForm {
   readonly registrado = output<void>();
+  /** Persona ya elegida fuera del formulario: no se muestra la búsqueda. */
+  readonly fija = input<PersonaTramite | null>(null);
 
   private readonly api = inject(ApiService);
   private readonly dialogo = inject(DialogoService);
@@ -123,6 +125,7 @@ export class CreditoExistenteForm {
   protected readonly resultados = signal<PersonaTramite[]>([]);
   protected readonly buscado = signal(false);
   protected readonly persona = signal<PersonaTramite | null>(null);
+  protected readonly actual = computed(() => this.fija() ?? this.persona());
   protected readonly vista = signal<VistaCreditoExistente | null>(null);
   protected readonly enviando = signal(false);
   protected readonly error = signal<string | null>(null);
@@ -190,14 +193,14 @@ export class CreditoExistenteForm {
 
   protected previsualizar(): void {
     this.error.set(null);
-    this.api.vistaCreditoExistente(this.persona()!.usuarioId, this.envio()).subscribe({
+    this.api.vistaCreditoExistente(this.actual()!.usuarioId, this.envio()).subscribe({
       next: (v) => this.vista.set(v),
       error: (e) => this.error.set(mensajeDeError(e)),
     });
   }
 
   protected async registrar(v: VistaCreditoExistente): Promise<void> {
-    const p = this.persona()!;
+    const p = this.actual()!;
     const pregunta = `¿Registrar el crédito de ${p.nombre} por ${this.datos.importe} USD, con ${v.letrasPagadas} de ${v.cuotas.length} letras pagadas y ${v.capitalPendiente} USD de capital por pagar? Queda activo de inmediato y no se puede borrar.`;
     if (!(await this.dialogo.confirmar(pregunta, 'Registrar'))) {
       return;

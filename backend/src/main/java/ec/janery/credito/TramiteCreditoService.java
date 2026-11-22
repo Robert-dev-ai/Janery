@@ -9,6 +9,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import ec.janery.auditoria.AuditoriaService;
 import ec.janery.common.NegocioException;
+import ec.janery.common.OrdenPersonas;
 import ec.janery.persona.PersonaController;
 import ec.janery.persona.PersonaService;
 import ec.janery.socio.SocioService;
@@ -38,12 +39,11 @@ public class TramiteCreditoService {
     public List<PersonaTramite> buscar(String texto) {
         String filtro = "%" + (texto == null ? "" : texto.trim().toLowerCase()) + "%";
         return jdbc.sql("""
-                SELECT p.usuario_id, p.nombres || ' ' || p.apellidos, p.identificacion,
+                SELECT p.usuario_id, p.apellidos || ' ' || p.nombres, p.identificacion,
                        EXISTS (SELECT 1 FROM socios s WHERE s.persona_id = p.id AND s.estado = 'ACTIVO'), c.numero
                 FROM personas p JOIN cuentas_principales c ON c.persona_id = p.id AND c.estado = 'ACTIVA'
-                WHERE lower(p.nombres || ' ' || p.apellidos) LIKE :filtro OR p.identificacion LIKE :filtro OR lower(c.numero) LIKE :filtro
-                ORDER BY p.apellidos, p.nombres LIMIT 20
-                """).param("filtro", filtro)
+                """ + " WHERE " + OrdenPersonas.NOMBRE_BUSCABLE + " LIKE :filtro OR p.identificacion LIKE :filtro OR lower(c.numero) LIKE :filtro"
+                + " ORDER BY " + OrdenPersonas.ORDEN + " LIMIT 20").param("filtro", filtro)
                 .query((rs, n) -> new PersonaTramite(rs.getLong(1), rs.getString(2), rs.getString(3), rs.getBoolean(4), rs.getString(5)))
                 .list();
     }

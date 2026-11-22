@@ -156,6 +156,144 @@ public class CreditoExistenteService {
         return c.getId();
     }
 
+    // --- Emergentes anteriores (22/11/2026)
+
+    /**
+     * Emergente de cliente que ya existía: un solo pago, que vence un mes después de recibir el dinero. Interés y
+     * desgravamen se calculan sobre el importe, como en los emergentes nuevos, salvo que ya los haya pagado.
+     */
+    public record EmergenteCliente(Long usuarioId, BigDecimal importe, LocalDate fechaInicio, BigDecimal tasaInteres,
+            BigDecimal tasaDesgravamen, BigDecimal capitalDebe, boolean cargosPagados, String nota) {
+    }
+
+    /** Cupo de socio que ya existía: lo que debe hoy de capital y los cargos ya corridos que aún no pagó. */
+    public record CupoSocio(Long usuarioId, BigDecimal capitalDebe, BigDecimal interesPendiente, BigDecimal desgravamenPendiente,
+            String nota) {
+    }
+
+    private static final String EMERGENTE_CLIENTE = "EMERGENTE_CLIENTE";
+    private static final String EMERGENTE_SOCIO = "EMERGENTE_SOCIO";
+
+    @Transactional
+    public Long registrarEmergenteCliente(Long actorId, EmergenteCliente d, String clave) {
+        Long personaId = personaDe(d.usuarioId());
+        cuentas.cuentaActivaBloqueada(personaId);
+        Optional<Credito> previo = creditos.findByClaveSolicitud(clave);
+        if (previo.isPresent()) {
+            return mismoCredito(previo.get(), personaId, d.importe());
+        }
+        if (d.fechaInicio().isAfter(LocalDate.now(reloj))) {
+            throw new NegocioException(HttpStatus.BAD_REQUEST, "FECHA_FUTURA", "La fecha en que recibió el dinero no puede ser posterior a hoy");
+        }
+        BigDecimal debe = (d.capitalDebe() == null ? d.importe() : d.capitalDebe()).setScale(2);
+        if (debe.signum() <= 0) {
+            throw NegocioException.conflicto("CREDITO_TERMINADO", "Si ya no debe capital, el emergente está terminado: no hace falta registrarlo");
+        }
+        if (debe.compareTo(d.importe()) > 0) {
+            throw new NegocioException(HttpStatus.BAD_REQUEST, "DEUDA_MAYOR_QUE_IMPORTE", "No puede deber más capital que el importe que recibió");
+        }
+        if (creditos.tieneEmergenteClienteAbierto(personaId)) {
+            throw NegocioException.conflicto("EMERGENTE_ABIERTO", "Esta persona ya tiene un emergente sin pagar");
+        }
+        String perfil = socios.esSocio(personaId) ? "SOCIO" : "CLIENTE";
+        Instant ahora = Instant.now(reloj);
+        Credito c = new Credito();
+        c.setPersonaId(personaId);
+        c.setFamilia(EMERGENTE_CLIENTE);
+        c.setPerfil(perfil);
+        c.setEstado("ACTIVO");
+        c.setUnidadTasa("PCT_MENSUAL");
+        c.setTasaInteres(d.tasaInteres());
+        c.setTasaDesgravamen(d.tasaDesgravamen());
+        c.setImporte(d.importe());
+        c.setPlazoMeses(1);
+        c.setFechaInicio(d.fechaInicio());
+        c.setCapitalPendiente(debe);
+        c.setTasaMora("CLIENTE".equals(perfil) ? parametros.valorVigente("MORA_DIARIA") : BigDecimal.ZERO);
+        c.setClaveSolicitud(clave);
+        c.setExistente(true);
+        c.setCreadoEn(ahora);
+        creditos.save(c);
+
+        BigDecimal interes = CalculadoraCredito.porcentaje(d.importe(), d.tasaInteres());
+        BigDecimal desgravamen = CalculadoraCredito.porcentaje(d.importe(), d.tasaDesgravamen());
+        CuotaCredito q = new CuotaCredito(c.getId(), 1, d.fechaInicio().plusMonths(1), d.importe(), BigDecimal.ZERO.setScale(2),
+                desgravamen, interes, d.importe().add(interes).add(desgravamen));
+        q.setCapitalPagado(d.importe().subtract(debe));
+        if (d.cargosPagados()) {
+            q.setInteresPagado(interes);
+            q.setDesgravamenPagado(desgravamen);
+        }
+        cuotas.save(q);
+
+        Long saldoInicial = cuentas.crearOperacionInterna("DESEMBOLSO", debe, null, actorId);
+        desembolsos.save(new DesembolsoCredito(null, c.getId(), saldoInicial, debe, ahora));
+        auditoria.registrar(actorId, "EMERGENTE_EXISTENTE_REGISTRADO", MODULO, "credito", c.getId(), null,
+                d.importe().toPlainString() + " desde " + d.fechaInicio() + ", debe " + debe.toPlainString() + " de capital", d.nota());
+        return c.getId();
+    }
+
+    /**
+     * Se suma a su cupo de socio: si ya tiene uno en Janery, lo corrido hasta hoy conserva su tasa y desde hoy devenga
+     * sobre el total. El cupo disponible baja en lo que debe.
+     */
+    @Transactional
+    public Long registrarCupoSocio(Long actorId, CupoSocio d, String clave) {
+        Long personaId = personaDe(d.usuarioId());
+        cuentas.cuentaActivaBloqueada(personaId);
+        BigDecimal debe = d.capitalDebe().setScale(2);
+        Optional<Long> previa = cuentas.operacionPrevia(clave, "DESEMBOLSO", debe, actorId);
+        if (previa.isPresent()) {
+            return desembolsos.findByOperacionId(previa.get()).map(DesembolsoCredito::getCreditoId)
+                    .orElseThrow(() -> NegocioException.conflicto("CLAVE_REUTILIZADA", "La clave de idempotencia ya se usó en otra operación"));
+        }
+        if (!socios.esSocio(personaId)) {
+            throw NegocioException.conflicto("SOLO_SOCIOS", "El cupo emergente es solo de socios: registre primero a la persona como socia");
+        }
+        LocalDate hoy = LocalDate.now(reloj);
+        Instant ahora = Instant.now(reloj);
+        Credito c = creditos.findByPersonaIdAndFamilia(personaId, EMERGENTE_SOCIO).orElseGet(() -> {
+            Credito nuevo = new Credito();
+            nuevo.setPersonaId(personaId);
+            nuevo.setFamilia(EMERGENTE_SOCIO);
+            nuevo.setPerfil("SOCIO");
+            nuevo.setEstado("ACTIVO");
+            nuevo.setUnidadTasa("PCT_DIARIO");
+            nuevo.setTasaInteres(parametros.valorVigente("EMERGENTE_SOCIO_INTERES"));
+            nuevo.setTasaDesgravamen(parametros.valorVigente("EMERGENTE_SOCIO_DESGRAVAMEN"));
+            nuevo.setUltimoDevengo(hoy);
+            nuevo.setFechaInicio(hoy);
+            nuevo.setExistente(true);
+            nuevo.setCreadoEn(ahora);
+            return nuevo;
+        });
+        if (c.getId() != null) {
+            c.devengar(hoy);
+        }
+        c.setCapitalPendiente(c.getCapitalPendiente().add(debe));
+        c.setInteresAcumulado(c.getInteresAcumulado().add(cero(d.interesPendiente())));
+        c.setDesgravamenAcumulado(c.getDesgravamenAcumulado().add(cero(d.desgravamenPendiente())));
+        creditos.save(c);
+
+        Long saldoInicial = cuentas.crearOperacionInterna("DESEMBOLSO", debe, clave, actorId);
+        desembolsos.save(new DesembolsoCredito(null, c.getId(), saldoInicial, debe, ahora));
+        auditoria.registrar(actorId, "CUPO_EXISTENTE_REGISTRADO", MODULO, "credito", c.getId(), null,
+                "debe " + debe.toPlainString() + " de capital, " + cero(d.interesPendiente()).toPlainString() + " de interés y "
+                        + cero(d.desgravamenPendiente()).toPlainString() + " de desgravamen", d.nota());
+        return c.getId();
+    }
+
+    private static BigDecimal cero(BigDecimal valor) {
+        return valor == null ? BigDecimal.ZERO.setScale(2) : valor.setScale(2);
+    }
+
+    private static Long mismoCredito(Credito previo, Long personaId, BigDecimal importe) {
+        if (!previo.getPersonaId().equals(personaId) || previo.getImporte().compareTo(importe) != 0) {
+            throw NegocioException.conflicto("CLAVE_REUTILIZADA", "La clave de idempotencia ya se usó en otra operación");
+        }
+        return previo.getId();
+    }
+
     private Vista calcular(Long personaId, Datos d) {
         validar(d);
         String perfil = socios.esSocio(personaId) ? "SOCIO" : "CLIENTE";

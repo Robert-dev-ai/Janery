@@ -135,6 +135,8 @@ public class CreditoService {
     interface DesembolsoRepository extends JpaRepository<DesembolsoCredito, Long> {
         @Query("select coalesce(sum(d.importe), 0) from DesembolsoCredito d where d.creditoId = :creditoId")
         BigDecimal totalDe(@Param("creditoId") Long creditoId);
+
+        Optional<DesembolsoCredito> findByOperacionId(Long operacionId);
     }
 
     interface EncajeRepository extends JpaRepository<EncajeCredito, Long> {

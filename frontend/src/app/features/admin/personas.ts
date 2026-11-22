@@ -29,7 +29,7 @@ import { mensajeDeError } from '../../shared/utils/errores';
             <tbody>
               @for (p of d.contenido; track p.id) {
                 <tr>
-                  <td>{{ p.nombres }} {{ p.apellidos }}</td>
+                  <td>{{ p.apellidos }} {{ p.nombres }}</td>
                   <td>{{ p.identificacion }}</td>
                   <td>{{ p.correo }}<br /><span class="suave">{{ p.telefono }}</span></td>
                   <td>{{ p.direccion }}</td>
