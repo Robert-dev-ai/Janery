@@ -91,6 +91,7 @@ public final class HistorialSql {
         ACCIONES.put("RETIRO_REVOCADO", "Quitó la autorización de retiro de ganancias de");
         ACCIONES.put("RETIRO_GANANCIA", "Retiró sus ganancias");
         ACCIONES.put("COMPRAVENTA_CAPITAL", "Registró una compraventa de capital");
+        ACCIONES.put("TRANSFERENCIA_CAPITAL", "Registró una transferencia de capital");
         ACCIONES.put("RESULTADO_GANANCIA", "Registró una ganancia");
         ACCIONES.put("RESULTADO_PERDIDA", "Registró una pérdida");
         ACCIONES.put("CIERRE_ANUAL", "Cerró el año contable");

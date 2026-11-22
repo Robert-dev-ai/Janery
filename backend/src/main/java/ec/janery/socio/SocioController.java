@@ -202,6 +202,21 @@ public class SocioController {
         return new OperacionResponse(service.registrarCompraventa(id(jwt), r.vendedorId(), r.compradorId(), r.capital(), r.precio(), clave));
     }
 
+    public record TransferenciaRequest(@NotNull Long origenId, @NotNull Long destinoId,
+            @NotNull @Positive @Digits(integer = 12, fraction = 2) BigDecimal capital, @NotBlank @Size(max = 200) String motivo) {
+    }
+
+    public record TransferenciaResponse(Long transferenciaId) {
+    }
+
+    /** Capital que pasa de un socio a otro sin pago dentro de Janery. */
+    @PostMapping("/admin/socios/transferencias")
+    @PreAuthorize("hasAuthority('SCOPE_GESTIONAR_RESULTADOS')")
+    public TransferenciaResponse transferencia(@AuthenticationPrincipal Jwt jwt, @RequestHeader("Idempotency-Key") @NotBlank @Size(max = 100) String clave,
+            @Valid @RequestBody TransferenciaRequest r) {
+        return new TransferenciaResponse(service.registrarTransferencia(id(jwt), r.origenId(), r.destinoId(), r.capital(), r.motivo().trim(), clave));
+    }
+
     @GetMapping("/caja-chica")
     @PreAuthorize("hasAnyAuthority('SCOPE_GESTIONAR_CAJA_CHICA', 'SCOPE_SOCIO')")
     public CajaChicaResponse cajaChica(@RequestParam(defaultValue = "0") int pagina,

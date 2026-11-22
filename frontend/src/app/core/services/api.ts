@@ -1125,6 +1125,11 @@ export class ApiService {
     return this.http.post(`${this.base}/admin/socios/compraventas`, { vendedorId, compradorId, capital, precio }, conClave(clave));
   }
 
+  /** Capital que pasa de un socio a otro sin pago dentro de Janery: no mueve cuentas ni caja. */
+  registrarTransferencia(origenId: number, destinoId: number, capital: number, motivo: string, clave: string): Observable<unknown> {
+    return this.http.post(`${this.base}/admin/socios/transferencias`, { origenId, destinoId, capital, motivo }, conClave(clave));
+  }
+
   registrarAporteInicial(socioId: number, importe: number, metodoPago: string, referencia: string | null,
       clave: string): Observable<unknown> {
     return this.http.post(`${this.base}/admin/socios/${socioId}/aporte-inicial`, { importe, metodoPago, referencia }, conClave(clave));
