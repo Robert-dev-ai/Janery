@@ -1,6 +1,6 @@
-# TEMPORAL: perfil del reinicio de datos (ReinicioRunner). Corre una vez desde la consola y termina, sin servidor web.
-spring:
-  main:
-    web-application-type: none
+# TEMPORAL: perfil del reinicio de datos (ReinicioRunner). Corre una vez desde la consola y termina. Levanta el servidor web
+# en un puerto libre porque la seguridad lo necesita, y el runner lo cierra al acabar.
+server:
+  port: 0
 janery:
   reparto-automatico: true

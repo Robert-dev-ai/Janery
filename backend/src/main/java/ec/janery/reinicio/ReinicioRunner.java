@@ -7,6 +7,8 @@ import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
+import org.springframework.boot.SpringApplication;
+import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.annotation.Profile;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -30,6 +32,7 @@ class ReinicioRunner implements ApplicationRunner {
     private final ReinicioService reinicio;
     private final ObjectMapper json;
     private final JdbcTemplate jdbc;
+    private final ConfigurableApplicationContext contexto;
 
     @Value("${janery.reinicio.plan}")
     private String plan;
@@ -52,5 +55,6 @@ class ReinicioRunner implements ApplicationRunner {
                 List.of(new SimpleGrantedAuthority("SCOPE_REGISTRAR_CREDITOS_EXISTENTES"))));
         ReinicioService.Resumen r = reinicio.ejecutar(actor, datos);
         System.out.println("REINICIO HECHO: " + json.writeValueAsString(r));
+        System.exit(SpringApplication.exit(contexto, () -> 0));
     }
 }
