@@ -21,8 +21,8 @@ interface Linea {
 
 /**
  * Ventanilla de tesorería. Decisión del propietario: cada persona puede hacer sus movimientos, pero lo común es que se
- * lo pida al tesorero, que cobra y entrega dinero por cualquiera. Todo se aplica al momento. En efectivo la foto del
- * comprobante es opcional; en transferencia, obligatoria.
+ * lo pida al tesorero, que cobra y entrega dinero por cualquiera. Todo se aplica al momento. El comprobante es
+ * opcional, en efectivo y en transferencia: el tesorero recibe el pago en persona.
  */
 @Component({
   selector: 'app-ventanilla',
@@ -185,13 +185,10 @@ interface Linea {
                 <p class="error" role="alert">El saldo ({{ saldoOrigen() | currency: 'USD' }}) no alcanza para el total.</p>
               }
             } @else {
-              @if (origen() === 'TRANSFERENCIA') {
-                <label>Número de la transferencia <input name="referencia" maxlength="100" [(ngModel)]="referencia" /></label>
-              }
-              <label>Comprobante ({{ origen() === 'TRANSFERENCIA' ? 'obligatorio' : 'opcional' }})
-                <input #archivo type="file" multiple accept="application/pdf,image/jpeg,image/png,image/webp" (change)="elegirArchivos($event)" />
+              <label>Comprobante (opcional)
+                <input #archivo type="file" accept="application/pdf,image/jpeg,image/png,image/webp" (change)="elegirArchivos($event)" />
               </label>
-              <p class="suave">Foto o PDF, hasta 5 archivos de 10 MB cada uno.{{ origen() === 'EFECTIVO' ? ' En efectivo no es obligatorio porque lo recibe en mano.' : '' }}</p>
+              <p class="suave">Una foto o un PDF, hasta 10 MB. No es obligatorio: usted recibe el pago en persona.</p>
             }
             <button type="submit" [disabled]="!listoParaCobrar() || enviando()">Cobrar {{ total() | currency: 'USD' }}</button>
           </form>
@@ -229,7 +226,6 @@ interface Linea {
             </label>
             <label>Número de cuenta <input name="numeroCuenta" maxlength="40" [(ngModel)]="numeroCuenta" /></label>
             <label>Titular <input name="titular" maxlength="150" [(ngModel)]="titular" /></label>
-            <label>Número de la transferencia (opcional) <input name="referenciaRetiro" maxlength="100" [(ngModel)]="referenciaRetiro" /></label>
             <p class="suave">A Pichincha y Guayaquil no cuesta. A otro banco o cooperativa se suma el costo de la transferencia, que sale de la misma cuenta o ahorro.</p>
           }
           <button type="submit" [disabled]="!listoParaEntregar() || enviando()">Entregar dinero</button>
@@ -293,7 +289,6 @@ export class Ventanilla {
 
   protected texto = '';
   protected importe: number | null = null;
-  protected referencia = '';
   private archivos: File[] = [];
   protected origenRetiro = 'CUENTA';
   protected importeRetiro: number | null = null;
@@ -302,7 +297,6 @@ export class Ventanilla {
   protected tipoCuenta = 'AHORROS';
   protected numeroCuenta = '';
   protected titular = '';
-  protected referenciaRetiro = '';
   // Una clave por intento: se renueva solo tras un éxito, para que reintentar no cobre ni entregue dos veces.
   private claveCobro: string = crypto.randomUUID();
   private claveRetiro: string = crypto.randomUUID();
@@ -484,7 +478,7 @@ export class Ventanilla {
   }
 
   protected elegirArchivos(evento: Event): void {
-    this.archivos = Array.from((evento.target as HTMLInputElement).files ?? []);
+    this.archivos = Array.from((evento.target as HTMLInputElement).files ?? []).slice(0, 1);
   }
 
   protected listoParaCobrar(): boolean {
@@ -494,7 +488,7 @@ export class Ventanilla {
     if (this.conSaldo()) {
       return this.saldoOrigen() >= this.total() && this.lineas().every((l) => l.destino.usuarioId === this.pagadorId());
     }
-    return this.origen() !== 'TRANSFERENCIA' || (!!this.referencia.trim() && this.archivos.length > 0);
+    return true;
   }
 
   protected async cobrar(): Promise<void> {
@@ -507,14 +501,13 @@ export class Ventanilla {
       return;
     }
     const [origen, ahorro] = this.origen().split(':') as [OrigenCobro, string | undefined];
-    const referencia = origen === 'TRANSFERENCIA' ? this.referencia.trim() : null;
     const archivos = this.conSaldo() ? [] : this.archivos;
     const nombreOrigen = origen === 'CUENTA' ? 'la cuenta principal'
       : `el ahorro «${this.fichaPagador()?.ahorros.find((a) => a.id === Number(ahorro))?.nombre ?? ''}»`;
     this.error.set(null);
     this.enviando.set(true);
     this.api.cobrarEnVentanilla(this.pagadorId()!, this.lineas().map((l) => l.destino), origen, ahorro ? Number(ahorro) : null,
-      referencia, archivos, this.claveCobro).subscribe({
+      archivos, this.claveCobro).subscribe({
       next: (r) => {
         this.claveCobro = crypto.randomUUID();
         this.enviando.set(false);
@@ -522,7 +515,6 @@ export class Ventanilla {
         this.lineas.set([]);
         this.pagadorId.set(null);
         this.origen.set('EFECTIVO');
-        this.referencia = '';
         this.archivos = [];
         const entrada = this.archivo()?.nativeElement;
         if (entrada) {
@@ -566,14 +558,12 @@ export class Ventanilla {
       usuarioId: f.persona.usuarioId, origen, ahorroId: ahorro ? Number(ahorro) : null, importe: this.importeRetiro!,
       medio: this.medioRetiro, banco: aBanco ? this.banco.trim() : null, tipoCuenta: aBanco ? this.tipoCuenta : null,
       numeroCuenta: aBanco ? this.numeroCuenta.trim() : null, titularCuenta: aBanco ? this.titular.trim() : null,
-      referencia: aBanco && this.referenciaRetiro.trim() ? this.referenciaRetiro.trim() : null,
     }, this.claveRetiro).subscribe({
       next: (r) => {
         this.claveRetiro = crypto.randomUUID();
         this.enviando.set(false);
         this.entregado.set(r);
         this.importeRetiro = null;
-        this.referenciaRetiro = '';
         this.refrescarFichas();
       },
       error: (e) => {

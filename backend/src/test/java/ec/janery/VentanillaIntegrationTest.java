@@ -101,19 +101,29 @@ class VentanillaIntegrationTest {
     }
 
     @Test
-    void laTransferenciaExigeNumeroYComprobante() throws Exception {
+    void enTransferenciaElComprobanteEsOpcionalYSoloUno() throws Exception {
         Persona uno = persona();
         List<Map<String, Object>> destinos = List.of(Map.of("usuarioId", uno.usuario(), "tipo", "CUENTA", "importe", 10));
 
-        cobrar(uno, destinos, "TRANSFERENCIA", null, null, UUID.randomUUID().toString(), true)
-                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.codigo").value("REFERENCIA_REQUERIDA"));
-        cobrar(uno, destinos, "TRANSFERENCIA", null, "TR-1", UUID.randomUUID().toString(), false)
-                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.codigo").value("COMPROBANTE_REQUERIDO"));
-        JsonNode cobro = json.readTree(cobrar(uno, destinos, "TRANSFERENCIA", null, "TR-1", UUID.randomUUID().toString(), true)
-                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString());
+        // Decisión del propietario: sin número de transferencia y sin comprobante, en ventanilla se cobra igual.
+        cobrar(uno, destinos, "TRANSFERENCIA", null, null, UUID.randomUUID().toString(), false).andExpect(status().isCreated());
         assertThat(saldo(uno)).isEqualByComparingTo("10");
+
+        JsonNode cobro = json.readTree(cobrar(uno, destinos, "TRANSFERENCIA", null, null, UUID.randomUUID().toString(), true)
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString());
+        assertThat(saldo(uno)).isEqualByComparingTo("20");
         assertThat(jdbc.queryForObject("select count(*) from comprobantes where tipo = 'DEPOSITO' and referencia_id = ?",
                 Long.class, cobro.get("id").asLong())).isEqualTo(1L);
+
+        // Un solo comprobante: con dos no se cobra nada.
+        MockMultipartHttpServletRequestBuilder dos = multipart("/api/v1/ventanilla/cobros")
+                .file(new MockMultipartFile("datos", "", MediaType.APPLICATION_JSON_VALUE, json.writeValueAsBytes(
+                        Map.of("pagadorId", uno.usuario(), "destinos", destinos, "origen", "TRANSFERENCIA"))))
+                .file(new MockMultipartFile("archivos", "a.pdf", "application/pdf", PDF))
+                .file(new MockMultipartFile("archivos", "b.pdf", "application/pdf", PDF));
+        mvc.perform(dos.header(HttpHeaders.AUTHORIZATION, bearer(presidente())).header("Idempotency-Key", UUID.randomUUID().toString()))
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.codigo").value("COMPROBANTES_EXCEDIDOS"));
+        assertThat(saldo(uno)).isEqualByComparingTo("20");
     }
 
     @Test

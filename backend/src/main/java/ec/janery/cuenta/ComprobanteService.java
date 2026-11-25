@@ -38,7 +38,8 @@ public class ComprobanteService {
     public static final String DEPOSITO = "DEPOSITO";
     private static final List<String> TIPOS = List.of(APERTURA, DEPOSITO);
     private static final long MAX_BYTES = 10L * 1024 * 1024;
-    private static final int MAX_POR_PAGO = 5;
+    /** Decisión del propietario (24/11/2026): un solo comprobante, una foto o un PDF. */
+    private static final int MAX_POR_PAGO = 1;
     private static final byte[] CABECERA_PDF = "%PDF-".getBytes(StandardCharsets.US_ASCII);
 
     private final JdbcClient jdbc;
@@ -63,7 +64,7 @@ public class ComprobanteService {
             throw NegocioException.conflicto("ESTADO_INVALIDO", "Este pago ya se revisó: no admite comprobantes");
         }
         if (archivos.isEmpty() || cantidad(tipo, referenciaId) + archivos.size() > MAX_POR_PAGO) {
-            throw NegocioException.conflicto("COMPROBANTES_EXCEDIDOS", "Se admiten hasta " + MAX_POR_PAGO + " comprobantes por pago");
+            throw NegocioException.conflicto("COMPROBANTES_EXCEDIDOS", "Se admite un solo comprobante por pago: una foto o un PDF");
         }
         Instant ahora = Instant.now(reloj);
         for (MultipartFile archivo : archivos) {

@@ -156,13 +156,10 @@ interface Linea {
             <option value="TRANSFERENCIA">Por transferencia</option>
           </select>
         </label>
-        @if (medio === 'TRANSFERENCIA') {
-          <label>Número de la transferencia <input name="referencia" maxlength="100" [(ngModel)]="referencia" /></label>
-        }
         <label>Comprobante (obligatorio)
-          <input #archivo type="file" multiple accept="application/pdf,image/jpeg,image/png,image/webp" (change)="elegirArchivos($event)" />
+          <input #archivo type="file" accept="application/pdf,image/jpeg,image/png,image/webp" (change)="elegirArchivos($event)" />
         </label>
-        <p class="suave">Foto o PDF del comprobante o recibo, hasta 5 archivos de 10 MB cada uno.</p>
+        <p class="suave">Una foto o un PDF del comprobante o recibo, hasta 10 MB.</p>
         <button type="submit" [disabled]="!listoParaEnviar() || enviando()">Enviar pago de {{ total() | currency: 'USD' }}</button>
       </form>
     }
@@ -172,7 +169,7 @@ interface Linea {
       @for (s of lista; track s.id) {
         <section class="tarjeta">
           <div class="encabezado-tarjeta">
-            <p class="m-0"><span class="codigo">{{ s.codigo }}</span> · {{ s.fecha | date: 'short' : 'America/Guayaquil' }} · {{ s.medio === 'EFECTIVO' ? 'Efectivo' : 'Transferencia ' + s.referencia }}</p>
+            <p class="m-0"><span class="codigo">{{ s.codigo }}</span> · {{ s.fecha | date: 'short' : 'America/Guayaquil' }} · {{ s.medio === 'EFECTIVO' ? 'Efectivo' : 'Transferencia' }}</p>
             <app-estado [valor]="s.estado" />
           </div>
           @for (d of s.destinos; track $index) {
@@ -229,7 +226,6 @@ export class Pagar implements OnInit {
   protected texto = '';
   protected importe: number | null = null;
   protected medio = 'EFECTIVO';
-  protected referencia = '';
   private archivos: File[] = [];
   // Una clave por intento: se renueva solo tras un éxito, para que reintentar no duplique.
   private clave: string = crypto.randomUUID();
@@ -397,11 +393,11 @@ export class Pagar implements OnInit {
   }
 
   protected elegirArchivos(evento: Event): void {
-    this.archivos = Array.from((evento.target as HTMLInputElement).files ?? []);
+    this.archivos = Array.from((evento.target as HTMLInputElement).files ?? []).slice(0, 1);
   }
 
   protected listoParaEnviar(): boolean {
-    return this.lineas().length > 0 && this.archivos.length > 0 && (this.medio !== 'TRANSFERENCIA' || !!this.referencia.trim());
+    return this.lineas().length > 0 && this.archivos.length > 0;
   }
 
   protected async enviar(): Promise<void> {
@@ -414,14 +410,12 @@ export class Pagar implements OnInit {
     this.error.set(null);
     this.aviso.set(null);
     this.enviando.set(true);
-    const referencia = this.medio === 'TRANSFERENCIA' ? this.referencia.trim() : null;
-    this.api.pagar(this.lineas().map((l) => l.destino), this.medio, referencia, this.archivos, this.clave).subscribe({
+    this.api.pagar(this.lineas().map((l) => l.destino), this.medio, this.archivos, this.clave).subscribe({
       next: (r) => {
         this.clave = crypto.randomUUID();
         this.enviando.set(false);
         this.lineas.set([]);
         this.archivos = [];
-        this.referencia = '';
         const entrada = this.archivo()?.nativeElement;
         if (entrada) {
           entrada.value = '';

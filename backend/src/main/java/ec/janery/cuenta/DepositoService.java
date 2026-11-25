@@ -167,8 +167,8 @@ public class DepositoService {
     }
 
     /**
-     * Decisión del propietario: lo que se paga en persona al tesorero no exige foto, aunque se puede adjuntar; una
-     * transferencia, sí. Devuelve false si ya estaba confirmada (reintento con la misma clave).
+     * Decisión del propietario: lo que se paga en persona al tesorero no exige comprobante, aunque se puede adjuntar,
+     * sea en efectivo o por transferencia. Devuelve false si ya estaba confirmada (reintento con la misma clave).
      */
     @Transactional
     public boolean confirmarEnVentanilla(Long actorId, Long id) {
@@ -186,17 +186,16 @@ public class DepositoService {
     private void aplicar(Long actorId, SolicitudDeposito s, boolean enVentanilla) {
         Long id = s.getId();
         Long operacion;
+        // Decisión del propietario (24/11/2026): si la persona mete dinero a la caja por su cuenta, siempre con
+        // comprobante, también en efectivo. En ventanilla lo recibe el tesorero en persona y es opcional.
+        if (!enVentanilla && comprobantes.cantidad(ComprobanteService.DEPOSITO, id) == 0) {
+            throw NegocioException.conflicto("COMPROBANTE_REQUERIDO",
+                    s.isEsPago() ? "Falta el comprobante del pago" : "Falta el comprobante del depósito");
+        }
         if (s.isEsPago()) {
-            if (enVentanilla) {
-                comprobantes.exigirSiTransferencia(ComprobanteService.DEPOSITO, id, s.getMedio());
-            } else if (comprobantes.cantidad(ComprobanteService.DEPOSITO, id) == 0) {
-                // Decisión del propietario: un pago enviado por la persona siempre lleva comprobante.
-                throw NegocioException.conflicto("COMPROBANTE_REQUERIDO", "Falta el comprobante del pago");
-            }
             operacion = ejecutor.orElseThrow(() -> new IllegalStateException("Sin módulo de pagos"))
                     .ejecutar(actorId, id, s.getMedio(), s.getReferencia());
         } else {
-            comprobantes.exigirSiTransferencia(ComprobanteService.DEPOSITO, id, s.getMedio());
             operacion = cuentas.depositar(actorId, s.getCuentaId(), s.getImporte(), s.getMedio(), s.getReferencia(),
                     "solicitud-deposito-" + id);
         }

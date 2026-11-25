@@ -341,7 +341,7 @@ El propietario autorizó el 30/10/2026 usar valores provisionales de tasas, enca
 - **Recuperar contraseña sin correo:** Janery no envía correos. El pedido le llega a la presidencia, que genera una contraseña temporal de 10 caracteres y se la entrega en persona o por mensaje. Al entrar con ella se obliga a elegir otra.
 - **Cédula exacta:** se exigen exactamente 10 números (no «hasta 10»), como toda cédula ecuatoriana.
 - **Teléfono en Ecuador:** celular de 9 números sin el 0 (empieza con 9); fijo de 8. En otros países, de 6 a 12.
-- **Comprobante obligatorio solo en transferencias:** sin él no se puede confirmar. En efectivo es opcional, porque se entrega en mano. Se aceptan PDF, JPG, PNG y WEBP de hasta 10 MB, comprobados por su contenido.
+- **Comprobante (actualizado el 24/11/2026 por decisión del propietario):** quien mete dinero a la caja por su cuenta (depósito o pago) adjunta siempre su comprobante, también en efectivo; sin él no se puede confirmar. Si paga en persona al tesorero, en la ventanilla es opcional (sección 21). La apertura de cuenta lo exige solo en transferencia. Es un solo archivo: una foto o un PDF (PDF, JPG, PNG o WEBP de hasta 10 MB, comprobados por su contenido). Ya no se pide el número de la transferencia en ninguna pantalla.
 - **Costo de transferencia:** se aparta de la cuenta junto con el retiro y sale de la caja al entregarlo (el banco lo descuenta a Janery). Se cobra a cualquier banco cuyo nombre no contenga «Pichincha» ni «Guayaquil».
 - **Votos:** cada persona vota una vez y cuenta por una sola de sus áreas. Con los tres votos se decide: se aprueba solo si los tres aprueban; un rechazo con motivo basta para rechazarlo al completarse. El retiro de cupo de socio sigue la misma regla. Vicepresidencia, tesorería y comité de crédito recibieron el permiso `APROBAR_CREDITOS`.
 - **Ahorro letras mínimo:** la letra se redondea al dólar siguiente contando 0,50 de ahorro; así cada letra ahorra entre 0,50 y 1,49.
@@ -405,7 +405,7 @@ El propietario autorizó el 30/10/2026 usar valores provisionales de tasas, enca
 
 **Definido por el propietario (02/11/2026):** desde «Pagar», al final del menú, quien tiene cuenta activa paga de una vez lo que quiera: letras de créditos, depósitos a ahorros normales, aporte mensual, aporte personal, caja chica o un depósito a la cuenta principal. Un **cliente** solo paga lo suyo. Un **socio** puede pagar también lo de otras personas en el mismo pago (por ejemplo, 30 a la letra de una persona, 50 a la de otra, un depósito al ahorro de la primera y el aporte de una tercera); a un cliente no se le muestra esa opción y el servidor la rechaza (`SOLO_SOCIOS`).
 
-- **Comprobante obligatorio:** sin al menos un comprobante (foto o PDF, hasta 5) no se registra el pago, sea en efectivo o por transferencia.
+- **Comprobante obligatorio:** sin el comprobante (una foto o un PDF) no se registra el pago, sea en efectivo o por transferencia.
 - **Otras personas:** se buscan por nombre o cédula entre quienes tienen cuenta activa. Quien paga ve solo su nombre y lo que se le puede pagar (créditos con la letra que falta, ahorros normales y, si es socio, sus meses de aporte); no ve su cédula ni su número de cuenta.
 - **Nada cambia hasta confirmar:** el pago queda como un aviso de depósito (código DP) en «Depósitos y pagos por confirmar». Al confirmarlo, el dinero entra a la caja principal y a la cuenta principal de cada beneficiario, y de ahí se paga cada cosa como si la persona la hubiera pagado.
 - **Todo o nada:** si una cosa de la lista ya no se puede pagar al confirmar (por ejemplo, el mes ya se pagó), no se confirma nada y el mensaje dice cuál falló; el personal puede rechazar el pago con un motivo. Al registrarlo también se rechaza entero si algo no es válido.
@@ -419,7 +419,7 @@ El propietario autorizó el 30/10/2026 usar valores provisionales de tasas, enca
 - **Se aplica al momento:** el tesorero ya recibió o entregó el dinero. No queda nada por confirmar.
 - **Cobrar:** las mismas cosas que en «Pagar» (letras, ahorros, aporte mensual, aporte personal, caja chica y depósito a la cuenta principal), de una o de varias personas en el mismo cobro. El tesorero elige quién entregó el dinero; por defecto, la primera persona de la lista.
 - **Forma de pago:** en efectivo o por transferencia, y el dinero entra a la caja principal; o con el saldo de la cuenta principal o de un ahorro normal de quien paga, y no entra dinero a la caja.
-- **Comprobante:** el campo existe siempre. En efectivo es opcional, porque se paga en persona al tesorero; en transferencia es obligatorio, junto con el número de la transferencia.
+- **Comprobante:** el campo existe siempre, pero es opcional, en efectivo y en transferencia, porque se paga en persona al tesorero. Un solo archivo. No se pide el número de la transferencia.
 - **Entregar dinero (retiro):** sale de la cuenta principal o directo de un ahorro normal, en efectivo o por transferencia, y sale de la caja en ese momento. El costo de la transferencia a otros bancos (sección 16) sale de la misma cuenta o ahorro.
 
 **Criterios del desarrollo, pendientes de confirmación:**

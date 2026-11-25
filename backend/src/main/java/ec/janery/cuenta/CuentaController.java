@@ -17,7 +17,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-import ec.janery.common.NegocioException;
 import ec.janery.common.Pagina;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Digits;
@@ -69,11 +68,7 @@ public class CuentaController {
     @ResponseStatus(HttpStatus.CREATED)
     public CuentaResponse solicitarApertura(@AuthenticationPrincipal Jwt jwt,
             @Valid @RequestBody AperturaRequest request) {
-        if ("TRANSFERENCIA".equals(request.metodoPago())
-                && (request.referenciaPago() == null || request.referenciaPago().isBlank())) {
-            throw new NegocioException(HttpStatus.BAD_REQUEST, "REFERENCIA_REQUERIDA",
-                    "Indique el número de la transferencia");
-        }
+        // Decisión del propietario (24/11/2026): ya no se pide el número de la transferencia; basta el comprobante.
         return CuentaResponse.de(service.solicitarApertura(id(jwt), request.metodoPago(), request.referenciaPago()));
     }
 

@@ -66,14 +66,11 @@ const TIPOS_COMPROBANTE = 'application/pdf,image/jpeg,image/png,image/webp';
               <option value="TRANSFERENCIA">Transferencia</option>
             </select>
           </label>
-          @if (esTransferencia()) {
-            <label>Número de la transferencia <input formControlName="referenciaPago" maxlength="100" /></label>
-          }
           <label>Comprobante de pago {{ esTransferencia() ? '(obligatorio)' : '(si tiene uno)' }}
             <input type="file" [accept]="tipos" (change)="elegir($event)" />
           </label>
-          <p class="suave">Todo dinero que entra a Janery desde fuera se respalda con su comprobante: foto o PDF, hasta 10 MB.</p>
-          <button type="submit" [disabled]="(esTransferencia() && (!apertura.value.referenciaPago?.trim() || !archivo())) || enviando()">
+          <p class="suave">Todo dinero que entra a Janery desde fuera se respalda con su comprobante: una foto o un PDF, hasta 10 MB.</p>
+          <button type="submit" [disabled]="(esTransferencia() && !archivo()) || enviando()">
             Solicitar apertura
           </button>
         </form>
@@ -101,7 +98,6 @@ export class ActivarCuenta implements OnInit {
   });
   protected readonly apertura = this.fb.group({
     metodoPago: ['EFECTIVO'],
-    referenciaPago: [''],
   });
   private readonly metodo = signal('EFECTIVO');
   protected readonly esTransferencia = computed(() => this.metodo() === 'TRANSFERENCIA');
@@ -188,10 +184,9 @@ export class ActivarCuenta implements OnInit {
   }
 
   protected solicitar(): void {
-    const { metodoPago, referenciaPago } = this.apertura.getRawValue();
-    const referencia = metodoPago === 'TRANSFERENCIA' ? referenciaPago.trim() : null;
+    const { metodoPago } = this.apertura.getRawValue();
     const archivo = this.archivo();
-    this.ejecutar(this.api.solicitarApertura(metodoPago, referencia).pipe(
+    this.ejecutar(this.api.solicitarApertura(metodoPago).pipe(
       // Si falla la subida, la solicitud ya existe: el comprobante se puede adjuntar en la pantalla siguiente.
       switchMap((c) => (archivo ? this.api.subirComprobantes('APERTURA', c.id, [archivo]) : of(null))),
       switchMap(() => this.auth.cargarYo()),

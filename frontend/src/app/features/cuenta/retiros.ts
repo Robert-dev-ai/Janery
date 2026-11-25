@@ -70,7 +70,7 @@ import { mensajeDeError } from '../../shared/utils/errores';
                   <td class="num">{{ s.costo ? (s.costo | currency: 'USD') : '—' }}</td>
                   <td>{{ s.medio === 'EFECTIVO' ? 'Efectivo' : 'Banco: ' + s.banco?.banco }}</td>
                   <td><app-estado [valor]="s.estado" /></td>
-                  <td>{{ s.motivo ?? s.referencia ?? '—' }}</td>
+                  <td>{{ s.motivo ?? '—' }}</td>
                   <td>@if (s.estado === 'PENDIENTE') { <button type="button" class="secundario" (click)="cancelar(s)">Cancelar</button> }</td>
                 </tr>
               }

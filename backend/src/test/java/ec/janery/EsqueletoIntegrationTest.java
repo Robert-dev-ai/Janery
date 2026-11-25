@@ -185,7 +185,7 @@ class EsqueletoIntegrationTest {
     }
 
     @Test
-    void aperturaExigePerfilYReferenciaEnTransferencia() throws Exception {
+    void aperturaExigePerfilPeroNoElNumeroDeTransferencia() throws Exception {
         String correo = correoNuevo();
         registrar(correo);
         mvc.perform(post("/api/v1/cuentas-principales/apertura").header(HttpHeaders.AUTHORIZATION, bearer(login(correo)))
@@ -193,7 +193,7 @@ class EsqueletoIntegrationTest {
                 .andExpect(status().isConflict()).andExpect(jsonPath("$.codigo").value("PERFIL_INCOMPLETO"));
         mvc.perform(post("/api/v1/cuentas-principales/apertura").header(HttpHeaders.AUTHORIZATION, bearer(personaConPerfil()))
                         .contentType(MediaType.APPLICATION_JSON).content("{\"metodoPago\":\"TRANSFERENCIA\"}"))
-                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.codigo").value("REFERENCIA_REQUERIDA"));
+                .andExpect(status().isCreated());
     }
 
     @Test

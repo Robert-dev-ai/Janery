@@ -104,9 +104,6 @@ public class VentanillaService {
     public Cobro cobrar(Long actorId, Long pagadorId, List<PagoService.Destino> destinos, String origen, Long ahorroId,
             String referencia, String clave, List<MultipartFile> archivos) {
         if (EFECTIVO.equals(origen) || TRANSFERENCIA.equals(origen)) {
-            if (TRANSFERENCIA.equals(origen) && (referencia == null || referencia.isBlank())) {
-                throw new NegocioException(HttpStatus.BAD_REQUEST, "REFERENCIA_REQUERIDA", "Indique el número de la transferencia");
-            }
             DepositoService.Vista v = pagos.cobrarEnVentanilla(actorId, pagadorId, destinos, origen,
                     referencia == null || referencia.isBlank() ? null : referencia.trim(), clave, archivos);
             return new Cobro(v.id(), v.codigo(), v.importe(),

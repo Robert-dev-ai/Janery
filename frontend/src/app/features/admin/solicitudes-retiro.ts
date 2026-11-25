@@ -57,7 +57,7 @@ import { mensajeDeError } from '../../shared/utils/errores';
                       <button type="button" (click)="entregar(s)">Confirmar entrega</button>
                       <button type="button" class="peligro" (click)="rechazar(s)">Rechazar</button>
                     } @else {
-                      {{ s.motivo ?? s.referencia ?? '' }}
+                      {{ s.motivo ?? '' }}
                     }
                   </td>
                 </tr>
@@ -104,7 +104,7 @@ export class SolicitudesRetiro implements OnInit {
   protected async entregar(s: SolicitudRetiro): Promise<void> {
     const costo = s.costo ? ` (más ${s.costo} USD del costo de la transferencia)` : '';
     if (await this.dialogo.confirmar(`¿Confirma que entregó ${s.importe} USD a ${s.titular}${costo}? Saldrán de la caja principal.`, 'Confirmar entrega')) {
-      this.ejecutar(this.api.entregarRetiro(s.id, null), 'Entrega registrada.');
+      this.ejecutar(this.api.entregarRetiro(s.id), 'Entrega registrada.');
     }
   }
 

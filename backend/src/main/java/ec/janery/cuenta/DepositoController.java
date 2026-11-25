@@ -17,7 +17,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-import ec.janery.common.NegocioException;
 import ec.janery.common.Pagina;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Digits;
@@ -46,10 +45,8 @@ public class DepositoController {
     @ResponseStatus(HttpStatus.CREATED)
     public DepositoService.Vista solicitar(@AuthenticationPrincipal Jwt jwt,
             @RequestHeader("Idempotency-Key") @jakarta.validation.constraints.NotBlank @Size(max = 100) String clave, @Valid @RequestBody SolicitudRequest r) {
+        // Decisión del propietario (24/11/2026): ya no se pide el número de la transferencia; basta el comprobante.
         boolean sinReferencia = r.referencia() == null || r.referencia().isBlank();
-        if ("TRANSFERENCIA".equals(r.medio()) && sinReferencia) {
-            throw new NegocioException(HttpStatus.BAD_REQUEST, "REFERENCIA_REQUERIDA", "Indique el número de la transferencia");
-        }
         return service.solicitar(id(jwt), r.importe(), r.medio(), sinReferencia ? null : r.referencia().trim(), clave);
     }
 

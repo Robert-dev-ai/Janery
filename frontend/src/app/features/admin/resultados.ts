@@ -60,7 +60,6 @@ import { mensajeDeError } from '../../shared/utils/errores';
             <option value="TRANSFERENCIA">Transferencia</option>
           </select>
         </label>
-        <label>Referencia <input name="referenciaInicial" maxlength="100" [(ngModel)]="referenciaInicial" /></label>
         <button type="submit" [disabled]="enviando() || !socioInicial || !importeInicial || importeInicial <= 0">Registrar</button>
       </form>
 
@@ -202,7 +201,6 @@ export class AdminResultados implements OnInit {
   protected socioInicial: number | null = null;
   protected importeInicial: number | null = null;
   protected metodoInicial = 'EFECTIVO';
-  protected referenciaInicial = '';
 
   // Una clave por intento: se renueva solo tras un éxito, para que reintentar no duplique.
   private claveInicial: string = crypto.randomUUID();
@@ -256,12 +254,10 @@ export class AdminResultados implements OnInit {
 
   protected registrarInicial(): void {
     this.ejecutar(
-      this.api.registrarAporteInicial(this.socioInicial!, this.importeInicial!, this.metodoInicial,
-        this.referenciaInicial.trim() || null, this.claveInicial),
+      this.api.registrarAporteInicial(this.socioInicial!, this.importeInicial!, this.metodoInicial, this.claveInicial),
       'Aporte inicial registrado.', () => {
         this.claveInicial = crypto.randomUUID();
         this.importeInicial = null;
-        this.referenciaInicial = '';
       });
   }
 

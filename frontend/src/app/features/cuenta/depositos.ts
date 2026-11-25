@@ -28,13 +28,11 @@ import { mensajeDeError } from '../../shared/utils/errores';
           <option value="TRANSFERENCIA">Por transferencia</option>
         </select>
       </label>
-      @if (medio === 'TRANSFERENCIA') {
-        <label>Número de la transferencia <input name="referencia" maxlength="100" [(ngModel)]="referencia" /></label>
-      }
-      <label>Comprobante de pago {{ medio === 'TRANSFERENCIA' ? '(obligatorio)' : '(si tiene uno)' }}
+      <!-- Decisión del propietario: quien mete dinero a la caja por su cuenta adjunta siempre el comprobante. -->
+      <label>Comprobante de pago (obligatorio)
         <input type="file" accept="application/pdf,image/jpeg,image/png,image/webp" (change)="elegir($event)" />
       </label>
-      <p class="suave">Foto o PDF del comprobante, hasta 10 MB.</p>
+      <p class="suave">Una foto o un PDF del comprobante o recibo, hasta 10 MB. Si paga en persona al tesorero, él lo registra y no necesita enviarlo.</p>
       <button type="submit" [disabled]="!valido() || enviando()">Avisar depósito</button>
     </form>
 
@@ -63,7 +61,7 @@ import { mensajeDeError } from '../../shared/utils/errores';
                     }
                   </td>
                   <td><app-estado [valor]="s.estado" /></td>
-                  <td>{{ s.motivo ?? s.referencia ?? '—' }}</td>
+                  <td>{{ s.motivo ?? '—' }}</td>
                   <td>@if (s.estado === 'PENDIENTE') { <button type="button" class="secundario" (click)="cancelar(s)">Cancelar</button> }</td>
                 </tr>
               }
@@ -91,7 +89,6 @@ export class Depositos implements OnInit {
 
   protected importe: number | null = null;
   protected medio = 'EFECTIVO';
-  protected referencia = '';
   protected comprobante: File | null = null;
 
   // Una clave por intento: se renueva solo tras un éxito, para que reintentar no duplique.
@@ -110,23 +107,20 @@ export class Depositos implements OnInit {
   }
 
   protected valido(): boolean {
-    const transferencia = this.medio === 'TRANSFERENCIA';
-    return !!this.importe && this.importe > 0 && (!transferencia || (!!this.referencia.trim() && !!this.comprobante));
+    return !!this.importe && this.importe > 0 && !!this.comprobante;
   }
 
   protected solicitar(): void {
     this.error.set(null);
     this.aviso.set(null);
     this.enviando.set(true);
-    const referencia = this.medio === 'TRANSFERENCIA' ? this.referencia.trim() : null;
     const archivo = this.comprobante;
-    this.api.solicitarDeposito({ importe: this.importe!, medio: this.medio, referencia }, this.clave).pipe(
+    this.api.solicitarDeposito({ importe: this.importe!, medio: this.medio }, this.clave).pipe(
       switchMap((s) => (archivo ? this.api.subirComprobantes('DEPOSITO', s.id, [archivo]) : of(null))),
     ).subscribe({
       next: () => {
         this.clave = crypto.randomUUID();
         this.importe = null;
-        this.referencia = '';
         this.comprobante = null;
         this.enviando.set(false);
         this.aviso.set('Depósito registrado. Se sumará a su saldo cuando el personal lo confirme.');

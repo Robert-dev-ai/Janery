@@ -161,7 +161,7 @@ public class PagoService {
 
     /**
      * Ventanilla, con dinero recibido en efectivo o por transferencia: se registra a nombre de quien entregó el dinero y
-     * se aplica al momento. Decisión del propietario: en efectivo la foto es opcional; en transferencia, obligatoria.
+     * se aplica al momento. Decisión del propietario: el comprobante es opcional, también en transferencia.
      */
     @Transactional
     public DepositoService.Vista cobrarEnVentanilla(Long actorId, Long pagadorId, List<Destino> destinos, String medio,
@@ -171,9 +171,6 @@ public class PagoService {
             return previo.get();
         }
         List<MultipartFile> adjuntos = archivos == null ? List.of() : archivos.stream().filter(a -> !a.isEmpty()).toList();
-        if ("TRANSFERENCIA".equals(medio) && adjuntos.isEmpty()) {
-            throw new NegocioException(HttpStatus.BAD_REQUEST, "COMPROBANTE_REQUERIDO", "Adjunte el comprobante de la transferencia");
-        }
         List<Fila> filas = validarVentanilla(pagadorId, destinos);
         DepositoService.Vista aviso = depositos.registrarEnVentanilla(actorId, pagadorId, total(filas), medio, referencia, clave);
         if (aviso.destinos().isEmpty()) {

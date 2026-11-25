@@ -18,7 +18,6 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
-import ec.janery.common.NegocioException;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotNull;
@@ -64,10 +63,8 @@ public class PagoController {
     @ResponseStatus(HttpStatus.CREATED)
     public PagoService.Creado pagar(@AuthenticationPrincipal Jwt jwt, @RequestHeader("Idempotency-Key") @jakarta.validation.constraints.NotBlank @Size(max = 60) String clave,
             @Valid @RequestPart("datos") PagoRequest r, @RequestPart(name = "archivos", required = false) List<MultipartFile> archivos) {
+        // Decisión del propietario (24/11/2026): ya no se pide el número de la transferencia; basta el comprobante.
         boolean sinReferencia = r.referencia() == null || r.referencia().isBlank();
-        if ("TRANSFERENCIA".equals(r.medio()) && sinReferencia) {
-            throw new NegocioException(HttpStatus.BAD_REQUEST, "REFERENCIA_REQUERIDA", "Indique el número de la transferencia");
-        }
         List<PagoService.Destino> destinos = r.destinos().stream()
                 .map(d -> new PagoService.Destino(d.usuarioId(), d.tipo(), d.referenciaId(), d.periodos(), d.importe())).toList();
         return service.crear(id(jwt), destinos, r.medio(), sinReferencia ? null : r.referencia().trim(), clave, archivos);
