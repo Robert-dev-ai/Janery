@@ -339,7 +339,7 @@ public class CuentaService {
     }
 
     /**
-     * Pendiente de confirmar por el propietario: al cerrar, el interés pendiente, acumulado y disponible devengado hasta
+     * Confirmado por el propietario (24/11/2026): al cerrar, el interés pendiente, acumulado y disponible devengado hasta
      * hoy, se acredita al saldo para liquidarlo con el resto. Lo que no llega a un centavo se pierde. Devuelve lo acreditado.
      */
     private BigDecimal liquidarInteres(CuentaPrincipal cuenta, Long actorId) {

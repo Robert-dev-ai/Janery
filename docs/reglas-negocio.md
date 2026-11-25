@@ -341,7 +341,7 @@ El propietario autorizó el 30/10/2026 usar valores provisionales de tasas, enca
 - **Recuperar contraseña sin correo:** Janery no envía correos. El pedido le llega a la presidencia, que genera una contraseña temporal de 10 caracteres y se la entrega en persona o por mensaje. Al entrar con ella se obliga a elegir otra.
 - **Cédula exacta:** se exigen exactamente 10 números (no «hasta 10»), como toda cédula ecuatoriana.
 - **Teléfono en Ecuador:** celular de 9 números sin el 0 (empieza con 9); fijo de 8. En otros países, de 6 a 12.
-- **Comprobante (actualizado el 24/11/2026 por decisión del propietario):** quien mete dinero a la caja por su cuenta (depósito o pago) adjunta siempre su comprobante, también en efectivo; sin él no se puede confirmar. Si paga en persona al tesorero, en la ventanilla es opcional (sección 21). La apertura de cuenta lo exige solo en transferencia. Es un solo archivo: una foto o un PDF (PDF, JPG, PNG o WEBP de hasta 10 MB, comprobados por su contenido). Ya no se pide el número de la transferencia en ninguna pantalla.
+- **Comprobante (actualizado el 24/11/2026 por decisión del propietario):** quien mete dinero a la caja por su cuenta (depósito o pago) adjunta siempre su comprobante, también en efectivo; sin él no se puede confirmar. Si paga en persona al tesorero, en la ventanilla es opcional (sección 21). La apertura de cuenta lo exige solo en transferencia; en efectivo es opcional (confirmado por el propietario el 24/11/2026). Es un solo archivo: una foto o un PDF (PDF, JPG, PNG o WEBP de hasta 10 MB, comprobados por su contenido). Ya no se pide el número de la transferencia en ninguna pantalla.
 - **Costo de transferencia:** se aparta de la cuenta junto con el retiro y sale de la caja al entregarlo (el banco lo descuenta a Janery). Se cobra a cualquier banco cuyo nombre no contenga «Pichincha» ni «Guayaquil».
 - **Votos:** cada persona vota una vez y cuenta por una sola de sus áreas. Con los tres votos se decide: se aprueba solo si los tres aprueban; un rechazo con motivo basta para rechazarlo al completarse. El retiro de cupo de socio sigue la misma regla. Vicepresidencia, tesorería y comité de crédito recibieron el permiso `APROBAR_CREDITOS`.
 - **Ahorro letras mínimo:** la letra se redondea al dólar siguiente contando 0,50 de ahorro; así cada letra ahorra entre 0,50 y 1,49.
@@ -438,7 +438,7 @@ El propietario autorizó el 30/10/2026 usar valores provisionales de tasas, enca
 - **Sin interés retroactivo:** las cuentas activas empiezan a ganar desde el 24/11/2026; las nuevas, desde el día en que se activan.
 - **Retirar el interés:** pasa al saldo de la cuenta principal lo ya liberado, redondeado hacia abajo a centavos. Es un gasto de Janery (5.1, como el interés de los ahorros) y una pérdida que se reparte entre los socios. No mueve la caja.
 
-**Pendiente de confirmación por el propietario:**
+**Confirmado por el propietario (24/11/2026):**
 
 - **Cierre de la cuenta:** el interés pendiente no impide pedir el cierre. Al confirmarlo, lo acumulado y lo disponible, devengado hasta ese día, se acredita al saldo y se entrega junto con el depósito reembolsable. Lo que no llega a un centavo se pierde.
 
@@ -451,5 +451,5 @@ El propietario autorizó el 30/10/2026 usar valores provisionales de tasas, enca
 
 **Criterios del desarrollo, pendientes de confirmación:**
 
-- El dinero del ahorro pasa por la cuenta principal, para que quede en los movimientos de la persona. Si el retiro se cancela o se rechaza, vuelve a la cuenta principal, no al ahorro.
+- **Confirmado por el propietario (24/11/2026):** el dinero del ahorro pasa por la cuenta principal, para que quede en los movimientos de la persona. Si el retiro se cancela o se rechaza, vuelve a la cuenta principal, no al ahorro.
 - Un plazo fijo no se usa para esto: no se toca antes de vencer.
