@@ -83,6 +83,15 @@
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
             </plugin>
+            <plugin>
+                <!-- Las pruebas calculan fechas con la zona del equipo; la aplicación usa la de Ecuador. En la CI
+                     (UTC), de 19:00 a 24:00 de Ecuador ya es mañana y las fechas de hoy salían futuras. -->
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <argLine>-Duser.timezone=America/Guayaquil</argLine>
+                </configuration>
+            </plugin>
         </plugins>
     </build>
 </project>
