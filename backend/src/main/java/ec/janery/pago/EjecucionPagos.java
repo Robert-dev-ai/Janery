@@ -74,20 +74,22 @@ class EjecucionPagos implements EjecutorPagos {
     }
 
     private void pagar(Fila f, String clave) {
-        switch (f.tipo()) {
+        pagarDestino(f.usuarioId(), f.tipo(), f.referenciaId(),
+                f.periodos() == null ? List.of() : Arrays.asList(f.periodos().split(",")), f.importe(), clave);
+    }
+
+    /** Paga un destino con el saldo de la cuenta principal de la persona, como si ella misma lo pagara. */
+    void pagarDestino(Long usuarioId, String tipo, Long referenciaId, List<String> periodos, BigDecimal importe, String clave) {
+        switch (tipo) {
             case PagoService.CUENTA -> {
                 // El dinero ya quedó en su cuenta principal.
             }
-            case PagoService.CUOTA_CREDITO -> pagosCredito.pagar(f.usuarioId(), f.referenciaId(), f.importe(), false, false, clave);
-            case PagoService.AHORRO -> ahorros.depositar(f.usuarioId(), f.referenciaId(), f.importe(), clave);
-            case PagoService.APORTE_PERSONAL -> participacion.aportar(f.usuarioId(), "PERSONAL", f.importe(), null, clave);
-            case PagoService.APORTE_OBLIGATORIO -> participacion.pagarPeriodos(f.usuarioId(), "OBLIGATORIO", meses(f), clave);
-            case PagoService.CAJA_CHICA -> participacion.pagarPeriodos(f.usuarioId(), "CAJA_CHICA", meses(f), clave);
-            default -> throw new IllegalStateException("Destino desconocido: " + f.tipo());
+            case PagoService.CUOTA_CREDITO -> pagosCredito.pagar(usuarioId, referenciaId, importe, false, false, clave);
+            case PagoService.AHORRO -> ahorros.depositar(usuarioId, referenciaId, importe, clave);
+            case PagoService.APORTE_PERSONAL -> participacion.aportar(usuarioId, "PERSONAL", importe, null, clave);
+            case PagoService.APORTE_OBLIGATORIO -> participacion.pagarPeriodos(usuarioId, "OBLIGATORIO", periodos, clave);
+            case PagoService.CAJA_CHICA -> participacion.pagarPeriodos(usuarioId, "CAJA_CHICA", periodos, clave);
+            default -> throw new IllegalStateException("Destino desconocido: " + tipo);
         }
-    }
-
-    private static List<String> meses(Fila f) {
-        return Arrays.asList(f.periodos().split(","));
     }
 }

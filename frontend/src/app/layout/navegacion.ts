@@ -49,6 +49,7 @@ const ADMIN: GrupoMenu[] = [
   {
     titulo: 'Productos financieros',
     enlaces: [
+      { titulo: 'Ventanilla', ruta: '/admin/ventanilla', icono: HandCoins, visible: conPermiso('GESTIONAR_CUENTAS') },
       { titulo: 'Cuentas', ruta: '/admin/cuentas', icono: Wallet, visible: conPermiso('GESTIONAR_CUENTAS') },
       { titulo: 'Depósitos y pagos', ruta: '/admin/solicitudes-deposito', icono: BanknoteArrowDown, visible: conPermiso('GESTIONAR_CUENTAS') },
       { titulo: 'Retiros de dinero', ruta: '/admin/solicitudes-retiro', icono: Banknote, visible: conPermiso('GESTIONAR_CUENTAS') },

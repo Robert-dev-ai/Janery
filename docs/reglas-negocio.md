@@ -411,3 +411,20 @@ El propietario autorizó el 30/10/2026 usar valores provisionales de tasas, enca
 - **Todo o nada:** si una cosa de la lista ya no se puede pagar al confirmar (por ejemplo, el mes ya se pagó), no se confirma nada y el mensaje dice cuál falló; el personal puede rechazar el pago con un motivo. Al registrarlo también se rechaza entero si algo no es válido.
 - Un pago a un crédito que supera la letra adelanta las siguientes, como en la sección de pagos de créditos. Quien paga puede cancelar el pago mientras esté pendiente.
 - «Mi cuenta» salió del menú: el saldo y los botones de depositar y retirar están en el resumen, y el cierre de cuenta en Configuración → Cuenta.
+
+## 21. Ventanilla de tesorería
+
+**Definido por el propietario (24/11/2026):** cada persona puede hacer sus movimientos, pero lo más común es que se lo pida al tesorero, que cobra y entrega dinero por cualquiera. Lo hace desde «Ventanilla», con `GESTIONAR_CUENTAS` (tesorería y presidencia).
+
+- **Se aplica al momento:** el tesorero ya recibió o entregó el dinero. No queda nada por confirmar.
+- **Cobrar:** las mismas cosas que en «Pagar» (letras, ahorros, aporte mensual, aporte personal, caja chica y depósito a la cuenta principal), de una o de varias personas en el mismo cobro. El tesorero elige quién entregó el dinero; por defecto, la primera persona de la lista.
+- **Forma de pago:** en efectivo o por transferencia, y el dinero entra a la caja principal; o con el saldo de la cuenta principal o de un ahorro normal de quien paga, y no entra dinero a la caja.
+- **Comprobante:** el campo existe siempre. En efectivo es opcional, porque se paga en persona al tesorero; en transferencia es obligatorio, junto con el número de la transferencia.
+- **Entregar dinero (retiro):** sale de la cuenta principal o directo de un ahorro normal, en efectivo o por transferencia, y sale de la caja en ese momento. El costo de la transferencia a otros bancos (sección 16) sale de la misma cuenta o ahorro.
+
+**Criterios del desarrollo, pendientes de confirmación:**
+
+- Con el saldo de una cuenta o de un ahorro solo se paga lo de su dueño (`SOLO_PROPIO`): no se pasa dinero de la cuenta de una persona a otra. Lo de otras personas se cobra en efectivo o por transferencia.
+- Un plazo fijo no se usa en ventanilla: no se toca antes de vencer y, al vencer, se liquida entero desde Ahorros.
+- El pago de un ahorro pasa por la cuenta principal, como un retiro del ahorro seguido del pago, para que quede en los movimientos de la persona.
+- El personal ve en la ventanilla la cédula y el número de cuenta de la persona, para reconocer a quien atiende.

@@ -12,6 +12,7 @@ import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -116,7 +117,16 @@ public class PagoService {
         } else {
             exigirCuenta(solicitante);
         }
-        Info p = beneficiario(infos, usuarioId);
+        return opcionesDe(beneficiario(infos, usuarioId));
+    }
+
+    /** Ventanilla: el personal ve lo que se le puede cobrar a cualquier persona con cuenta activa. */
+    @Transactional(readOnly = true)
+    public Opciones opcionesVentanilla(Long usuarioId) {
+        return opcionesDe(beneficiario(info(List.of(usuarioId)), usuarioId));
+    }
+
+    private Opciones opcionesDe(Info p) {
         Datos datos = datos(List.of(p));
         return new Opciones(p.usuarioId(), p.nombre(), p.socio(),
                 datos.creditos(p).stream().map(d -> new CreditoOpcion(d.id(), d.codigo(), d.familia(), d.modalidad(),
@@ -133,29 +143,15 @@ public class PagoService {
         if (adjuntos.isEmpty()) {
             throw new NegocioException(HttpStatus.BAD_REQUEST, "COMPROBANTE_REQUERIDO", "Adjunte el comprobante del pago");
         }
-        if (destinos == null || destinos.isEmpty() || destinos.size() > MAX_DESTINOS) {
-            throw new NegocioException(HttpStatus.BAD_REQUEST, "DESTINOS_INVALIDOS", "Elija entre 1 y " + MAX_DESTINOS + " pagos");
-        }
-        Set<Long> usuarios = new LinkedHashSet<>();
-        usuarios.add(usuarioId);
-        destinos.forEach(d -> usuarios.add(d.usuarioId()));
-        Map<Long, Info> infos = info(usuarios);
+        Map<Long, Info> infos = infosDelPago(usuarioId, destinos);
         Info solicitante = infos.get(usuarioId);
-        if (usuarios.size() > 1) {
+        if (destinos.stream().anyMatch(d -> !usuarioId.equals(d.usuarioId()))) {
             exigirSocio(solicitante);
         } else {
             exigirCuenta(solicitante);
         }
-        List<Info> beneficiarios = destinos.stream().map(d -> beneficiario(infos, d.usuarioId())).distinct().toList();
-        Datos datos = datos(beneficiarios);
-
-        List<Fila> filas = new ArrayList<>();
-        Set<String> repetidos = new HashSet<>();
-        for (Destino d : destinos) {
-            filas.add(validar(d, infos.get(d.usuarioId()), datos, repetidos));
-        }
-        BigDecimal total = filas.stream().map(Fila::importe).reduce(BigDecimal.ZERO, BigDecimal::add);
-        DepositoService.Vista aviso = depositos.solicitar(usuarioId, total, medio, referencia, clave, true);
+        List<Fila> filas = filas(destinos, infos);
+        DepositoService.Vista aviso = depositos.solicitar(usuarioId, total(filas), medio, referencia, clave, true);
         if (aviso.destinos().isEmpty()) {
             guardar(aviso.id(), filas);
             comprobantes.subir(usuarioId, ComprobanteService.DEPOSITO, aviso.id(), adjuntos);
@@ -163,7 +159,67 @@ public class PagoService {
         return new Creado(aviso.id(), aviso.codigo(), aviso.importe());
     }
 
-    private record Fila(Long personaId, String tipo, Long referenciaId, List<String> periodos, BigDecimal importe,
+    /**
+     * Ventanilla, con dinero recibido en efectivo o por transferencia: se registra a nombre de quien entregó el dinero y
+     * se aplica al momento. Decisión del propietario: en efectivo la foto es opcional; en transferencia, obligatoria.
+     */
+    @Transactional
+    public DepositoService.Vista cobrarEnVentanilla(Long actorId, Long pagadorId, List<Destino> destinos, String medio,
+            String referencia, String clave, List<MultipartFile> archivos) {
+        Optional<DepositoService.Vista> previo = depositos.porClave(clave);
+        if (previo.isPresent() && "CONFIRMADA".equals(previo.get().estado())) {
+            return previo.get();
+        }
+        List<MultipartFile> adjuntos = archivos == null ? List.of() : archivos.stream().filter(a -> !a.isEmpty()).toList();
+        if ("TRANSFERENCIA".equals(medio) && adjuntos.isEmpty()) {
+            throw new NegocioException(HttpStatus.BAD_REQUEST, "COMPROBANTE_REQUERIDO", "Adjunte el comprobante de la transferencia");
+        }
+        List<Fila> filas = validarVentanilla(pagadorId, destinos);
+        DepositoService.Vista aviso = depositos.registrarEnVentanilla(actorId, pagadorId, total(filas), medio, referencia, clave);
+        if (aviso.destinos().isEmpty()) {
+            guardar(aviso.id(), filas);
+            if (!adjuntos.isEmpty()) {
+                comprobantes.subirPorPersonal(actorId, ComprobanteService.DEPOSITO, aviso.id(), adjuntos);
+            }
+        }
+        depositos.confirmarEnVentanilla(actorId, aviso.id());
+        return depositos.porClave(clave).orElseThrow();
+    }
+
+    /** Destinos de un cobro de ventanilla, validados: quien paga y cada beneficiario necesitan cuenta activa. */
+    @Transactional(readOnly = true)
+    List<Fila> validarVentanilla(Long pagadorId, List<Destino> destinos) {
+        Map<Long, Info> infos = infosDelPago(pagadorId, destinos);
+        beneficiario(infos, pagadorId);
+        return filas(destinos, infos);
+    }
+
+    private Map<Long, Info> infosDelPago(Long usuarioId, List<Destino> destinos) {
+        if (destinos == null || destinos.isEmpty() || destinos.size() > MAX_DESTINOS) {
+            throw new NegocioException(HttpStatus.BAD_REQUEST, "DESTINOS_INVALIDOS", "Elija entre 1 y " + MAX_DESTINOS + " pagos");
+        }
+        Set<Long> usuarios = new LinkedHashSet<>();
+        usuarios.add(usuarioId);
+        destinos.forEach(d -> usuarios.add(d.usuarioId()));
+        return info(usuarios);
+    }
+
+    private List<Fila> filas(List<Destino> destinos, Map<Long, Info> infos) {
+        List<Info> beneficiarios = destinos.stream().map(d -> beneficiario(infos, d.usuarioId())).distinct().toList();
+        Datos datos = datos(beneficiarios);
+        List<Fila> filas = new ArrayList<>();
+        Set<String> repetidos = new HashSet<>();
+        for (Destino d : destinos) {
+            filas.add(validar(d, infos.get(d.usuarioId()), datos, repetidos));
+        }
+        return filas;
+    }
+
+    static BigDecimal total(List<Fila> filas) {
+        return filas.stream().map(Fila::importe).reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    record Fila(Long usuarioId, Long personaId, String tipo, Long referenciaId, List<String> periodos, BigDecimal importe,
             String descripcion) {
     }
 
@@ -190,7 +246,7 @@ public class PagoService {
     private Fila validar(Destino d, Info p, Datos datos, Set<String> repetidos) {
         String de = " de " + p.nombre();
         return switch (d.tipo()) {
-            case CUENTA -> new Fila(p.personaId(), CUENTA, null, List.of(), importe(d), "Depósito a la cuenta principal" + de);
+            case CUENTA -> new Fila(p.usuarioId(), p.personaId(), CUENTA, null, List.of(), importe(d), "Depósito a la cuenta principal" + de);
             case CUOTA_CREDITO -> {
                 CreditoService.Deuda c = datos.creditos(p).stream().filter(x -> x.id().equals(d.referenciaId())).findFirst()
                         .orElseThrow(() -> NegocioException.conflicto("DESTINO_INVALIDO", "Ese crédito" + de + " no admite pagos"));
@@ -199,23 +255,23 @@ public class PagoService {
                     throw NegocioException.conflicto("PAGO_EXCEDIDO", "El pago al crédito " + c.codigo() + de
                             + " supera lo que falta (" + c.totalPendiente().toPlainString() + " USD)");
                 }
-                yield new Fila(p.personaId(), CUOTA_CREDITO, c.id(), List.of(), importe, "Pago al crédito " + c.codigo() + de);
+                yield new Fila(p.usuarioId(), p.personaId(), CUOTA_CREDITO, c.id(), List.of(), importe, "Pago al crédito " + c.codigo() + de);
             }
             case AHORRO -> {
                 AhorroOpcion a = datos.ahorros(p).stream().filter(x -> x.id().equals(d.referenciaId())).findFirst()
                         .orElseThrow(() -> NegocioException.conflicto("DESTINO_INVALIDO", "Ese ahorro" + de + " no admite depósitos"));
-                yield new Fila(p.personaId(), AHORRO, a.id(), List.of(), importe(d), "Depósito al ahorro «" + a.nombre() + "»" + de);
+                yield new Fila(p.usuarioId(), p.personaId(), AHORRO, a.id(), List.of(), importe(d), "Depósito al ahorro «" + a.nombre() + "»" + de);
             }
             case APORTE_PERSONAL -> {
                 exigirSocioBeneficiario(p);
-                yield new Fila(p.personaId(), APORTE_PERSONAL, null, List.of(), importe(d), "Aporte personal" + de);
+                yield new Fila(p.usuarioId(), p.personaId(), APORTE_PERSONAL, null, List.of(), importe(d), "Aporte personal" + de);
             }
             case APORTE_OBLIGATORIO, CAJA_CHICA -> {
                 exigirSocioBeneficiario(p);
                 boolean mensual = APORTE_OBLIGATORIO.equals(d.tipo());
                 List<String> meses = meses(d, datos.meses(p), mensual, repetidos);
                 BigDecimal porMes = mensual ? datos.aporteMensual() : datos.aporteCaja();
-                yield new Fila(p.personaId(), d.tipo(), null, meses, porMes.multiply(BigDecimal.valueOf(meses.size())),
+                yield new Fila(p.usuarioId(), p.personaId(), d.tipo(), null, meses, porMes.multiply(BigDecimal.valueOf(meses.size())),
                         (mensual ? "Aporte mensual" : "Caja chica") + de + ": " + String.join(", ", meses));
             }
             default -> throw new NegocioException(HttpStatus.BAD_REQUEST, "DESTINO_INVALIDO", "Tipo de pago desconocido");

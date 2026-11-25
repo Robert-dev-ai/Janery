@@ -48,6 +48,17 @@ public class ComprobanteService {
     @Transactional
     public List<Vista> subir(Long usuarioId, String tipo, Long referenciaId, List<MultipartFile> archivos) {
         exigirPropio(usuarioId, tipo, referenciaId);
+        return guardar(usuarioId, tipo, referenciaId, archivos);
+    }
+
+    /** Ventanilla: el personal adjunta el comprobante de un cobro que registra por otra persona. */
+    @Transactional
+    public List<Vista> subirPorPersonal(Long actorId, String tipo, Long referenciaId, List<MultipartFile> archivos) {
+        validarTipo(tipo);
+        return guardar(actorId, tipo, referenciaId, archivos);
+    }
+
+    private List<Vista> guardar(Long usuarioId, String tipo, Long referenciaId, List<MultipartFile> archivos) {
         if (!pendiente(tipo, referenciaId)) {
             throw NegocioException.conflicto("ESTADO_INVALIDO", "Este pago ya se revisó: no admite comprobantes");
         }

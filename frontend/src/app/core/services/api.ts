@@ -661,7 +661,46 @@ export interface OpcionesPago {
   meses: MesAporte[];
 }
 
-export type TipoDestinoPago = 'CUENTA' | 'CUOTA_CREDITO' | 'AHORRO' | 'APORTE_OBLIGATORIO' | 'APORTE_PERSONAL' | 'CAJA_CHICA';
+/** Ventanilla: el personal ve la cédula y el número de cuenta para reconocer a quien atiende. */
+export interface PersonaVentanilla {
+  usuarioId: number;
+  nombre: string;
+  identificacion: string;
+  numeroCuenta: string;
+  socio: boolean;
+}
+
+export interface FichaVentanilla {
+  persona: PersonaVentanilla;
+  saldoCuenta: number;
+  ahorros: { id: number; codigo: string; nombre: string; saldo: number }[];
+  opciones: OpcionesPago;
+}
+
+/** EFECTIVO y TRANSFERENCIA meten dinero a la caja; CUENTA y AHORRO pagan con el saldo de quien paga. */
+export type OrigenCobro = 'EFECTIVO' | 'TRANSFERENCIA' | 'CUENTA' | 'AHORRO';
+
+export interface CobroVentanilla {
+  id: number | null;
+  codigo: string | null;
+  importe: number;
+  detalle: string[];
+}
+
+export interface RetiroVentanilla {
+  usuarioId: number;
+  origen: 'CUENTA' | 'AHORRO';
+  ahorroId: number | null;
+  importe: number;
+  medio: 'EFECTIVO' | 'TRANSFERENCIA';
+  banco: string | null;
+  tipoCuenta: string | null;
+  numeroCuenta: string | null;
+  titularCuenta: string | null;
+  referencia: string | null;
+}
+
+export type TipoDestinoPago ='CUENTA' | 'CUOTA_CREDITO' | 'AHORRO' | 'APORTE_OBLIGATORIO' | 'APORTE_PERSONAL' | 'CAJA_CHICA';
 
 export interface DestinoPago {
   usuarioId: number;
@@ -1370,6 +1409,27 @@ export class ApiService {
     datos.append('datos', new Blob([JSON.stringify({ destinos, medio, referencia })], { type: 'application/json' }));
     archivos.forEach((a) => datos.append('archivos', a, a.name));
     return this.http.post<{ id: number; codigo: string; importe: number }>(`${this.base}/pagos`, datos, conClave(clave));
+  }
+
+  buscarEnVentanilla(texto: string): Observable<PersonaVentanilla[]> {
+    return this.http.get<PersonaVentanilla[]>(`${this.base}/ventanilla/personas`, { params: { buscar: texto } });
+  }
+
+  fichaVentanilla(usuarioId: number): Observable<FichaVentanilla> {
+    return this.http.get<FichaVentanilla>(`${this.base}/ventanilla/personas/${usuarioId}`);
+  }
+
+  /** Se aplica al momento. El comprobante es obligatorio solo en transferencia. */
+  cobrarEnVentanilla(pagadorId: number, destinos: DestinoPago[], origen: OrigenCobro, ahorroId: number | null,
+    referencia: string | null, archivos: File[], clave: string): Observable<CobroVentanilla> {
+    const datos = new FormData();
+    datos.append('datos', new Blob([JSON.stringify({ pagadorId, destinos, origen, ahorroId, referencia })], { type: 'application/json' }));
+    archivos.forEach((a) => datos.append('archivos', a, a.name));
+    return this.http.post<CobroVentanilla>(`${this.base}/ventanilla/cobros`, datos, conClave(clave));
+  }
+
+  entregarEnVentanilla(retiro: RetiroVentanilla, clave: string): Observable<SolicitudRetiro> {
+    return this.http.post<SolicitudRetiro>(`${this.base}/ventanilla/retiros`, retiro, conClave(clave));
   }
 
   misDepositos(): Observable<SolicitudDeposito[]> {
