@@ -169,7 +169,9 @@ public class ReinicioService {
             jdbc.update("""
                     UPDATE operaciones_financieras o SET importe = d.importe_reembolsable
                     FROM depositos_apertura d WHERE d.operacion_id = o.id AND d.importe_reembolsable > 0""");
-            jdbc.update("UPDATE cuentas_principales SET saldo_disponible = 0");
+            jdbc.update("""
+                    UPDATE cuentas_principales SET saldo_disponible = 0, interes_acumulado = 0, interes_disponible = 0,
+                           ultimo_devengo = CASE WHEN estado = 'ACTIVA' THEN CURRENT_DATE END""");
             for (String tabla : A_VACIAR) {
                 jdbc.execute("ALTER TABLE " + tabla + " ALTER COLUMN id RESTART WITH 1");
             }

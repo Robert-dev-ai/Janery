@@ -212,14 +212,18 @@ class AreaSociosContabilidadIntegrationTest {
         assertThat(saldo(p)).isEqualByComparingTo("10");
         assertThat(saldoCaja()).isEqualByComparingTo(caja);
 
+        // Decisión del propietario: quien deposita por su cuenta adjunta el comprobante, también en efectivo, y solo uno.
+        confirmarDeposito(a).andExpect(status().isConflict()).andExpect(jsonPath("$.codigo").value("COMPROBANTE_REQUERIDO"));
+        subirComprobante(p, a, 2).andExpect(status().isConflict()).andExpect(jsonPath("$.codigo").value("COMPROBANTES_EXCEDIDOS"));
+        subirComprobante(p, a, 1).andExpect(status().isOk());
         confirmarDeposito(a).andExpect(status().isNoContent());
         assertThat(saldo(p)).isEqualByComparingTo("35");
         assertThat(saldoCaja()).isEqualByComparingTo(caja.add(new BigDecimal("25")));
         confirmarDeposito(a).andExpect(status().isConflict());
         assertThat(saldo(p)).isEqualByComparingTo("35");
 
-        deposito(p, "{\"importe\":5.00,\"medio\":\"TRANSFERENCIA\"}").resultado().andExpect(status().isBadRequest());
-        long b = deposito(p, "{\"importe\":5.00,\"medio\":\"TRANSFERENCIA\",\"referencia\":\"ABC\"}").andExpect(status().isCreated()).andReturn2().get("id").asLong();
+        // Ya no se pide el número de la transferencia.
+        long b = deposito(p, "{\"importe\":5.00,\"medio\":\"TRANSFERENCIA\"}").andExpect(status().isCreated()).andReturn2().get("id").asLong();
         mvc.perform(post("/api/v1/admin/solicitudes-deposito/" + b + "/rechazar").header(HttpHeaders.AUTHORIZATION, bearer(p.token()))
                 .contentType(MediaType.APPLICATION_JSON).content("{\"motivo\":\"x\"}")).andExpect(status().isForbidden());
         mvc.perform(post("/api/v1/admin/solicitudes-deposito/" + b + "/rechazar").header(HttpHeaders.AUTHORIZATION, bearer(presidente()))
@@ -384,7 +388,7 @@ class AreaSociosContabilidadIntegrationTest {
         // Retiro apartado sin entregar, otro entregado, y registro manual.
         solicitar(p, "{\"importe\":10.00,\"medio\":\"EFECTIVO\"}").andExpect(status().isCreated());
         entregar(solicitar(p, "{\"importe\":5.00,\"medio\":\"EFECTIVO\"}").andReturn2().get("id").asLong()).andExpect(status().isNoContent());
-        confirmarDeposito(deposito(p, "{\"importe\":15.00,\"medio\":\"EFECTIVO\"}").andReturn2().get("id").asLong()).andExpect(status().isNoContent());
+        confirmarConComprobante(p, deposito(p, "{\"importe\":15.00,\"medio\":\"EFECTIVO\"}").andReturn2().get("id").asLong()).andExpect(status().isNoContent());
         long gasto = asiento("{\"linea\":\"5.4\",\"importe\":10.00,\"descripcion\":\"Sueldo\"}").andExpect(status().isCreated()).andReturn2().get("id").asLong();
         asiento("{\"linea\":\"1.7\",\"importe\":7.00,\"descripcion\":\"Silla\"}").andExpect(status().isCreated());
         asiento("{\"linea\":\"5.9\",\"importe\":3.00,\"descripcion\":\"Provisión\"}").andExpect(status().isCreated());
@@ -449,6 +453,21 @@ class AreaSociosContabilidadIntegrationTest {
     private Pedido deposito(Persona p, String cuerpo) throws Exception {
         return new Pedido(mvc.perform(post("/api/v1/cuentas-principales/me/depositos").header(HttpHeaders.AUTHORIZATION, bearer(p.token()))
                 .header("Idempotency-Key", UUID.randomUUID().toString()).contentType(MediaType.APPLICATION_JSON).content(cuerpo)));
+    }
+
+    private ResultActions subirComprobante(Persona p, long deposito, int cuantos) throws Exception {
+        var req = org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart("/api/v1/comprobantes/deposito/" + deposito);
+        for (int i = 0; i < cuantos; i++) {
+            req.file(new org.springframework.mock.web.MockMultipartFile("archivos", "recibo" + i + ".pdf", "application/pdf",
+                    "%PDF-1.7 comprobante".getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        }
+        return mvc.perform(req.header(HttpHeaders.AUTHORIZATION, bearer(p.token())));
+    }
+
+    /** Decisión del propietario: un depósito propio se confirma solo con su comprobante. */
+    private ResultActions confirmarConComprobante(Persona p, long id) throws Exception {
+        subirComprobante(p, id, 1).andExpect(status().isOk());
+        return confirmarDeposito(id);
     }
 
     private ResultActions confirmarDeposito(long id) throws Exception {

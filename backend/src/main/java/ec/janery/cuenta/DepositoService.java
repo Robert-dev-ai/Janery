@@ -106,6 +106,26 @@ public class DepositoService {
     /** Un pago es un aviso con destinos; los destinos los guarda el módulo de pagos. */
     @Transactional
     public Vista solicitar(Long usuarioId, BigDecimal importe, String medio, String referencia, String clave, boolean esPago) {
+        return crear(usuarioId, usuarioId, importe, medio, referencia, clave, esPago);
+    }
+
+    /**
+     * Ventanilla: el personal registra un pago que recibió en mano o por transferencia, a nombre de quien entregó el
+     * dinero. Queda pendiente solo hasta {@link #confirmarEnVentanilla}, en la misma transacción.
+     */
+    @Transactional
+    public Vista registrarEnVentanilla(Long actorId, Long pagadorUsuarioId, BigDecimal importe, String medio, String referencia,
+            String clave) {
+        return crear(actorId, pagadorUsuarioId, importe, medio, referencia, clave, true);
+    }
+
+    /** Para responder igual a un reintento de la ventanilla, antes de volver a validar lo que ya se pagó. */
+    @Transactional(readOnly = true)
+    public Optional<Vista> porClave(String clave) {
+        return solicitudes.findByClaveIdempotencia(clave).map(this::vista);
+    }
+
+    private Vista crear(Long actorId, Long usuarioId, BigDecimal importe, String medio, String referencia, String clave, boolean esPago) {
         Long personaId = personaDe(usuarioId);
         CuentaPrincipal cuenta = cuentas.cuentaActivaBloqueada(personaId);
         Optional<SolicitudDeposito> previa = solicitudes.findByClaveIdempotencia(clave);
@@ -118,7 +138,8 @@ public class DepositoService {
         }
         SolicitudDeposito s = solicitudes.save(new SolicitudDeposito(null, cuenta.getId(), personaId, importe, medio, referencia,
                 PENDIENTE, null, clave, null, null, Instant.now(reloj), null, esPago));
-        auditoria.registrar(usuarioId, esPago ? "PAGO_SOLICITADO" : "DEPOSITO_SOLICITADO", MODULO, "solicitud_deposito", s.getId(), null, importe.toPlainString(), medio);
+        String accion = !actorId.equals(usuarioId) ? "PAGO_VENTANILLA" : esPago ? "PAGO_SOLICITADO" : "DEPOSITO_SOLICITADO";
+        auditoria.registrar(actorId, accion, MODULO, "solicitud_deposito", s.getId(), null, importe.toPlainString(), medio);
         return vista(s);
     }
 
@@ -142,17 +163,39 @@ public class DepositoService {
     /** Se confirma cuando el dinero ya se recibió: aquí entra a la cuenta y a la caja principal. */
     @Transactional
     public void confirmar(Long actorId, Long id) {
-        SolicitudDeposito s = pendienteBloqueada(id);
+        aplicar(actorId, pendienteBloqueada(id), false);
+    }
+
+    /**
+     * Decisión del propietario: lo que se paga en persona al tesorero no exige comprobante, aunque se puede adjuntar,
+     * sea en efectivo o por transferencia. Devuelve false si ya estaba confirmada (reintento con la misma clave).
+     */
+    @Transactional
+    public boolean confirmarEnVentanilla(Long actorId, Long id) {
+        SolicitudDeposito s = solicitudes.bloquear(id).orElseThrow(() -> NegocioException.noEncontrado("Solicitud no encontrada"));
+        if ("CONFIRMADA".equals(s.getEstado())) {
+            return false;
+        }
+        if (!PENDIENTE.equals(s.getEstado())) {
+            throw NegocioException.conflicto("ESTADO_INVALIDO", "Esta solicitud ya se resolvió");
+        }
+        aplicar(actorId, s, true);
+        return true;
+    }
+
+    private void aplicar(Long actorId, SolicitudDeposito s, boolean enVentanilla) {
+        Long id = s.getId();
         Long operacion;
+        // Decisión del propietario (24/11/2026): si la persona mete dinero a la caja por su cuenta, siempre con
+        // comprobante, también en efectivo. En ventanilla lo recibe el tesorero en persona y es opcional.
+        if (!enVentanilla && comprobantes.cantidad(ComprobanteService.DEPOSITO, id) == 0) {
+            throw NegocioException.conflicto("COMPROBANTE_REQUERIDO",
+                    s.isEsPago() ? "Falta el comprobante del pago" : "Falta el comprobante del depósito");
+        }
         if (s.isEsPago()) {
-            // Decisión del propietario: un pago siempre lleva comprobante, sea en efectivo o por transferencia.
-            if (comprobantes.cantidad(ComprobanteService.DEPOSITO, id) == 0) {
-                throw NegocioException.conflicto("COMPROBANTE_REQUERIDO", "Falta el comprobante del pago");
-            }
             operacion = ejecutor.orElseThrow(() -> new IllegalStateException("Sin módulo de pagos"))
                     .ejecutar(actorId, id, s.getMedio(), s.getReferencia());
         } else {
-            comprobantes.exigirSiTransferencia(ComprobanteService.DEPOSITO, id, s.getMedio());
             operacion = cuentas.depositar(actorId, s.getCuentaId(), s.getImporte(), s.getMedio(), s.getReferencia(),
                     "solicitud-deposito-" + id);
         }

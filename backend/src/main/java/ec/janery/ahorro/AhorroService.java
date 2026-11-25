@@ -5,7 +5,6 @@ import java.math.RoundingMode;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.temporal.ChronoUnit;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -20,6 +19,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import ec.janery.auditoria.AuditoriaService;
+import ec.janery.common.InteresDiario;
 import ec.janery.common.NegocioException;
 import ec.janery.cuenta.CuentaPrincipal;
 import ec.janery.cuenta.CuentaService;
@@ -123,10 +123,6 @@ public class AhorroService {
     public record Productos(BigDecimal tasaNormal, List<PlazoVista> plazos) {
     }
 
-    /** Interés de un ahorro normal a hoy: lo disponible se liberó el último día 1; lo acumulado se libera el próximo. */
-    private record Interes(BigDecimal acumulado, BigDecimal disponible) {
-    }
-
     public record MovimientoVista(Long id, String sentido, BigDecimal importe, String concepto,
             BigDecimal saldoResultante, Instant fecha) {
     }
@@ -139,8 +135,8 @@ public class AhorroService {
     private static final String MODULO = "AHORRO";
     private static final BigDecimal CIEN = BigDecimal.valueOf(100);
     private static final BigDecimal DOCE = BigDecimal.valueOf(12);
-    private static final BigDecimal DIAS_ANIO = BigDecimal.valueOf(365);
-    private static final BigDecimal CERO = BigDecimal.ZERO.setScale(6);
+    private static final BigDecimal CERO = InteresDiario.CERO;
+    private static final String TASA_NORMAL = "AHORRO_NORMAL_TASA";
     /** Definido por el propietario: solo estos plazos, cada uno con su tasa. */
     private static final List<Integer> PLAZOS = List.of(3, 6, 9, 12, 24);
 
@@ -152,6 +148,7 @@ public class AhorroService {
     private final AuditoriaService auditoria;
     private final org.springframework.context.ApplicationEventPublisher eventos;
     private final Clock reloj;
+    private final InteresDiario interesDiario;
     @jakarta.persistence.PersistenceContext
     private jakarta.persistence.EntityManager em;
 
@@ -297,7 +294,7 @@ public class AhorroService {
         // Entra y sale en la misma operación: el saldo no cambia, y el libro registra el gasto y el pago.
         BigDecimal saldo = a.getSaldo();
         a.setSaldo(saldo.add(interes));
-        asiento(a, operacion, ENTRADA, interes, "INTERES", null, parametros.valorVigente("AHORRO_NORMAL_TASA"));
+        asiento(a, operacion, ENTRADA, interes, "INTERES", null, parametros.valorVigente(TASA_NORMAL));
         a.setSaldo(saldo);
         asiento(a, operacion, SALIDA, interes, "RETIRO_INTERES", null, null);
         cuentas.mover(cuenta, operacion, ENTRADA, interes, "INTERES_AHORRO");
@@ -373,7 +370,7 @@ public class AhorroService {
         Map<Integer, String> codigos = new LinkedHashMap<>();
         PLAZOS.forEach(p -> codigos.put(p, parametroPlazo(p)));
         Map<String, BigDecimal> tasas = parametros.valoresVigentes(codigos.values());
-        return new Productos(parametros.valorVigente("AHORRO_NORMAL_TASA"),
+        return new Productos(parametros.valorVigente(TASA_NORMAL),
                 PLAZOS.stream().map(p -> new PlazoVista(p, tasas.get(codigos.get(p)))).toList());
     }
 
@@ -430,34 +427,19 @@ public class AhorroService {
 
     /** Guarda el interés corrido hasta hoy. Debe llamarse antes de cambiar el saldo: corrió sobre el saldo anterior. */
     private void devengar(CuentaAhorro a) {
-        Interes i = interesAHoy(a);
+        InteresDiario.Interes i = interesAHoy(a);
         a.setInteresAcumulado(i.acumulado());
         a.setInteresDisponible(i.disponible());
-        a.setUltimoDevengo(LocalDate.now(reloj));
+        a.setUltimoDevengo(interesDiario.hoy());
     }
 
-    /** Definido por el propietario: 5 % anual dividido para 365 cada día, sin capitalizar; se libera cada día 1. */
-    private Interes interesAHoy(CuentaAhorro a) {
-        LocalDate hoy = LocalDate.now(reloj);
-        BigDecimal acumulado = a.getInteresAcumulado();
-        BigDecimal disponible = a.getInteresDisponible();
-        LocalDate desde = a.getUltimoDevengo();
-        if (!NORMAL.equals(a.getTipo()) || desde == null || !desde.isBefore(hoy)) {
-            return new Interes(acumulado, disponible);
+    /** Definido por el propietario: tasa anual dividida para 365 cada día, sin capitalizar; se libera cada día 1. */
+    private InteresDiario.Interes interesAHoy(CuentaAhorro a) {
+        if (!NORMAL.equals(a.getTipo())) {
+            return new InteresDiario.Interes(a.getInteresAcumulado(), a.getInteresDisponible());
         }
-        BigDecimal diario = a.getSaldo().multiply(parametros.valorVigente("AHORRO_NORMAL_TASA"));
-        LocalDate primero = hoy.withDayOfMonth(1);
-        if (desde.isBefore(primero)) {
-            disponible = disponible.add(acumulado).add(interesDe(diario, desde, primero));
-            acumulado = CERO;
-            desde = primero;
-        }
-        return new Interes(acumulado.add(interesDe(diario, desde, hoy)), disponible);
-    }
-
-    private static BigDecimal interesDe(BigDecimal saldoPorTasa, LocalDate desde, LocalDate hasta) {
-        return saldoPorTasa.multiply(BigDecimal.valueOf(ChronoUnit.DAYS.between(desde, hasta)))
-                .divide(CIEN.multiply(DIAS_ANIO), 6, RoundingMode.HALF_UP);
+        return interesDiario.aHoy(a.getSaldo(), a.getInteresAcumulado(), a.getInteresDisponible(), a.getUltimoDevengo(),
+                TASA_NORMAL);
     }
 
     @Transactional(readOnly = true)
@@ -474,13 +456,13 @@ public class AhorroService {
 
     private AhorroVista vista(CuentaAhorro a) {
         boolean plazo = PLAZO_FIJO.equals(a.getTipo());
-        BigDecimal tasa = plazo ? a.getTasaAnual() : parametros.valorVigente("AHORRO_NORMAL_TASA");
+        BigDecimal tasa = plazo ? a.getTasaAnual() : parametros.valorVigente(TASA_NORMAL);
         boolean retirable = ACTIVA.equals(a.getEstado()) && (!plazo || !LocalDate.now(reloj).isBefore(a.getVenceEn()));
-        Interes interes = interesAHoy(a);
+        InteresDiario.Interes interes = interesAHoy(a);
         return new AhorroVista(a.getId(), a.getTipo(), a.getNombre(), a.getEstado(), a.getSaldo(), tasa, a.getPlazoMeses(),
                 a.getVenceEn(), plazo && ACTIVA.equals(a.getEstado()) ? interesPlazoFijo(a) : null, retirable,
                 interes.acumulado().setScale(2, RoundingMode.DOWN), interes.disponible().setScale(2, RoundingMode.DOWN),
-                plazo ? null : LocalDate.now(reloj).withDayOfMonth(1).plusMonths(1), ec.janery.common.Codigos.ahorro(a.getTipo(), a.getId()));
+                plazo ? null : interesDiario.proximaLiberacion(), ec.janery.common.Codigos.ahorro(a.getTipo(), a.getId()));
     }
 
     private static BigDecimal interesPlazoFijo(CuentaAhorro a) {

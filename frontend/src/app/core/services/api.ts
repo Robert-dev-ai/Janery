@@ -661,7 +661,53 @@ export interface OpcionesPago {
   meses: MesAporte[];
 }
 
-export type TipoDestinoPago = 'CUENTA' | 'CUOTA_CREDITO' | 'AHORRO' | 'APORTE_OBLIGATORIO' | 'APORTE_PERSONAL' | 'CAJA_CHICA';
+export interface InteresPrincipal {
+  tasaAnual: number;
+  /** Corre este mes; pasa a disponible el día de proximaLiberacion. */
+  acumulado: number;
+  disponible: number;
+  proximaLiberacion: string;
+}
+
+/** Ventanilla: el personal ve la cédula y el número de cuenta para reconocer a quien atiende. */
+export interface PersonaVentanilla {
+  usuarioId: number;
+  nombre: string;
+  identificacion: string;
+  numeroCuenta: string;
+  socio: boolean;
+}
+
+export interface FichaVentanilla {
+  persona: PersonaVentanilla;
+  saldoCuenta: number;
+  ahorros: { id: number; codigo: string; nombre: string; saldo: number }[];
+  opciones: OpcionesPago;
+}
+
+/** EFECTIVO y TRANSFERENCIA meten dinero a la caja; CUENTA y AHORRO pagan con el saldo de quien paga. */
+export type OrigenCobro = 'EFECTIVO' | 'TRANSFERENCIA' | 'CUENTA' | 'AHORRO';
+
+export interface CobroVentanilla {
+  id: number | null;
+  codigo: string | null;
+  importe: number;
+  detalle: string[];
+}
+
+export interface RetiroVentanilla {
+  usuarioId: number;
+  origen: 'CUENTA' | 'AHORRO';
+  ahorroId: number | null;
+  importe: number;
+  medio: 'EFECTIVO' | 'TRANSFERENCIA';
+  banco: string | null;
+  tipoCuenta: string | null;
+  numeroCuenta: string | null;
+  titularCuenta: string | null;
+}
+
+export type TipoDestinoPago ='CUENTA' | 'CUOTA_CREDITO' | 'AHORRO' | 'APORTE_OBLIGATORIO' | 'APORTE_PERSONAL' | 'CAJA_CHICA';
 
 export interface DestinoPago {
   usuarioId: number;
@@ -947,8 +993,8 @@ export class ApiService {
     return this.http.get<Cuenta>(`${this.base}/cuentas-principales/me`);
   }
 
-  solicitarApertura(metodoPago: string, referenciaPago: string | null): Observable<Cuenta> {
-    return this.http.post<Cuenta>(`${this.base}/cuentas-principales/apertura`, { metodoPago, referenciaPago });
+  solicitarApertura(metodoPago: string): Observable<Cuenta> {
+    return this.http.post<Cuenta>(`${this.base}/cuentas-principales/apertura`, { metodoPago });
   }
 
   solicitarCierre(): Observable<void> {
@@ -983,9 +1029,9 @@ export class ApiService {
 
   /** La clave la genera quien llama por cada intento del usuario, para que un reintento no duplique. */
   movimiento(id: number, tipo: 'depositos' | 'retiros', importe: number, metodoPago: string,
-      referencia: string | null, clave: string): Observable<{ operacionId: number }> {
+      clave: string): Observable<{ operacionId: number }> {
     return this.http.post<{ operacionId: number }>(`${this.base}/admin/cuentas/${id}/${tipo}`,
-      { importe, metodoPago, referencia }, { headers: { 'Idempotency-Key': clave } });
+      { importe, metodoPago }, { headers: { 'Idempotency-Key': clave } });
   }
 
   parametros(): Observable<Parametro[]> {
@@ -1130,9 +1176,9 @@ export class ApiService {
     return this.http.post(`${this.base}/admin/socios/transferencias`, { origenId, destinoId, capital, motivo }, conClave(clave));
   }
 
-  registrarAporteInicial(socioId: number, importe: number, metodoPago: string, referencia: string | null,
+  registrarAporteInicial(socioId: number, importe: number, metodoPago: string,
       clave: string): Observable<unknown> {
-    return this.http.post(`${this.base}/admin/socios/${socioId}/aporte-inicial`, { importe, metodoPago, referencia }, conClave(clave));
+    return this.http.post(`${this.base}/admin/socios/${socioId}/aporte-inicial`, { importe, metodoPago }, conClave(clave));
   }
 
   resultados(pagina: number): Observable<Pagina<Resultado>> {
@@ -1312,6 +1358,16 @@ export class ApiService {
     return this.http.get<ProductosAhorro>(`${this.base}/ahorros/productos`);
   }
 
+  /** Interés de la cuenta principal a hoy: corre como el del ahorro normal, con su propia tasa. */
+  miInteresPrincipal(): Observable<InteresPrincipal> {
+    return this.http.get<InteresPrincipal>(`${this.base}/cuentas-principales/me/interes`);
+  }
+
+  /** Pasa al saldo de la cuenta principal el interés ya liberado. */
+  retirarInteresPrincipal(clave: string): Observable<unknown> {
+    return this.http.post(`${this.base}/cuentas-principales/me/interes`, null, conClave(clave));
+  }
+
   retirarInteresAhorro(id: number, clave: string): Observable<unknown> {
     return this.http.post(`${this.base}/ahorros/${id}/interes`, null, conClave(clave));
   }
@@ -1340,6 +1396,16 @@ export class ApiService {
     return this.http.post<SolicitudRetiro>(`${this.base}/cuentas-principales/me/retiros`, cuerpo, conClave(clave));
   }
 
+  /** Retiro de dinero que sale directo de un ahorro normal propio; queda pendiente de entrega. */
+  retirarDesdeAhorro(ahorroId: number, cuerpo: { importe: number; medio: string } & Partial<DatosBanco>, clave: string): Observable<SolicitudRetiro> {
+    return this.http.post<SolicitudRetiro>(`${this.base}/ahorros/${ahorroId}/retiros-dinero`, cuerpo, conClave(clave));
+  }
+
+  /** Paga lo propio con el saldo de la cuenta principal o de un ahorro normal: se aplica al momento, sin comprobante. */
+  pagarConSaldo(destinos: DestinoPago[], origen: 'CUENTA' | 'AHORRO', ahorroId: number | null, clave: string): Observable<CobroVentanilla> {
+    return this.http.post<CobroVentanilla>(`${this.base}/pagos/con-saldo`, { destinos, origen, ahorroId }, conClave(clave));
+  }
+
   cancelarRetiro(id: number): Observable<void> {
     return this.http.post<void>(`${this.base}/cuentas-principales/me/retiros/${id}/cancelar`, null);
   }
@@ -1348,8 +1414,8 @@ export class ApiService {
     return this.http.get<Pagina<SolicitudRetiro>>(`${this.base}/admin/solicitudes-retiro`, { params: consulta({ estado, pagina }) });
   }
 
-  entregarRetiro(id: number, referencia: string | null): Observable<void> {
-    return this.http.post<void>(`${this.base}/admin/solicitudes-retiro/${id}/entregar`, { referencia });
+  entregarRetiro(id: number): Observable<void> {
+    return this.http.post<void>(`${this.base}/admin/solicitudes-retiro/${id}/entregar`, {});
   }
 
   rechazarRetiro(id: number, motivo: string): Observable<void> {
@@ -1365,18 +1431,39 @@ export class ApiService {
   }
 
   /** El pago y su comprobante van juntos: sin comprobante no se registra. */
-  pagar(destinos: DestinoPago[], medio: string, referencia: string | null, archivos: File[], clave: string): Observable<{ id: number; codigo: string; importe: number }> {
+  pagar(destinos: DestinoPago[], medio: string, archivos: File[], clave: string): Observable<{ id: number; codigo: string; importe: number }> {
     const datos = new FormData();
-    datos.append('datos', new Blob([JSON.stringify({ destinos, medio, referencia })], { type: 'application/json' }));
+    datos.append('datos', new Blob([JSON.stringify({ destinos, medio })], { type: 'application/json' }));
     archivos.forEach((a) => datos.append('archivos', a, a.name));
     return this.http.post<{ id: number; codigo: string; importe: number }>(`${this.base}/pagos`, datos, conClave(clave));
+  }
+
+  buscarEnVentanilla(texto: string): Observable<PersonaVentanilla[]> {
+    return this.http.get<PersonaVentanilla[]>(`${this.base}/ventanilla/personas`, { params: { buscar: texto } });
+  }
+
+  fichaVentanilla(usuarioId: number): Observable<FichaVentanilla> {
+    return this.http.get<FichaVentanilla>(`${this.base}/ventanilla/personas/${usuarioId}`);
+  }
+
+  /** Se aplica al momento. El comprobante es opcional: el tesorero recibe el pago en persona. */
+  cobrarEnVentanilla(pagadorId: number, destinos: DestinoPago[], origen: OrigenCobro, ahorroId: number | null,
+    archivos: File[], clave: string): Observable<CobroVentanilla> {
+    const datos = new FormData();
+    datos.append('datos', new Blob([JSON.stringify({ pagadorId, destinos, origen, ahorroId })], { type: 'application/json' }));
+    archivos.forEach((a) => datos.append('archivos', a, a.name));
+    return this.http.post<CobroVentanilla>(`${this.base}/ventanilla/cobros`, datos, conClave(clave));
+  }
+
+  entregarEnVentanilla(retiro: RetiroVentanilla, clave: string): Observable<SolicitudRetiro> {
+    return this.http.post<SolicitudRetiro>(`${this.base}/ventanilla/retiros`, retiro, conClave(clave));
   }
 
   misDepositos(): Observable<SolicitudDeposito[]> {
     return this.http.get<SolicitudDeposito[]>(`${this.base}/cuentas-principales/me/depositos`);
   }
 
-  solicitarDeposito(cuerpo: { importe: number; medio: string; referencia: string | null }, clave: string): Observable<SolicitudDeposito> {
+  solicitarDeposito(cuerpo: { importe: number; medio: string }, clave: string): Observable<SolicitudDeposito> {
     return this.http.post<SolicitudDeposito>(`${this.base}/cuentas-principales/me/depositos`, cuerpo, conClave(clave));
   }
 

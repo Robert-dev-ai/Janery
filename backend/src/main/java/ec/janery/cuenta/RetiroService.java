@@ -115,6 +115,33 @@ public class RetiroService {
 
     @Transactional
     public Vista solicitar(Long usuarioId, BigDecimal importe, String medio, DatosBanco banco, String clave) {
+        return crear(usuarioId, usuarioId, importe, medio, banco, clave);
+    }
+
+    /**
+     * Ventanilla: el personal entrega el dinero a la persona en ese momento. Se aparta de su cuenta y sale de la caja en
+     * la misma transacción. Un reintento con la misma clave devuelve el retiro ya entregado.
+     */
+    @Transactional
+    public Vista entregarEnVentanilla(Long actorId, Long usuarioId, BigDecimal importe, String medio, DatosBanco banco,
+            String referencia, String clave) {
+        Vista v = crear(actorId, usuarioId, importe, medio, banco, clave);
+        if (PENDIENTE.equals(v.estado())) {
+            confirmarEntrega(actorId, v.id(), referencia);
+            return vista(bloquear(v.id()));
+        }
+        return v;
+    }
+
+    /** Lo que cobra el banco por la transferencia; se aparta junto con el retiro. */
+    @Transactional(readOnly = true)
+    public BigDecimal costo(String medio, String banco) {
+        return "TRANSFERENCIA".equals(medio) && !sinCosto(banco)
+                ? parametros.valorVigente("COSTO_TRANSFERENCIA_OTROS").setScale(2, java.math.RoundingMode.HALF_UP)
+                : BigDecimal.ZERO.setScale(2);
+    }
+
+    private Vista crear(Long actorId, Long usuarioId, BigDecimal importe, String medio, DatosBanco banco, String clave) {
         Long personaId = personaDe(usuarioId);
         CuentaPrincipal cuenta = cuentas.cuentaActivaBloqueada(personaId);
         // Tras el bloqueo: un reintento concurrente espera aquí y encuentra la solicitud ya creada.
@@ -127,16 +154,14 @@ public class RetiroService {
             return vista(s);
         }
         boolean aBanco = "TRANSFERENCIA".equals(medio);
-        BigDecimal costo = aBanco && !sinCosto(banco.banco())
-                ? parametros.valorVigente("COSTO_TRANSFERENCIA_OTROS").setScale(2, java.math.RoundingMode.HALF_UP)
-                : BigDecimal.ZERO.setScale(2);
-        Long operacion = cuentas.crearOperacionInterna("RETIRO_RESERVADO", importe.add(costo), null, usuarioId);
+        BigDecimal costo = costo(medio, aBanco ? banco.banco() : null);
+        Long operacion = cuentas.crearOperacionInterna("RETIRO_RESERVADO", importe.add(costo), null, actorId);
         cuentas.mover(cuenta, operacion, SALIDA, importe.add(costo), "RETIRO_SOLICITADO");
         SolicitudRetiro s = solicitudes.save(new SolicitudRetiro(null, cuenta.getId(), personaId, importe, medio,
                 aBanco ? banco.banco() : null, aBanco ? banco.tipoCuenta() : null, aBanco ? banco.numeroCuenta() : null,
                 aBanco ? banco.titularCuenta() : null, PENDIENTE, null, null, clave, operacion, null, Instant.now(reloj), null,
                 costo));
-        auditoria.registrar(usuarioId, "RETIRO_SOLICITADO", MODULO, "solicitud_retiro", s.getId(), null, importe.toPlainString(), medio);
+        auditoria.registrar(actorId, actorId.equals(usuarioId) ? "RETIRO_SOLICITADO" : "RETIRO_VENTANILLA", MODULO, "solicitud_retiro", s.getId(), null, importe.toPlainString(), medio);
         return vista(s);
     }
 

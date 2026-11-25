@@ -115,6 +115,11 @@ export const routes: Routes = [
         loadComponent: () => import('./features/admin/panel').then((m) => m.AdminPanel),
       },
       {
+        path: 'admin/ventanilla',
+        canActivate: [permisoGuard('GESTIONAR_CUENTAS')],
+        loadComponent: () => import('./features/admin/ventanilla').then((m) => m.Ventanilla),
+      },
+      {
         path: 'admin/solicitudes-deposito',
         canActivate: [permisoGuard('GESTIONAR_CUENTAS')],
         loadComponent: () => import('./features/admin/solicitudes-deposito').then((m) => m.SolicitudesDeposito),

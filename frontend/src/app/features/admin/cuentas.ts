@@ -16,7 +16,6 @@ interface Formulario {
   tipo: 'depositos' | 'retiros';
   importe: number | null;
   metodoPago: string;
-  referencia: string;
   /** Se conserva entre reintentos del mismo formulario: el backend no duplica la operación. */
   clave: string;
 }
@@ -54,7 +53,6 @@ interface Formulario {
             <option value="TRANSFERENCIA">Transferencia</option>
           </select>
         </label>
-        <label>Referencia <input name="referencia" maxlength="100" [(ngModel)]="f.referencia" /></label>
         <div class="acciones">
           <button type="submit" [disabled]="enviando() || !f.importe || f.importe <= 0">Registrar</button>
           <button type="button" class="secundario" (click)="formulario.set(null)">Cancelar</button>
@@ -75,7 +73,7 @@ interface Formulario {
                   <td>{{ c.numero }}</td>
                   <td>{{ c.titular }}</td>
                   <td><app-estado [valor]="c.estado" /></td>
-                  <td>{{ c.metodoPago }} {{ c.referenciaPago }}
+                  <td>{{ c.metodoPago }}
                     @if (c.estado === 'PENDIENTE_PAGO') { <app-comprobantes tipo="APERTURA" [referenciaId]="c.id" /> }
                   </td>
                   <td class="num">{{ c.saldoDisponible | currency: 'USD' }}</td>
@@ -161,12 +159,12 @@ export class AdminCuentas implements OnInit {
   }
 
   protected abrir(cuenta: Cuenta, tipo: 'depositos' | 'retiros'): void {
-    this.formulario.set({ cuenta, tipo, importe: null, metodoPago: 'EFECTIVO', referencia: '', clave: crypto.randomUUID() });
+    this.formulario.set({ cuenta, tipo, importe: null, metodoPago: 'EFECTIVO', clave: crypto.randomUUID() });
   }
 
   protected registrar(f: Formulario): void {
     this.ejecutar(
-      this.api.movimiento(f.cuenta.id, f.tipo, f.importe!, f.metodoPago, f.referencia.trim() || null, f.clave),
+      this.api.movimiento(f.cuenta.id, f.tipo, f.importe!, f.metodoPago, f.clave),
       'Movimiento registrado.',
       () => this.formulario.set(null),
     );

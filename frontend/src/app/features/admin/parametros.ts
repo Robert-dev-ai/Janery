@@ -38,10 +38,11 @@ const empieza = (...prefijos: string[]) => (codigo: string) => prefijos.some((p)
 
 const GRUPOS: Grupo[] = [
   {
-    id: 'cuenta', titulo: 'Cuenta principal', detalle: 'Pago de apertura de la cuenta y costo de los retiros a otros bancos.',
-    incluye: empieza('APERTURA_', 'COSTO_TRANSFERENCIA'),
+    id: 'cuenta', titulo: 'Cuenta principal', detalle: 'Pago de apertura, interés de la cuenta y costo de los retiros a otros bancos.',
+    incluye: empieza('APERTURA_', 'COSTO_TRANSFERENCIA', 'PRINCIPAL_'),
     subgrupos: [
       { titulo: 'Apertura de cuenta', incluye: empieza('APERTURA_') },
+      { titulo: 'Interés (aparte del ahorro normal)', incluye: empieza('PRINCIPAL_') },
       { titulo: 'Retiros', incluye: empieza('COSTO_TRANSFERENCIA') },
     ],
   },

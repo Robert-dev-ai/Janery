@@ -2,7 +2,7 @@ import { CurrencyPipe, DatePipe } from '@angular/common';
 import { Component, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
-import { ApiService, SolicitudRetiro } from '../../core/services/api';
+import { Ahorro, ApiService, SolicitudRetiro } from '../../core/services/api';
 import { alCambiar } from '../../core/services/tiempo-real';
 import { DialogoService } from '../../shared/components/dialogo';
 import { Estado } from '../../shared/components/estado';
@@ -13,12 +13,22 @@ import { mensajeDeError } from '../../shared/utils/errores';
   imports: [CurrencyPipe, DatePipe, Estado, FormsModule],
   template: `
     <h1>Retirar dinero</h1>
-    <p class="suave">Su dinero está en la caja de Janery. Pídalo en efectivo o a su banco: el importe se aparta de su cuenta principal hasta que el personal se lo entregue. Para sacar un ahorro, muévalo antes a su cuenta principal.</p>
+    <p class="suave">Su dinero está en la caja de Janery. Pídalo en efectivo o a su banco, desde su cuenta principal o directo de un ahorro: el importe se aparta hasta que el personal se lo entregue.</p>
     @if (error()) { <p class="error" role="alert">{{ error() }}</p> }
     @if (aviso()) { <p class="exito" role="status">{{ aviso() }}</p> }
 
     <form class="tarjeta estrecho" (ngSubmit)="solicitar()">
-      @if (saldo() !== null) { <p>Saldo disponible: <strong>{{ saldo() | currency: 'USD' }}</strong></p> }
+      <label>¿De dónde sale?
+        <select name="origen" [(ngModel)]="origen">
+          <option value="CUENTA">Cuenta principal{{ saldo() !== null ? ' (' + (saldo() | currency: 'USD') + ')' : '' }}</option>
+          @for (a of ahorros(); track a.id) {
+            <option [value]="'AHORRO:' + a.id">Ahorro «{{ a.nombre }}» ({{ a.saldo | currency: 'USD' }})</option>
+          }
+        </select>
+      </label>
+      @if (origen !== 'CUENTA') {
+        <p class="suave">Sale directo de su ahorro. Si cancela el retiro o no se aprueba, el dinero vuelve a su cuenta principal.</p>
+      }
       <label>Importe (USD) <input type="number" min="0" step="1" name="importe" [(ngModel)]="importe" /></label>
       <label>¿Cómo lo quiere recibir?
         <select name="medio" [(ngModel)]="medio">
@@ -50,7 +60,7 @@ import { mensajeDeError } from '../../shared/utils/errores';
         <label>Titular de la cuenta <input name="titularCuenta" maxlength="150" [(ngModel)]="titularCuenta" /></label>
       }
       @if (importe && costo() > 0) {
-        <p>Se apartarán de su cuenta <strong>{{ importe + costo() | currency: 'USD' }}</strong>: {{ importe | currency: 'USD' }} del retiro y {{ costo() | currency: 'USD' }} de la transferencia.</p>
+        <p>Se apartarán <strong>{{ importe + costo() | currency: 'USD' }}</strong>: {{ importe | currency: 'USD' }} del retiro y {{ costo() | currency: 'USD' }} de la transferencia.</p>
       }
       <button type="submit" [disabled]="enviando() || !valido()">Solicitar retiro</button>
     </form>
@@ -70,7 +80,7 @@ import { mensajeDeError } from '../../shared/utils/errores';
                   <td class="num">{{ s.costo ? (s.costo | currency: 'USD') : '—' }}</td>
                   <td>{{ s.medio === 'EFECTIVO' ? 'Efectivo' : 'Banco: ' + s.banco?.banco }}</td>
                   <td><app-estado [valor]="s.estado" /></td>
-                  <td>{{ s.motivo ?? s.referencia ?? '—' }}</td>
+                  <td>{{ s.motivo ?? '—' }}</td>
                   <td>@if (s.estado === 'PENDIENTE') { <button type="button" class="secundario" (click)="cancelar(s)">Cancelar</button> }</td>
                 </tr>
               }
@@ -91,6 +101,10 @@ export class Retiros implements OnInit {
 
   protected readonly solicitudes = signal<SolicitudRetiro[] | null>(null);
   protected readonly saldo = signal<number | null>(null);
+  /** Ahorros normales activos con saldo: de ellos también se puede retirar directo. */
+  protected readonly ahorros = signal<Ahorro[]>([]);
+  /** CUENTA o AHORRO:<id>. */
+  protected origen = 'CUENTA';
   protected readonly error = signal<string | null>(null);
   protected readonly aviso = signal<string | null>(null);
   /** Mientras una operación está en curso: evita el doble clic y deja ver que se está procesando. */
@@ -116,6 +130,10 @@ export class Retiros implements OnInit {
   ngOnInit(): void {
     this.api.misRetiros().subscribe({ next: (s) => this.solicitudes.set(s), error: (e) => this.error.set(mensajeDeError(e)) });
     this.api.miCuenta().subscribe({ next: (c) => this.saldo.set(c.saldoDisponible), error: (e) => this.error.set(mensajeDeError(e)) });
+    this.api.misAhorros().subscribe({
+      next: (a) => this.ahorros.set(a.filter((x) => x.tipo === 'NORMAL' && x.estado === 'ACTIVA' && x.saldo > 0)),
+      error: (e) => this.error.set(mensajeDeError(e)),
+    });
   }
 
   protected costo(): number {
@@ -143,11 +161,15 @@ export class Retiros implements OnInit {
     const banco = this.medio === 'TRANSFERENCIA'
       ? { banco: this.nombreBanco(), tipoCuenta: this.tipoCuenta, numeroCuenta: this.numeroCuenta.trim(), titularCuenta: this.titularCuenta.trim() }
       : {};
-    this.api.solicitarRetiro({ importe: this.importe!, medio: this.medio, ...banco }, this.clave).subscribe({
+    const cuerpo = { importe: this.importe!, medio: this.medio, ...banco };
+    const ahorro = this.origen.startsWith('AHORRO:') ? Number(this.origen.slice(7)) : null;
+    const peticion = ahorro === null ? this.api.solicitarRetiro(cuerpo, this.clave) : this.api.retirarDesdeAhorro(ahorro, cuerpo, this.clave);
+    peticion.subscribe({
       next: () => {
         this.enviando.set(false);
         this.clave = crypto.randomUUID();
         this.importe = null;
+        this.origen = 'CUENTA';
         this.aviso.set('Solicitud registrada. El importe queda apartado hasta la entrega.');
         this.ngOnInit();
       },

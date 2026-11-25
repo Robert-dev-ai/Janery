@@ -1,6 +1,7 @@
 package ec.janery.cuenta;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.HashMap;
@@ -22,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import ec.janery.auditoria.AuditoriaService;
 import ec.janery.caja.CajaService;
+import ec.janery.common.InteresDiario;
 import ec.janery.common.NegocioException;
 import ec.janery.cuenta.Entidades.DepositoApertura;
 import ec.janery.cuenta.Entidades.MovimientoCuenta;
@@ -86,6 +88,9 @@ public class CuentaService {
     private static final String MODULO = "CUENTA";
     private static final String ENTRADA = "ENTRADA";
     private static final String SALIDA = "SALIDA";
+    /** Decisión del propietario (24/11/2026): tasa propia, editable aparte de la del ahorro normal. */
+    private static final String TASA_PRINCIPAL = "PRINCIPAL_TASA";
+    private static final String INTERES_PRINCIPAL = "INTERES_PRINCIPAL";
 
     private final CuentaRepository cuentas;
     private final OperacionRepository operaciones;
@@ -100,6 +105,7 @@ public class CuentaService {
     private final List<RestriccionCierre> restricciones;
     private final JdbcClient jdbc;
     private final org.springframework.context.ApplicationEventPublisher eventos;
+    private final InteresDiario interesDiario;
     @jakarta.persistence.PersistenceContext
     private jakarta.persistence.EntityManager em;
 
@@ -142,7 +148,7 @@ public class CuentaService {
         if (reembolsable.signum() > 0) {
             caja.registrarEnPrincipal(operacion.getId(), ENTRADA, reembolsable, "DEPOSITO_REEMBOLSABLE");
         }
-        cuenta.activar(ahora);
+        cuenta.activar(ahora, interesDiario.hoy());
         eventos.publishEvent(new ec.janery.common.ResultadoGenerado("GANANCIA", ingreso, "Apertura de la cuenta " + cuenta.getNumero(), actorId));
         auditoria.registrar(actorId, "APERTURA_CONFIRMADA", MODULO, "cuenta", cuenta.getId(),
                 CuentaPrincipal.PENDIENTE_PAGO, CuentaPrincipal.ACTIVA, null);
@@ -203,6 +209,7 @@ public class CuentaService {
         movimientos.save(new MovimientoCuenta(null, cuenta.getId(), operacion.getId(), sentido, importe, tipo,
                 nuevoSaldo, ahora));
         caja.registrarEnPrincipal(operacion.getId(), sentido, importe, tipo + "_CUENTA");
+        devengar(cuenta);
         cuenta.aplicar(nuevoSaldo);
         auditoria.registrar(actorId, tipo, MODULO, "cuenta", cuenta.getId(), null, importe.toPlainString(), null);
         return operacion.getId();
@@ -268,7 +275,87 @@ public class CuentaService {
         }
         movimientos.save(new MovimientoCuenta(null, cuenta.getId(), operacionId, sentido, importe, concepto,
                 nuevoSaldo, Instant.now(reloj)));
+        devengar(cuenta);
         cuenta.aplicar(nuevoSaldo);
+    }
+
+    // --- Interés de la cuenta principal: el mismo cálculo que el ahorro normal, con su propia tasa.
+
+    /** Interés a hoy, para mostrarlo: disponible para retirar, acumulado que se libera el próximo día 1. */
+    public record InteresVista(BigDecimal tasaAnual, BigDecimal acumulado, BigDecimal disponible, java.time.LocalDate proximaLiberacion) {
+    }
+
+    /** Guarda el interés corrido hasta hoy. Va justo antes de cambiar el saldo: corrió sobre el saldo anterior. */
+    private void devengar(CuentaPrincipal cuenta) {
+        cuenta.devengar(interesAHoy(cuenta), interesDiario.hoy());
+    }
+
+    private InteresDiario.Interes interesAHoy(CuentaPrincipal cuenta) {
+        return interesDiario.aHoy(cuenta.getSaldoDisponible(), cuenta.getInteresAcumulado(), cuenta.getInteresDisponible(),
+                cuenta.getUltimoDevengo(), TASA_PRINCIPAL);
+    }
+
+    @Transactional(readOnly = true)
+    public InteresVista interes(Long usuarioId) {
+        return interes(cuentaDe(usuarioId));
+    }
+
+    private InteresVista interes(CuentaPrincipal cuenta) {
+        InteresDiario.Interes i = interesAHoy(cuenta);
+        return new InteresVista(parametros.valorVigente(TASA_PRINCIPAL), i.acumulado().setScale(2, RoundingMode.DOWN),
+                i.disponible().setScale(2, RoundingMode.DOWN), interesDiario.proximaLiberacion());
+    }
+
+    /**
+     * Pasa al saldo el interés ya liberado, redondeado hacia abajo a centavos. Es un gasto de Janery (5.1): no entra
+     * dinero a la caja, porque el saldo de la persona ya está en ella. Copia el flujo de AhorroService.retirarInteres.
+     */
+    @Transactional
+    public Long retirarInteres(Long usuarioId, String clave) {
+        CuentaPrincipal cuenta = cuentaActivaBloqueada(personaIdDe(usuarioId));
+        Optional<Long> previa = operacionPrevia(clave, INTERES_PRINCIPAL, null, usuarioId);
+        if (previa.isPresent()) {
+            return previa.get();
+        }
+        devengar(cuenta);
+        BigDecimal interes = cuenta.getInteresDisponible().setScale(2, RoundingMode.DOWN);
+        if (interes.signum() <= 0) {
+            throw NegocioException.conflicto("INTERES_NO_DISPONIBLE", "Aún no hay interés liberado: se libera cada día 1");
+        }
+        Long operacion = acreditarInteres(cuenta, interes, interes, BigDecimal.ZERO, clave, usuarioId);
+        auditoria.registrar(usuarioId, "CUENTA_INTERES", MODULO, "cuenta", cuenta.getId(), null, interes.toPlainString(), null);
+        return operacion;
+    }
+
+    /** Ya devengado: descuenta lo pagado del interés y lo suma al saldo, con su gasto en contabilidad. */
+    private Long acreditarInteres(CuentaPrincipal cuenta, BigDecimal importe, BigDecimal deDisponible, BigDecimal deAcumulado,
+            String clave, Long actorId) {
+        Long operacion = crearOperacionInterna(INTERES_PRINCIPAL, importe, clave, actorId);
+        cuenta.descontarInteres(deDisponible, deAcumulado);
+        mover(cuenta, operacion, ENTRADA, importe, INTERES_PRINCIPAL);
+        eventos.publishEvent(new ec.janery.common.ResultadoGenerado("PERDIDA", importe,
+                "Interés de la cuenta principal " + cuenta.getNumero(), actorId));
+        return operacion;
+    }
+
+    /**
+     * Confirmado por el propietario (24/11/2026): al cerrar, el interés pendiente, acumulado y disponible devengado hasta
+     * hoy, se acredita al saldo para liquidarlo con el resto. Lo que no llega a un centavo se pierde. Devuelve lo acreditado.
+     */
+    private BigDecimal liquidarInteres(CuentaPrincipal cuenta, Long actorId) {
+        devengar(cuenta);
+        BigDecimal interes = cuenta.getInteresAcumulado().add(cuenta.getInteresDisponible()).setScale(2, RoundingMode.DOWN);
+        if (interes.signum() > 0) {
+            BigDecimal deDisponible = interes.min(cuenta.getInteresDisponible());
+            acreditarInteres(cuenta, interes, deDisponible, interes.subtract(deDisponible), null, actorId);
+        }
+        cuenta.descontarInteres(cuenta.getInteresDisponible(), cuenta.getInteresAcumulado());
+        return interes;
+    }
+
+    private Long personaIdDe(Long usuarioId) {
+        return personas.dePorUsuario(usuarioId).orElseThrow(() -> NegocioException.conflicto(
+                "PERFIL_INCOMPLETO", "Complete sus datos personales")).getId();
     }
 
     @Transactional
@@ -292,10 +379,16 @@ public class CuentaService {
         DepositoApertura deposito = depositos.findByCuentaId(cuentaId)
                 .orElseThrow(() -> new IllegalStateException("Cuenta activa sin depósito de apertura: " + cuentaId));
         Instant ahora = Instant.now(reloj);
-        OperacionFinanciera operacion = operaciones.save(new OperacionFinanciera(null, "DEVOLUCION_CIERRE", deposito.getImporteReembolsable(),
-                cuenta.getMetodoPago(), null, null, actorId, ahora));
+        BigDecimal interes = liquidarInteres(cuenta, actorId);
+        OperacionFinanciera operacion = operaciones.save(new OperacionFinanciera(null, "DEVOLUCION_CIERRE",
+                deposito.getImporteReembolsable().add(interes), cuenta.getMetodoPago(), null, null, actorId, ahora));
         if (deposito.getImporteReembolsable().signum() > 0) {
             caja.registrarEnPrincipal(operacion.getId(), SALIDA, deposito.getImporteReembolsable(), "DEVOLUCION_DEPOSITO");
+        }
+        if (interes.signum() > 0) {
+            // Se entrega junto con el depósito reembolsable: sale de su cuenta y de la caja.
+            mover(cuenta, operacion.getId(), SALIDA, interes, "LIQUIDACION_CIERRE");
+            caja.registrarEnPrincipal(operacion.getId(), SALIDA, interes, "LIQUIDACION_INTERES");
         }
         deposito.marcarDevuelto(ahora);
         cuenta.cerrar(ahora);

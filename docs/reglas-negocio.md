@@ -341,7 +341,7 @@ El propietario autorizó el 30/10/2026 usar valores provisionales de tasas, enca
 - **Recuperar contraseña sin correo:** Janery no envía correos. El pedido le llega a la presidencia, que genera una contraseña temporal de 10 caracteres y se la entrega en persona o por mensaje. Al entrar con ella se obliga a elegir otra.
 - **Cédula exacta:** se exigen exactamente 10 números (no «hasta 10»), como toda cédula ecuatoriana.
 - **Teléfono en Ecuador:** celular de 9 números sin el 0 (empieza con 9); fijo de 8. En otros países, de 6 a 12.
-- **Comprobante obligatorio solo en transferencias:** sin él no se puede confirmar. En efectivo es opcional, porque se entrega en mano. Se aceptan PDF, JPG, PNG y WEBP de hasta 10 MB, comprobados por su contenido.
+- **Comprobante (actualizado el 24/11/2026 por decisión del propietario):** quien mete dinero a la caja por su cuenta (depósito o pago) adjunta siempre su comprobante, también en efectivo; sin él no se puede confirmar. Si paga en persona al tesorero, en la ventanilla es opcional (sección 21). La apertura de cuenta lo exige solo en transferencia; en efectivo es opcional (confirmado por el propietario el 24/11/2026). Es un solo archivo: una foto o un PDF (PDF, JPG, PNG o WEBP de hasta 10 MB, comprobados por su contenido). Ya no se pide el número de la transferencia en ninguna pantalla.
 - **Costo de transferencia:** se aparta de la cuenta junto con el retiro y sale de la caja al entregarlo (el banco lo descuenta a Janery). Se cobra a cualquier banco cuyo nombre no contenga «Pichincha» ni «Guayaquil».
 - **Votos:** cada persona vota una vez y cuenta por una sola de sus áreas. Con los tres votos se decide: se aprueba solo si los tres aprueban; un rechazo con motivo basta para rechazarlo al completarse. El retiro de cupo de socio sigue la misma regla. Vicepresidencia, tesorería y comité de crédito recibieron el permiso `APROBAR_CREDITOS`.
 - **Ahorro letras mínimo:** la letra se redondea al dólar siguiente contando 0,50 de ahorro; así cada letra ahorra entre 0,50 y 1,49.
@@ -405,9 +405,51 @@ El propietario autorizó el 30/10/2026 usar valores provisionales de tasas, enca
 
 **Definido por el propietario (02/11/2026):** desde «Pagar», al final del menú, quien tiene cuenta activa paga de una vez lo que quiera: letras de créditos, depósitos a ahorros normales, aporte mensual, aporte personal, caja chica o un depósito a la cuenta principal. Un **cliente** solo paga lo suyo. Un **socio** puede pagar también lo de otras personas en el mismo pago (por ejemplo, 30 a la letra de una persona, 50 a la de otra, un depósito al ahorro de la primera y el aporte de una tercera); a un cliente no se le muestra esa opción y el servidor la rechaza (`SOLO_SOCIOS`).
 
-- **Comprobante obligatorio:** sin al menos un comprobante (foto o PDF, hasta 5) no se registra el pago, sea en efectivo o por transferencia.
+- **Comprobante obligatorio:** sin el comprobante (una foto o un PDF) no se registra el pago, sea en efectivo o por transferencia.
 - **Otras personas:** se buscan por nombre o cédula entre quienes tienen cuenta activa. Quien paga ve solo su nombre y lo que se le puede pagar (créditos con la letra que falta, ahorros normales y, si es socio, sus meses de aporte); no ve su cédula ni su número de cuenta.
 - **Nada cambia hasta confirmar:** el pago queda como un aviso de depósito (código DP) en «Depósitos y pagos por confirmar». Al confirmarlo, el dinero entra a la caja principal y a la cuenta principal de cada beneficiario, y de ahí se paga cada cosa como si la persona la hubiera pagado.
 - **Todo o nada:** si una cosa de la lista ya no se puede pagar al confirmar (por ejemplo, el mes ya se pagó), no se confirma nada y el mensaje dice cuál falló; el personal puede rechazar el pago con un motivo. Al registrarlo también se rechaza entero si algo no es válido.
 - Un pago a un crédito que supera la letra adelanta las siguientes, como en la sección de pagos de créditos. Quien paga puede cancelar el pago mientras esté pendiente.
 - «Mi cuenta» salió del menú: el saldo y los botones de depositar y retirar están en el resumen, y el cierre de cuenta en Configuración → Cuenta.
+
+## 21. Ventanilla de tesorería
+
+**Definido por el propietario (24/11/2026):** cada persona puede hacer sus movimientos, pero lo más común es que se lo pida al tesorero, que cobra y entrega dinero por cualquiera. Lo hace desde «Ventanilla», con `GESTIONAR_CUENTAS` (tesorería y presidencia).
+
+- **Se aplica al momento:** el tesorero ya recibió o entregó el dinero. No queda nada por confirmar.
+- **Cobrar:** las mismas cosas que en «Pagar» (letras, ahorros, aporte mensual, aporte personal, caja chica y depósito a la cuenta principal), de una o de varias personas en el mismo cobro. El tesorero elige quién entregó el dinero; por defecto, la primera persona de la lista.
+- **Forma de pago:** en efectivo o por transferencia, y el dinero entra a la caja principal; o con el saldo de la cuenta principal o de un ahorro normal de quien paga, y no entra dinero a la caja.
+- **Comprobante:** el campo existe siempre, pero es opcional, en efectivo y en transferencia, porque se paga en persona al tesorero. Un solo archivo. No se pide el número de la transferencia.
+- **Entregar dinero (retiro):** sale de la cuenta principal o directo de un ahorro normal, en efectivo o por transferencia, y sale de la caja en ese momento. El costo de la transferencia a otros bancos (sección 16) sale de la misma cuenta o ahorro.
+
+**Criterios del desarrollo, pendientes de confirmación:**
+
+- Con el saldo de una cuenta o de un ahorro solo se paga lo de su dueño (`SOLO_PROPIO`): no se pasa dinero de la cuenta de una persona a otra. Lo de otras personas se cobra en efectivo o por transferencia.
+- Un plazo fijo no se usa en ventanilla: no se toca antes de vencer y, al vencer, se liquida entero desde Ahorros.
+- El pago de un ahorro pasa por la cuenta principal, como un retiro del ahorro seguido del pago, para que quede en los movimientos de la persona.
+- El personal ve en la ventanilla la cédula y el número de cuenta de la persona, para reconocer a quien atiende.
+
+## 22. Interés de la cuenta principal
+
+**Definido por el propietario (24/11/2026):** la cuenta principal gana interés igual que un ahorro normal, para que nadie tenga que pasar dinero a un ahorro solo para ganarlo. Los ahorros normales y a plazo fijo no cambian.
+
+- **Tasa propia:** `PRINCIPAL_TASA` (5 % anual al empezar, como `AHORRO_NORMAL_TASA`). Se cambia en Parámetros → Cuenta principal, aparte de la del ahorro normal.
+- **Cálculo:** el mismo del ahorro normal (sección 15): tasa anual / 365 cada día sobre todo el saldo disponible, sin capitalizar. Lo acumulado pasa a disponible cada día 1. Se usa la tasa vigente al calcular.
+- **Sin interés retroactivo:** las cuentas activas empiezan a ganar desde el 24/11/2026; las nuevas, desde el día en que se activan.
+- **Retirar el interés:** pasa al saldo de la cuenta principal lo ya liberado, redondeado hacia abajo a centavos. Es un gasto de Janery (5.1, como el interés de los ahorros) y una pérdida que se reparte entre los socios. No mueve la caja.
+
+**Confirmado por el propietario (24/11/2026):**
+
+- **Cierre de la cuenta:** el interés pendiente no impide pedir el cierre. Al confirmarlo, lo acumulado y lo disponible, devengado hasta ese día, se acredita al saldo y se entrega junto con el depósito reembolsable. Lo que no llega a un centavo se pierde.
+
+## 23. Pagar y retirar directo desde un ahorro
+
+**Definido por el propietario (24/11/2026):** cada persona puede pagar y retirar dinero directo desde su ahorro, sin pasarlo antes a su cuenta principal. Es lo mismo que el tesorero hace en la ventanilla (sección 21), pero solo con lo propio.
+
+- **Pagar con saldo:** en «Pagar», lo propio (letras, depósitos a otro ahorro, aportes, caja chica) se paga con el saldo de la cuenta principal o de un ahorro normal. Se aplica al momento y sin comprobante, porque no entra dinero nuevo a la caja. Lo de otras personas sigue pagándose en efectivo o por transferencia, con comprobante.
+- **Retirar desde un ahorro:** en «Retirar dinero» se elige de dónde sale: la cuenta principal o un ahorro normal. Queda pendiente hasta que el personal entrega el dinero, como cualquier retiro. El costo de la transferencia a otros bancos sale del mismo ahorro.
+
+**Criterios del desarrollo, pendientes de confirmación:**
+
+- **Confirmado por el propietario (24/11/2026):** el dinero del ahorro pasa por la cuenta principal, para que quede en los movimientos de la persona. Si el retiro se cancela o se rechaza, vuelve a la cuenta principal, no al ahorro.
+- Un plazo fijo no se usa para esto: no se toca antes de vencer.

@@ -4,7 +4,7 @@ import { RouterLink } from '@angular/router';
 import { Banknote, BanknoteArrowDown, HandCoins, LucideAngularModule, PiggyBank, TrendingUp, Wallet } from 'lucide-angular';
 
 import { AuthService } from '../../core/auth/auth';
-import { Ahorro, ApiService, Credito, Cuenta, MovimientoCuenta, ResumenSocio } from '../../core/services/api';
+import { Ahorro, ApiService, Credito, Cuenta, InteresPrincipal, MovimientoCuenta, ResumenSocio } from '../../core/services/api';
 import { alCambiar } from '../../core/services/tiempo-real';
 import { Estado } from '../../shared/components/estado';
 import { GraficoBarras } from '../../shared/components/grafico-barras';
@@ -29,6 +29,23 @@ const USD = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' 
       <a class="boton-claro" routerLink="/app/retiros"><lucide-icon [img]="iconos.Banknote" [size]="20" aria-hidden="true" /> Retirar</a>
     </div>
     @if (error()) { <p class="error" role="alert">{{ error() }}</p> }
+    @if (aviso()) { <p class="exito" role="status">{{ aviso() }}</p> }
+
+    @if (interes(); as i) {
+      <!-- Decisión del propietario: la cuenta principal gana interés como un ahorro normal, sin pasar el dinero a un ahorro. -->
+      <section class="tarjeta" aria-labelledby="titulo-interes">
+        <h2 id="titulo-interes" class="m-0">Interés de su cuenta principal <span class="suave text-sm font-normal">{{ i.tasaAnual }} % anual</span></h2>
+        <div class="importes">
+          <div>Interés de este mes (se libera el {{ i.proximaLiberacion | date: 'dd/MM' : 'UTC' }})<p class="importe">{{ i.acumulado | currency: 'USD' }}</p></div>
+          <div>Interés liberado, para retirar<p class="importe">{{ i.disponible | currency: 'USD' }}</p></div>
+        </div>
+        @if (i.disponible >= 0.01) {
+          <button type="button" class="secundario" [disabled]="enviando()" (click)="retirarInteres()">Retirar interés</button>
+        } @else {
+          <p class="suave mb-0">El interés corre cada día sobre su saldo y se libera el día 1 de cada mes.</p>
+        }
+      </section>
+    }
 
     @if (cuenta(); as c) {
       <div class="rejilla-indicadores">
@@ -122,6 +139,11 @@ export class Resumen implements OnInit {
   protected readonly movimientos = signal<MovimientoCuenta[]>([]);
   protected readonly socio = signal<ResumenSocio | null>(null);
   protected readonly error = signal<string | null>(null);
+  protected readonly aviso = signal<string | null>(null);
+  protected readonly interes = signal<InteresPrincipal | null>(null);
+  protected readonly enviando = signal(false);
+  // Una clave por intento: se renueva solo tras un éxito, para que reintentar no pague dos veces.
+  private clave: string = crypto.randomUUID();
 
   protected readonly totalDeuda = computed(() => this.creditos().filter((c) => c.estado === 'ACTIVO').reduce((t, c) => t + c.totalPendiente, 0));
   protected readonly atrasadas = computed(() => this.creditos().reduce((t, c) => t + c.letrasAtrasadas, 0));
@@ -148,6 +170,7 @@ export class Resumen implements OnInit {
   ngOnInit(): void {
     const fallo = (e: unknown) => this.error.set(mensajeDeError(e));
     this.api.miCuenta().subscribe({ next: (c) => this.cuenta.set(c), error: fallo });
+    this.api.miInteresPrincipal().subscribe({ next: (i) => this.interes.set(i), error: fallo });
     this.api.misCreditos().subscribe({
       next: (c) => this.creditos.set(c.filter((x) => x.estado === 'ACTIVO' || x.estado === 'SOLICITADO')),
       error: fallo,
@@ -165,6 +188,24 @@ export class Resumen implements OnInit {
     const signo = v > 0 ? '▲ +' : v < 0 ? '▼ −' : '';
     const porcentaje = s.rendimientoMes === null || s.rendimientoMes === undefined ? '' : ` (${s.rendimientoMes > 0 ? '+' : ''}${s.rendimientoMes} %)`;
     return v === 0 ? 'Sin cambios este mes' : `${signo}${USD.format(Math.abs(v))}${porcentaje} este mes`;
+  }
+
+  protected retirarInteres(): void {
+    this.error.set(null);
+    this.aviso.set(null);
+    this.enviando.set(true);
+    this.api.retirarInteresPrincipal(this.clave).subscribe({
+      next: () => {
+        this.clave = crypto.randomUUID();
+        this.enviando.set(false);
+        this.aviso.set('Interés sumado al saldo de su cuenta principal.');
+        this.ngOnInit();
+      },
+      error: (e) => {
+        this.enviando.set(false);
+        this.error.set(mensajeDeError(e));
+      },
+    });
   }
 
   protected proximaLetra(c: Credito) {

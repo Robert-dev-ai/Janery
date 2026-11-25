@@ -17,7 +17,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-import ec.janery.common.NegocioException;
 import ec.janery.common.Pagina;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Digits;
@@ -69,17 +68,26 @@ public class CuentaController {
     @ResponseStatus(HttpStatus.CREATED)
     public CuentaResponse solicitarApertura(@AuthenticationPrincipal Jwt jwt,
             @Valid @RequestBody AperturaRequest request) {
-        if ("TRANSFERENCIA".equals(request.metodoPago())
-                && (request.referenciaPago() == null || request.referenciaPago().isBlank())) {
-            throw new NegocioException(HttpStatus.BAD_REQUEST, "REFERENCIA_REQUERIDA",
-                    "Indique el número de la transferencia");
-        }
+        // Decisión del propietario (24/11/2026): ya no se pide el número de la transferencia; basta el comprobante.
         return CuentaResponse.de(service.solicitarApertura(id(jwt), request.metodoPago(), request.referenciaPago()));
     }
 
     @GetMapping("/cuentas-principales/me")
     public CuentaResponse miCuenta(@AuthenticationPrincipal Jwt jwt) {
         return CuentaResponse.de(service.miCuenta(id(jwt)));
+    }
+
+    /** Interés de la cuenta principal a hoy, como en el ahorro normal. */
+    @GetMapping("/cuentas-principales/me/interes")
+    public CuentaService.InteresVista miInteres(@AuthenticationPrincipal Jwt jwt) {
+        return service.interes(id(jwt));
+    }
+
+    /** Pasa al saldo el interés ya liberado (cada día 1). */
+    @PostMapping("/cuentas-principales/me/interes")
+    public OperacionResponse retirarInteres(@AuthenticationPrincipal Jwt jwt,
+            @RequestHeader("Idempotency-Key") @NotBlank @Size(max = 100) String clave) {
+        return new OperacionResponse(service.retirarInteres(id(jwt), clave));
     }
 
     @GetMapping("/cuentas-principales/me/movimientos")

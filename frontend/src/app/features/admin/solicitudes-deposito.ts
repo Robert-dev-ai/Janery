@@ -52,7 +52,7 @@ import { Comprobantes } from './comprobantes';
                   </td>
                   <td>{{ s.numeroCuenta }}</td>
                   <td class="num">{{ s.importe | currency: 'USD' }}</td>
-                  <td>{{ s.medio === 'EFECTIVO' ? 'Efectivo' : 'Transferencia ' + s.referencia }}</td>
+                  <td>{{ s.medio === 'EFECTIVO' ? 'Efectivo' : 'Transferencia' }}</td>
                   <td><app-comprobantes tipo="DEPOSITO" [referenciaId]="s.id" /></td>
                   <td><app-estado [valor]="s.estado" /></td>
                   <td class="acciones">

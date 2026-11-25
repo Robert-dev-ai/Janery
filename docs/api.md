@@ -34,6 +34,8 @@
 - `PUT /personas/me` (solo teléfono y dirección)
 - `POST /cuentas-principales/apertura`
 - `GET /cuentas-principales/me`
+- `GET /cuentas-principales/me/interes`: interés de la cuenta principal a hoy: `{tasaAnual, acumulado, disponible, proximaLiberacion}`.
+- `POST /cuentas-principales/me/interes` (requiere `Idempotency-Key`): pasa al saldo el interés ya liberado. Sin interés liberado responde 409 `INTERES_NO_DISPONIBLE`.
 - `GET /cuentas-principales/me/movimientos`
 - `POST /cuentas-principales/me/cierre` (flujo simple inicial)
 
@@ -52,7 +54,14 @@
 - Reglas en `reglas-negocio.md`, sección 20. Requiere cuenta principal activa.
 - `GET /pagos/personas?buscar=` (mínimo 3 letras; devuelve solo `usuarioId` y `nombre`). Buscar y pagar lo de otras personas es solo para socios: a un cliente responde 403 `SOLO_SOCIOS`.
 - `GET /pagos/opciones/me` y `GET /pagos/opciones/{usuarioId}`: créditos activos, ahorros normales y, si es socio, meses de aporte
-- `POST /pagos` (multiparte, requiere `Idempotency-Key`): parte `datos` en JSON `{destinos: [{usuarioId, tipo, referenciaId?, periodos?, importe?}], medio, referencia}` y parte `archivos` con el comprobante, obligatorio. `tipo`: `CUENTA`, `CUOTA_CREDITO`, `AHORRO`, `APORTE_OBLIGATORIO`, `APORTE_PERSONAL` o `CAJA_CHICA`. Queda como aviso de depósito; se confirma o rechaza en `/admin/solicitudes-deposito`.
+- `POST /pagos` (multiparte, requiere `Idempotency-Key`): parte `datos` en JSON `{destinos: [{usuarioId, tipo, referenciaId?, periodos?, importe?}], medio}` y parte `archivos` con el comprobante, obligatorio y uno solo. `tipo`: `CUENTA`, `CUOTA_CREDITO`, `AHORRO`, `APORTE_OBLIGATORIO`, `APORTE_PERSONAL` o `CAJA_CHICA`. Queda como aviso de depósito; se confirma o rechaza en `/admin/solicitudes-deposito`.
+- `POST /pagos/con-saldo` (requiere `Idempotency-Key`): `{destinos, origen: CUENTA|AHORRO, ahorroId?}`. La persona paga lo suyo con el saldo de su cuenta principal o de un ahorro normal; se aplica al momento, sin comprobante. Lo de otra persona responde 409 `SOLO_PROPIO`.
+- `POST /ahorros/{ahorroId}/retiros-dinero` (requiere `Idempotency-Key`): como `POST /cuentas-principales/me/retiros`, pero el dinero sale directo del ahorro normal. Queda `PENDIENTE` hasta la entrega.
+- Ventanilla de tesorería (permiso `GESTIONAR_CUENTAS`; todo se aplica al momento):
+  - `GET /ventanilla/personas?buscar=` (mínimo 3 caracteres: nombre, cédula o número de cuenta): `usuarioId`, `nombre`, `identificacion`, `numeroCuenta`, `socio`.
+  - `GET /ventanilla/personas/{usuarioId}`: `persona`, `saldoCuenta`, `ahorros` normales con su saldo y `opciones` (como `/pagos/opciones`).
+  - `POST /ventanilla/cobros` (multiparte, requiere `Idempotency-Key`): parte `datos` `{pagadorId, destinos, origen, ahorroId?}` y parte `archivos` opcional, con un solo archivo. `origen`: `EFECTIVO`, `TRANSFERENCIA`, `CUENTA` o `AHORRO` (con `ahorroId`; solo lo del mismo `pagadorId`, si no `SOLO_PROPIO`). Responde `{id, codigo, importe, detalle}`; `id` y `codigo` (DP) son nulos si se pagó con saldo.
+  - `POST /ventanilla/retiros` (requiere `Idempotency-Key`): `{usuarioId, origen: CUENTA|AHORRO, ahorroId?, importe, medio: EFECTIVO|TRANSFERENCIA, banco?, tipoCuenta?, numeroCuenta?, titularCuenta?}`. Responde el retiro ya `ENTREGADA`.
 
 
 ### Ahorros
