@@ -5,7 +5,7 @@ import { FormsModule } from '@angular/forms';
 import { catchError, debounceTime, distinctUntilChanged, of, Subject, switchMap } from 'rxjs';
 
 import { AuthService } from '../../core/auth/auth';
-import { ApiService, DestinoPago, MesAporte, OpcionesPago, PersonaPago, SolicitudDeposito } from '../../core/services/api';
+import { Ahorro, ApiService, DestinoPago, MesAporte, OpcionesPago, PersonaPago, SolicitudDeposito } from '../../core/services/api';
 import { alCambiar } from '../../core/services/tiempo-real';
 import { DialogoService } from '../../shared/components/dialogo';
 import { Estado } from '../../shared/components/estado';
@@ -31,7 +31,7 @@ interface Linea {
   imports: [CurrencyPipe, DatePipe, Estado, FormsModule],
   template: `
     <h1>Pagar</h1>
-    <p class="suave">Arme la lista de lo que va a pagar: letras, ahorros y aportes{{ esSocio() ? ', suyos o de otras personas' : '' }}. Al final adjunte el comprobante. Cuando el personal confirme que recibió el dinero, se paga cada cosa de la lista.</p>
+    <p class="suave">Arme la lista de lo que va a pagar: letras, ahorros y aportes{{ esSocio() ? ', suyos o de otras personas' : '' }}. Al final adjunte el comprobante: cuando el personal confirme que recibió el dinero, se paga cada cosa de la lista. Lo suyo también lo puede pagar al momento con el saldo de su cuenta principal o de un ahorro.</p>
     @if (error()) { <p class="error" role="alert">{{ error() }}</p> }
     @if (aviso()) { <p class="exito" role="status">{{ aviso() }}</p> }
 
@@ -149,18 +149,36 @@ interface Linea {
 
     @if (lineas().length) {
       <form class="tarjeta estrecho" (ngSubmit)="enviar()">
-        <h2>3. Comprobante de pago</h2>
-        <label>¿Cómo entrega el dinero?
-          <select name="medio" [(ngModel)]="medio">
+        <h2>3. ¿Cómo paga?</h2>
+        <label>Forma de pago
+          <select name="medio" [ngModel]="medio()" (ngModelChange)="medio.set($event)">
             <option value="EFECTIVO">En efectivo</option>
             <option value="TRANSFERENCIA">Por transferencia</option>
+            <!-- Decisión del propietario: lo propio se paga también con el saldo, sin pasar antes el ahorro a la cuenta. -->
+            @if (soloMio()) {
+              <option value="CUENTA">Con el saldo de mi cuenta principal ({{ saldoCuenta() | currency: 'USD' }})</option>
+              @for (a of ahorrosNormales(); track a.id) {
+                <option [value]="'AHORRO:' + a.id">Con mi ahorro «{{ a.nombre }}» ({{ a.saldo | currency: 'USD' }})</option>
+              }
+            }
           </select>
         </label>
-        <label>Comprobante (obligatorio)
-          <input #archivo type="file" accept="application/pdf,image/jpeg,image/png,image/webp" (change)="elegirArchivos($event)" />
-        </label>
-        <p class="suave">Una foto o un PDF del comprobante o recibo, hasta 10 MB.</p>
-        <button type="submit" [disabled]="!listoParaEnviar() || enviando()">Enviar pago de {{ total() | currency: 'USD' }}</button>
+        @if (conSaldo()) {
+          <p class="suave">Se paga en este momento, sin comprobante: no entra dinero nuevo a la caja.</p>
+          @if (saldoOrigen() < total()) {
+            <p class="error" role="alert">El saldo ({{ saldoOrigen() | currency: 'USD' }}) no alcanza para el total.</p>
+          }
+          <button type="submit" [disabled]="!listoParaEnviar() || enviando()">Pagar {{ total() | currency: 'USD' }}</button>
+        } @else {
+          @if (!soloMio()) {
+            <p class="suave">Con el saldo de una cuenta o de un ahorro solo se paga lo suyo; lo de otras personas, en efectivo o por transferencia.</p>
+          }
+          <label>Comprobante (obligatorio)
+            <input #archivo type="file" accept="application/pdf,image/jpeg,image/png,image/webp" (change)="elegirArchivos($event)" />
+          </label>
+          <p class="suave">Una foto o un PDF del comprobante o recibo, hasta 10 MB.</p>
+          <button type="submit" [disabled]="!listoParaEnviar() || enviando()">Enviar pago de {{ total() | currency: 'USD' }}</button>
+        }
       </form>
     }
 
@@ -225,7 +243,14 @@ export class Pagar implements OnInit {
 
   protected texto = '';
   protected importe: number | null = null;
-  protected medio = 'EFECTIVO';
+  /** EFECTIVO, TRANSFERENCIA, CUENTA o AHORRO:<id>. */
+  protected readonly medio = signal('EFECTIVO');
+  protected readonly saldoCuenta = signal(0);
+  protected readonly ahorrosNormales = signal<Ahorro[]>([]);
+  protected readonly soloMio = computed(() => this.lineas().length > 0 && this.lineas().every((l) => l.para === 'Yo'));
+  protected readonly conSaldo = computed(() => this.medio() === 'CUENTA' || this.medio().startsWith('AHORRO:'));
+  protected readonly saldoOrigen = computed(() => this.medio() === 'CUENTA' ? this.saldoCuenta()
+    : this.ahorrosNormales().find((a) => `AHORRO:${a.id}` === this.medio())?.saldo ?? 0);
   private archivos: File[] = [];
   // Una clave por intento: se renueva solo tras un éxito, para que reintentar no duplique.
   private clave: string = crypto.randomUUID();
@@ -234,6 +259,7 @@ export class Pagar implements OnInit {
     alCambiar(() => {
       this.cache.clear();
       this.cargarPagos();
+      this.cargarSaldos();
     });
     this.busquedas.pipe(
       debounceTime(300),
@@ -252,6 +278,7 @@ export class Pagar implements OnInit {
   ngOnInit(): void {
     this.paraMi();
     this.cargarPagos();
+    this.cargarSaldos();
   }
 
   protected familia(codigo: string): string {
@@ -384,6 +411,10 @@ export class Pagar implements OnInit {
         concepto: tipo === 'CUENTA' ? 'Depósito a la cuenta principal' : 'Aporte personal', importe: this.importe! };
     }
     this.lineas.update((l) => [...l, linea]);
+    // Con saldo solo se paga lo propio: si entra algo de otra persona, se vuelve a efectivo.
+    if (!this.soloMio() && this.conSaldo()) {
+      this.medio.set('EFECTIVO');
+    }
     this.aviso.set(null);
     this.limpiarConcepto();
   }
@@ -397,10 +428,26 @@ export class Pagar implements OnInit {
   }
 
   protected listoParaEnviar(): boolean {
-    return this.lineas().length > 0 && this.archivos.length > 0;
+    if (!this.lineas().length) {
+      return false;
+    }
+    return this.conSaldo() ? this.soloMio() && this.saldoOrigen() >= this.total() : this.archivos.length > 0;
+  }
+
+  /** Saldos de lo que se puede usar para pagar lo propio: la cuenta principal y los ahorros normales. */
+  private cargarSaldos(): void {
+    this.api.miCuenta().subscribe({ next: (c) => this.saldoCuenta.set(c.saldoDisponible), error: () => undefined });
+    this.api.misAhorros().subscribe({
+      next: (a) => this.ahorrosNormales.set(a.filter((x) => x.tipo === 'NORMAL' && x.estado === 'ACTIVA' && x.saldo > 0)),
+      error: () => undefined,
+    });
   }
 
   protected async enviar(): Promise<void> {
+    if (this.conSaldo()) {
+      await this.pagarConSaldo();
+      return;
+    }
     const ok = await this.dialogo.confirmar(
       `¿Enviar el pago de ${this.total().toFixed(2)} USD? Se pagará cada cosa de la lista cuando el personal confirme que recibió el dinero.`,
       'Enviar pago');
@@ -410,7 +457,7 @@ export class Pagar implements OnInit {
     this.error.set(null);
     this.aviso.set(null);
     this.enviando.set(true);
-    this.api.pagar(this.lineas().map((l) => l.destino), this.medio, this.archivos, this.clave).subscribe({
+    this.api.pagar(this.lineas().map((l) => l.destino), this.medio(), this.archivos, this.clave).subscribe({
       next: (r) => {
         this.clave = crypto.randomUUID();
         this.enviando.set(false);
@@ -422,6 +469,34 @@ export class Pagar implements OnInit {
         }
         this.aviso.set(`Pago ${r.codigo} enviado. Se aplicará cuando el personal confirme que recibió el dinero.`);
         this.cargarPagos();
+      },
+      error: (e) => {
+        this.enviando.set(false);
+        this.error.set(mensajeDeError(e));
+      },
+    });
+  }
+
+  private async pagarConSaldo(): Promise<void> {
+    const [origen, ahorro] = this.medio().split(':') as ['CUENTA' | 'AHORRO', string | undefined];
+    const desde = origen === 'CUENTA' ? 'su cuenta principal'
+      : `su ahorro «${this.ahorrosNormales().find((a) => a.id === Number(ahorro))?.nombre ?? ''}»`;
+    if (!await this.dialogo.confirmar(`¿Pagar ${this.total().toFixed(2)} USD con ${desde}? Se aplica en este momento.`, 'Pagar')) {
+      return;
+    }
+    this.error.set(null);
+    this.aviso.set(null);
+    this.enviando.set(true);
+    this.api.pagarConSaldo(this.lineas().map((l) => l.destino), origen, ahorro ? Number(ahorro) : null, this.clave).subscribe({
+      next: () => {
+        this.clave = crypto.randomUUID();
+        this.enviando.set(false);
+        this.lineas.set([]);
+        this.medio.set('EFECTIVO');
+        this.cache.clear();
+        this.paraMi();
+        this.cargarSaldos();
+        this.aviso.set(`Pagado con ${desde}.`);
       },
       error: (e) => {
         this.enviando.set(false);

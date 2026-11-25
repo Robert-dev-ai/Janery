@@ -441,3 +441,15 @@ El propietario autorizó el 30/10/2026 usar valores provisionales de tasas, enca
 **Pendiente de confirmación por el propietario:**
 
 - **Cierre de la cuenta:** el interés pendiente no impide pedir el cierre. Al confirmarlo, lo acumulado y lo disponible, devengado hasta ese día, se acredita al saldo y se entrega junto con el depósito reembolsable. Lo que no llega a un centavo se pierde.
+
+## 23. Pagar y retirar directo desde un ahorro
+
+**Definido por el propietario (24/11/2026):** cada persona puede pagar y retirar dinero directo desde su ahorro, sin pasarlo antes a su cuenta principal. Es lo mismo que el tesorero hace en la ventanilla (sección 21), pero solo con lo propio.
+
+- **Pagar con saldo:** en «Pagar», lo propio (letras, depósitos a otro ahorro, aportes, caja chica) se paga con el saldo de la cuenta principal o de un ahorro normal. Se aplica al momento y sin comprobante, porque no entra dinero nuevo a la caja. Lo de otras personas sigue pagándose en efectivo o por transferencia, con comprobante.
+- **Retirar desde un ahorro:** en «Retirar dinero» se elige de dónde sale: la cuenta principal o un ahorro normal. Queda pendiente hasta que el personal entrega el dinero, como cualquier retiro. El costo de la transferencia a otros bancos sale del mismo ahorro.
+
+**Criterios del desarrollo, pendientes de confirmación:**
+
+- El dinero del ahorro pasa por la cuenta principal, para que quede en los movimientos de la persona. Si el retiro se cancela o se rechaza, vuelve a la cuenta principal, no al ahorro.
+- Un plazo fijo no se usa para esto: no se toca antes de vencer.

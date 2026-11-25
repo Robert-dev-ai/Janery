@@ -1396,6 +1396,16 @@ export class ApiService {
     return this.http.post<SolicitudRetiro>(`${this.base}/cuentas-principales/me/retiros`, cuerpo, conClave(clave));
   }
 
+  /** Retiro de dinero que sale directo de un ahorro normal propio; queda pendiente de entrega. */
+  retirarDesdeAhorro(ahorroId: number, cuerpo: { importe: number; medio: string } & Partial<DatosBanco>, clave: string): Observable<SolicitudRetiro> {
+    return this.http.post<SolicitudRetiro>(`${this.base}/ahorros/${ahorroId}/retiros-dinero`, cuerpo, conClave(clave));
+  }
+
+  /** Paga lo propio con el saldo de la cuenta principal o de un ahorro normal: se aplica al momento, sin comprobante. */
+  pagarConSaldo(destinos: DestinoPago[], origen: 'CUENTA' | 'AHORRO', ahorroId: number | null, clave: string): Observable<CobroVentanilla> {
+    return this.http.post<CobroVentanilla>(`${this.base}/pagos/con-saldo`, { destinos, origen, ahorroId }, conClave(clave));
+  }
+
   cancelarRetiro(id: number): Observable<void> {
     return this.http.post<void>(`${this.base}/cuentas-principales/me/retiros/${id}/cancelar`, null);
   }

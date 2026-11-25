@@ -55,6 +55,8 @@
 - `GET /pagos/personas?buscar=` (mínimo 3 letras; devuelve solo `usuarioId` y `nombre`). Buscar y pagar lo de otras personas es solo para socios: a un cliente responde 403 `SOLO_SOCIOS`.
 - `GET /pagos/opciones/me` y `GET /pagos/opciones/{usuarioId}`: créditos activos, ahorros normales y, si es socio, meses de aporte
 - `POST /pagos` (multiparte, requiere `Idempotency-Key`): parte `datos` en JSON `{destinos: [{usuarioId, tipo, referenciaId?, periodos?, importe?}], medio}` y parte `archivos` con el comprobante, obligatorio y uno solo. `tipo`: `CUENTA`, `CUOTA_CREDITO`, `AHORRO`, `APORTE_OBLIGATORIO`, `APORTE_PERSONAL` o `CAJA_CHICA`. Queda como aviso de depósito; se confirma o rechaza en `/admin/solicitudes-deposito`.
+- `POST /pagos/con-saldo` (requiere `Idempotency-Key`): `{destinos, origen: CUENTA|AHORRO, ahorroId?}`. La persona paga lo suyo con el saldo de su cuenta principal o de un ahorro normal; se aplica al momento, sin comprobante. Lo de otra persona responde 409 `SOLO_PROPIO`.
+- `POST /ahorros/{ahorroId}/retiros-dinero` (requiere `Idempotency-Key`): como `POST /cuentas-principales/me/retiros`, pero el dinero sale directo del ahorro normal. Queda `PENDIENTE` hasta la entrega.
 - Ventanilla de tesorería (permiso `GESTIONAR_CUENTAS`; todo se aplica al momento):
   - `GET /ventanilla/personas?buscar=` (mínimo 3 caracteres: nombre, cédula o número de cuenta): `usuarioId`, `nombre`, `identificacion`, `numeroCuenta`, `socio`.
   - `GET /ventanilla/personas/{usuarioId}`: `persona`, `saldoCuenta`, `ahorros` normales con su saldo y `opciones` (como `/pagos/opciones`).

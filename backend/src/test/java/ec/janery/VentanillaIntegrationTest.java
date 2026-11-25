@@ -187,6 +187,76 @@ class VentanillaIntegrationTest {
     }
 
     @Test
+    void laPersonaPagaLoSuyoConSuAhorroOSuCuentaSinComprobante() throws Exception {
+        Persona uno = persona();
+        Persona otra = persona();
+        long credito = creditoAprobado(uno);
+        long creditoOtra = creditoAprobado(otra);
+        long ahorro = crearAhorro(uno);
+        cobrar(uno, List.of(Map.of("usuarioId", uno.usuario(), "tipo", "AHORRO", "referenciaId", ahorro, "importe", 100)),
+                "EFECTIVO", null, null, UUID.randomUUID().toString(), false).andExpect(status().isCreated());
+        BigDecimal caja = saldoCaja();
+        BigDecimal cuenta = saldo(uno);
+
+        // Directo de su ahorro, sin moverlo antes a la cuenta principal.
+        String clave = UUID.randomUUID().toString();
+        pagarConSaldo(uno, List.of(Map.of("usuarioId", uno.usuario(), "tipo", "CUOTA_CREDITO", "referenciaId", credito, "importe", 30)),
+                "AHORRO", ahorro, clave).andExpect(status().isCreated()).andExpect(jsonPath("$.importe").value(30));
+        pagarConSaldo(uno, List.of(Map.of("usuarioId", uno.usuario(), "tipo", "CUOTA_CREDITO", "referenciaId", credito, "importe", 30)),
+                "AHORRO", ahorro, clave).andExpect(status().isCreated());
+        assertThat(saldoAhorro(uno, ahorro)).isEqualByComparingTo("70");
+        assertThat(pagadoPrimeraLetra(uno, credito)).isEqualByComparingTo("30");
+        assertThat(saldo(uno)).isEqualByComparingTo(cuenta);
+
+        // Con el saldo de su cuenta principal.
+        pagarConSaldo(uno, List.of(Map.of("usuarioId", uno.usuario(), "tipo", "CUOTA_CREDITO", "referenciaId", credito, "importe", 10)),
+                "CUENTA", null, UUID.randomUUID().toString()).andExpect(status().isCreated());
+        assertThat(pagadoPrimeraLetra(uno, credito)).isEqualByComparingTo("40");
+        assertThat(saldo(uno)).isEqualByComparingTo(cuenta.subtract(BigDecimal.TEN));
+        assertThat(saldoCaja()).isEqualByComparingTo(caja);
+
+        // Solo lo suyo, y solo de su ahorro.
+        pagarConSaldo(uno, List.of(Map.of("usuarioId", otra.usuario(), "tipo", "CUOTA_CREDITO", "referenciaId", creditoOtra, "importe", 5)),
+                "AHORRO", ahorro, UUID.randomUUID().toString())
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.codigo").value("SOLO_PROPIO"));
+        long ahorroOtra = crearAhorro(otra);
+        pagarConSaldo(uno, List.of(Map.of("usuarioId", uno.usuario(), "tipo", "CUOTA_CREDITO", "referenciaId", credito, "importe", 5)),
+                "AHORRO", ahorroOtra, UUID.randomUUID().toString()).andExpect(status().isNotFound());
+        assertThat(saldoAhorro(uno, ahorro)).isEqualByComparingTo("70");
+    }
+
+    @Test
+    void laPersonaPideUnRetiroQueSaleDirectoDeSuAhorro() throws Exception {
+        Persona uno = persona();
+        long ahorro = crearAhorro(uno);
+        cobrar(uno, List.of(Map.of("usuarioId", uno.usuario(), "tipo", "AHORRO", "referenciaId", ahorro, "importe", 60)),
+                "EFECTIVO", null, null, UUID.randomUUID().toString(), false).andExpect(status().isCreated());
+        BigDecimal caja = saldoCaja();
+
+        String clave = UUID.randomUUID().toString();
+        long retiro = json.readTree(retirarDesdeAhorro(uno, ahorro, "{\"importe\":20.00,\"medio\":\"EFECTIVO\"}", clave)
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.estado").value("PENDIENTE"))
+                .andReturn().getResponse().getContentAsString()).get("id").asLong();
+        retirarDesdeAhorro(uno, ahorro, "{\"importe\":20.00,\"medio\":\"EFECTIVO\"}", clave).andExpect(status().isCreated());
+        // Sale del ahorro y queda apartado hasta la entrega; la caja no cambia todavía.
+        assertThat(saldoAhorro(uno, ahorro)).isEqualByComparingTo("40");
+        assertThat(saldo(uno)).isEqualByComparingTo("0");
+        assertThat(saldoCaja()).isEqualByComparingTo(caja);
+        mvc.perform(post("/api/v1/admin/solicitudes-retiro/" + retiro + "/entregar").header(HttpHeaders.AUTHORIZATION, bearer(presidente()))
+                .contentType(MediaType.APPLICATION_JSON).content("{}")).andExpect(status().isNoContent());
+        assertThat(caja.subtract(saldoCaja())).isEqualByComparingTo("20");
+
+        // A otro banco, el costo de la transferencia también sale del ahorro.
+        retirarDesdeAhorro(uno, ahorro, """
+                {"importe":10.00,"medio":"TRANSFERENCIA","banco":"Cooperativa Andina","tipoCuenta":"AHORROS",
+                 "numeroCuenta":"123","titularCuenta":"Ana Prueba"}""", UUID.randomUUID().toString())
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.costo").value(0.41));
+        assertThat(saldoAhorro(uno, ahorro)).isEqualByComparingTo("29.59");
+        retirarDesdeAhorro(uno, ahorro, "{\"importe\":100.00,\"medio\":\"EFECTIVO\"}", UUID.randomUUID().toString())
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.codigo").value("SALDO_INSUFICIENTE"));
+    }
+
+    @Test
     void soloElPersonalConPermisoUsaLaVentanilla() throws Exception {
         Persona uno = persona();
         mvc.perform(get("/api/v1/ventanilla/personas").param("buscar", "ana prueba")
@@ -220,6 +290,21 @@ class VentanillaIntegrationTest {
             req.file(new MockMultipartFile("archivos", "recibo.pdf", "application/pdf", PDF));
         }
         return mvc.perform(req.header(HttpHeaders.AUTHORIZATION, bearer(presidente())).header("Idempotency-Key", clave));
+    }
+
+    private ResultActions pagarConSaldo(Persona p, List<Map<String, Object>> destinos, String origen, Long ahorroId, String clave)
+            throws Exception {
+        Map<String, Object> cuerpo = new HashMap<>(Map.of("destinos", destinos, "origen", origen));
+        if (ahorroId != null) {
+            cuerpo.put("ahorroId", ahorroId);
+        }
+        return mvc.perform(post("/api/v1/pagos/con-saldo").header(HttpHeaders.AUTHORIZATION, bearer(p.token()))
+                .header("Idempotency-Key", clave).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsBytes(cuerpo)));
+    }
+
+    private ResultActions retirarDesdeAhorro(Persona p, long ahorro, String cuerpo, String clave) throws Exception {
+        return mvc.perform(post("/api/v1/ahorros/" + ahorro + "/retiros-dinero").header(HttpHeaders.AUTHORIZATION, bearer(p.token()))
+                .header("Idempotency-Key", clave).contentType(MediaType.APPLICATION_JSON).content(cuerpo));
     }
 
     private ResultActions retirar(Persona p, String origen, Long ahorroId, int importe, String medio, String clave) throws Exception {

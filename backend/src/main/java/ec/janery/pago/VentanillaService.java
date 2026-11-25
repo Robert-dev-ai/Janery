@@ -109,6 +109,17 @@ public class VentanillaService {
             return new Cobro(v.id(), v.codigo(), v.importe(),
                     v.destinos().stream().map(d -> d.descripcion() + ": " + d.importe().toPlainString() + " USD").toList());
         }
+        return pagarConSaldo(actorId, pagadorId, destinos, origen, ahorroId, clave);
+    }
+
+    /**
+     * Paga con el saldo de la cuenta principal o de un ahorro normal, sin que entre dinero a la caja; se aplica al
+     * momento y no lleva comprobante. Solo lo de esa misma persona. Lo usa la ventanilla y, decisión del propietario
+     * (24/11/2026), la propia persona desde «Pagar»: no necesita pasar el dinero de su ahorro a la cuenta antes.
+     */
+    @Transactional
+    public Cobro pagarConSaldo(Long actorId, Long pagadorId, List<PagoService.Destino> destinos, String origen, Long ahorroId,
+            String clave) {
         List<PagoService.Fila> filas = pagos.validarVentanilla(pagadorId, destinos);
         if (filas.stream().anyMatch(f -> !pagadorId.equals(f.usuarioId()))) {
             throw NegocioException.conflicto("SOLO_PROPIO",
@@ -137,8 +148,23 @@ public class VentanillaService {
                 throw new NegocioException(ex.getStatus(), ex.getCodigo(), f.descripcion() + ": " + ex.getMessage());
             }
         }
-        auditoria.registrar(actorId, "COBRO_VENTANILLA", "CUENTA", "usuario", pagadorId, null, total.toPlainString(), origen);
+        auditoria.registrar(actorId, actorId.equals(pagadorId) ? "PAGO_CON_SALDO" : "COBRO_VENTANILLA", "CUENTA", "usuario",
+                pagadorId, null, total.toPlainString(), origen);
         return new Cobro(null, null, total, detalle(filas));
+    }
+
+    /**
+     * La persona pide un retiro de dinero que sale directo de su ahorro normal, sin moverlo antes a la cuenta principal.
+     * Queda pendiente de entrega como cualquier retiro. El ahorro pasa por la cuenta principal y se aparta ahí; si se
+     * cancela o se rechaza, el dinero vuelve a la cuenta principal, no al ahorro.
+     */
+    @Transactional
+    public RetiroService.Vista solicitarRetiroDesdeAhorro(Long usuarioId, Long ahorroId, BigDecimal importe, String medio,
+            RetiroService.DatosBanco banco, String clave) {
+        exigirAhorroNormal(usuarioId, ahorroId);
+        BigDecimal costo = retiros.costo(medio, banco == null ? null : banco.banco());
+        ahorros.retirar(usuarioId, ahorroId, importe.add(costo), clave + ":ahorro");
+        return retiros.solicitar(usuarioId, importe, medio, banco, clave);
     }
 
     /** Entrega dinero en efectivo o por transferencia. Sale de la cuenta principal o directo de un ahorro normal. */
