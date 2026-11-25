@@ -428,3 +428,16 @@ El propietario autorizó el 30/10/2026 usar valores provisionales de tasas, enca
 - Un plazo fijo no se usa en ventanilla: no se toca antes de vencer y, al vencer, se liquida entero desde Ahorros.
 - El pago de un ahorro pasa por la cuenta principal, como un retiro del ahorro seguido del pago, para que quede en los movimientos de la persona.
 - El personal ve en la ventanilla la cédula y el número de cuenta de la persona, para reconocer a quien atiende.
+
+## 22. Interés de la cuenta principal
+
+**Definido por el propietario (24/11/2026):** la cuenta principal gana interés igual que un ahorro normal, para que nadie tenga que pasar dinero a un ahorro solo para ganarlo. Los ahorros normales y a plazo fijo no cambian.
+
+- **Tasa propia:** `PRINCIPAL_TASA` (5 % anual al empezar, como `AHORRO_NORMAL_TASA`). Se cambia en Parámetros → Cuenta principal, aparte de la del ahorro normal.
+- **Cálculo:** el mismo del ahorro normal (sección 15): tasa anual / 365 cada día sobre todo el saldo disponible, sin capitalizar. Lo acumulado pasa a disponible cada día 1. Se usa la tasa vigente al calcular.
+- **Sin interés retroactivo:** las cuentas activas empiezan a ganar desde el 24/11/2026; las nuevas, desde el día en que se activan.
+- **Retirar el interés:** pasa al saldo de la cuenta principal lo ya liberado, redondeado hacia abajo a centavos. Es un gasto de Janery (5.1, como el interés de los ahorros) y una pérdida que se reparte entre los socios. No mueve la caja.
+
+**Pendiente de confirmación por el propietario:**
+
+- **Cierre de la cuenta:** el interés pendiente no impide pedir el cierre. Al confirmarlo, lo acumulado y lo disponible, devengado hasta ese día, se acredita al saldo y se entrega junto con el depósito reembolsable. Lo que no llega a un centavo se pierde.

@@ -77,6 +77,19 @@ public class CuentaController {
         return CuentaResponse.de(service.miCuenta(id(jwt)));
     }
 
+    /** Interés de la cuenta principal a hoy, como en el ahorro normal. */
+    @GetMapping("/cuentas-principales/me/interes")
+    public CuentaService.InteresVista miInteres(@AuthenticationPrincipal Jwt jwt) {
+        return service.interes(id(jwt));
+    }
+
+    /** Pasa al saldo el interés ya liberado (cada día 1). */
+    @PostMapping("/cuentas-principales/me/interes")
+    public OperacionResponse retirarInteres(@AuthenticationPrincipal Jwt jwt,
+            @RequestHeader("Idempotency-Key") @NotBlank @Size(max = 100) String clave) {
+        return new OperacionResponse(service.retirarInteres(id(jwt), clave));
+    }
+
     @GetMapping("/cuentas-principales/me/movimientos")
     public Pagina<MovimientoResponse> misMovimientos(@AuthenticationPrincipal Jwt jwt,
             @RequestParam(defaultValue = "0") int pagina, @RequestParam(defaultValue = "20") int tamano) {

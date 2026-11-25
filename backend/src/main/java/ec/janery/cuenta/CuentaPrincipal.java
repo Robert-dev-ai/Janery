@@ -2,7 +2,9 @@ package ec.janery.cuenta;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 
+import ec.janery.common.InteresDiario;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -35,6 +37,10 @@ public class CuentaPrincipal {
     private Instant abiertaEn;
     private Instant cerradaEn;
     private Instant creadoEn;
+    /** Interés corrido, como en el ahorro normal: lo acumulado pasa a disponible cada día 1. */
+    private BigDecimal interesAcumulado;
+    private BigDecimal interesDisponible;
+    private LocalDate ultimoDevengo;
 
     CuentaPrincipal(Long personaId, String numero, String metodoPago, String referenciaPago, Instant creadoEn) {
         this.personaId = personaId;
@@ -44,11 +50,28 @@ public class CuentaPrincipal {
         this.metodoPago = metodoPago;
         this.referenciaPago = referenciaPago;
         this.creadoEn = creadoEn;
+        this.interesAcumulado = InteresDiario.CERO;
+        this.interesDisponible = InteresDiario.CERO;
     }
 
-    void activar(Instant ahora) {
+    /** Gana interés desde el día en que se activa. */
+    void activar(Instant ahora, LocalDate hoy) {
         estado = ACTIVA;
         abiertaEn = ahora;
+        ultimoDevengo = hoy;
+    }
+
+    void devengar(InteresDiario.Interes interes, LocalDate hoy) {
+        interesAcumulado = interes.acumulado();
+        interesDisponible = interes.disponible();
+        // Sin fecha (una cuenta anterior a esta función que no estaba activa), empieza a ganar desde hoy.
+        ultimoDevengo = hoy;
+    }
+
+    /** Lo que pasa al saldo sale primero de lo disponible; al cerrar, también de lo acumulado. */
+    void descontarInteres(BigDecimal deDisponible, BigDecimal deAcumulado) {
+        interesDisponible = interesDisponible.subtract(deDisponible);
+        interesAcumulado = interesAcumulado.subtract(deAcumulado);
     }
 
     void rechazar() {

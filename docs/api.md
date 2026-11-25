@@ -34,6 +34,8 @@
 - `PUT /personas/me` (solo teléfono y dirección)
 - `POST /cuentas-principales/apertura`
 - `GET /cuentas-principales/me`
+- `GET /cuentas-principales/me/interes`: interés de la cuenta principal a hoy: `{tasaAnual, acumulado, disponible, proximaLiberacion}`.
+- `POST /cuentas-principales/me/interes` (requiere `Idempotency-Key`): pasa al saldo el interés ya liberado. Sin interés liberado responde 409 `INTERES_NO_DISPONIBLE`.
 - `GET /cuentas-principales/me/movimientos`
 - `POST /cuentas-principales/me/cierre` (flujo simple inicial)
 

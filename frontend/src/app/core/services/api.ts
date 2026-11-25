@@ -661,6 +661,14 @@ export interface OpcionesPago {
   meses: MesAporte[];
 }
 
+export interface InteresPrincipal {
+  tasaAnual: number;
+  /** Corre este mes; pasa a disponible el día de proximaLiberacion. */
+  acumulado: number;
+  disponible: number;
+  proximaLiberacion: string;
+}
+
 /** Ventanilla: el personal ve la cédula y el número de cuenta para reconocer a quien atiende. */
 export interface PersonaVentanilla {
   usuarioId: number;
@@ -1348,6 +1356,16 @@ export class ApiService {
 
   productosAhorro(): Observable<ProductosAhorro> {
     return this.http.get<ProductosAhorro>(`${this.base}/ahorros/productos`);
+  }
+
+  /** Interés de la cuenta principal a hoy: corre como el del ahorro normal, con su propia tasa. */
+  miInteresPrincipal(): Observable<InteresPrincipal> {
+    return this.http.get<InteresPrincipal>(`${this.base}/cuentas-principales/me/interes`);
+  }
+
+  /** Pasa al saldo de la cuenta principal el interés ya liberado. */
+  retirarInteresPrincipal(clave: string): Observable<unknown> {
+    return this.http.post(`${this.base}/cuentas-principales/me/interes`, null, conClave(clave));
   }
 
   retirarInteresAhorro(id: number, clave: string): Observable<unknown> {
