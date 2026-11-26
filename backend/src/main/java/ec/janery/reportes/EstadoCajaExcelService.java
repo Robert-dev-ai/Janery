@@ -41,6 +41,8 @@ public class EstadoCajaExcelService {
     private static final DateTimeFormatter FECHA_HORA = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
     private static final DateTimeFormatter FECHA = DateTimeFormatter.ofPattern("dd/MM/yyyy");
     private static final DateTimeFormatter ARCHIVO = DateTimeFormatter.ofPattern("yyyy-MM-dd_HHmm");
+    private static final DateTimeFormatter MES = DateTimeFormatter.ofPattern("MMMM yyyy", new java.util.Locale("es", "EC"));
+    private static final int MAXIMO_DIARIO = 50_000;
     private static final BigDecimal CERO = BigDecimal.ZERO;
     private static final Map<String, String> FAMILIAS = Map.of("LETRAS", "Crédito a letras", "EMERGENTE_CLIENTE", "Emergente cliente",
             "EMERGENTE_SOCIO", "Emergente socio", "EMERGENTE_ESTACIONAL", "Emergente estacional");
@@ -80,6 +82,7 @@ public class EstadoCajaExcelService {
         hojaCreditos(libro.hoja("Créditos"), ahora, creditos);
         ahorros(libro.hoja("Ahorros"), ahora);
         aportes(libro.hoja("Aportes"), ahora);
+        libroDiario(libro.hoja("Libro diario"), ahora);
 
         auditoria.registrar(actorId, "INFORME_EXPORTADO", "REPORTES", "informe", "ESTADO_CAJA", null,
                 String.valueOf(personas.size()), null);
@@ -241,6 +244,39 @@ public class EstadoCajaExcelService {
                 }).list();
         h.fila(texto("TOTAL", Estilo.NEGRITA), texto(""), texto(""), total(totales[0]), total(totales[1]), total(totales[2]),
                 total(totales[3]), total(totales[4]), texto(""), total(totales[5]));
+    }
+
+    /**
+     * Libro diario del mes en curso, del más antiguo al más reciente. Cada operación mueve dos o más rubros; en los
+     * movimientos de la caja (línea 1.1) se dice si fue ingreso o egreso y cuánto quedó en la caja justo después.
+     */
+    private void libroDiario(Hoja h, ZonedDateTime ahora) {
+        var d = contabilidad.diario(null, 0, MAXIMO_DIARIO);
+        encabezadoHoja(h, "Libro diario de " + ahora.format(MES), ahora).anchos(17, 36, 28, 30, 14, 14, 16, 14, 14, 16);
+        h.fila(texto("Dinero en la caja ahora"), texto(""), total(d.saldoCaja()));
+        h.fila(texto("Ingresó a la caja este mes"), texto(""), dinero(d.entradasCaja()));
+        h.fila(texto("Salió de la caja este mes"), texto(""), dinero(d.salidasCaja()));
+        h.vacia();
+        h.encabezado("Fecha", "Movimiento", "De quién", "Rubro", "Sube", "Baja", "Ingreso o egreso", "Ingreso a caja",
+                "Egreso de caja", "Queda en caja").fijarHastaAqui();
+        List<ContabilidadService.FilaLibro> filas = new ArrayList<>(d.movimientos().contenido());
+        java.util.Collections.reverse(filas);
+        for (var f : filas) {
+            boolean esCaja = f.cajaDespues() != null;
+            boolean ingreso = esCaja && f.sube().signum() > 0;
+            boolean egreso = esCaja && f.baja().signum() > 0;
+            h.fila(texto(f.fecha().atZone(ZONA).format(FECHA_HORA)), texto(NombresConceptos.de(f.concepto())),
+                    texto(f.quien() == null ? "" : f.quien()), texto(f.linea() + " " + f.nombre()),
+                    f.sube().signum() > 0 ? dinero(f.sube()) : texto(""), f.baja().signum() > 0 ? dinero(f.baja()) : texto(""),
+                    texto(ingreso ? "Ingreso" : egreso ? "Egreso" : "No mueve caja"),
+                    ingreso ? dinero(f.sube()) : texto(""), egreso ? dinero(f.baja()) : texto(""),
+                    esCaja ? total(f.cajaDespues()) : texto(""));
+        }
+        if (filas.isEmpty()) {
+            h.fila(texto("No hay movimientos en este mes."));
+        } else if (d.movimientos().total() > filas.size()) {
+            h.fila(texto("Solo se muestran los últimos " + filas.size() + " movimientos del mes."));
+        }
     }
 
     // --- Consultas

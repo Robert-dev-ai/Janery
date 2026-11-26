@@ -120,8 +120,11 @@ class ReportesIntegrationTest {
                 partes.put(e.getName(), new String(zip.readAllBytes(), StandardCharsets.UTF_8));
             }
         }
-        assertThat(partes).containsKeys("[Content_Types].xml", "xl/workbook.xml", "xl/styles.xml", "xl/worksheets/sheet6.xml");
-        assertThat(partes.get("xl/workbook.xml")).contains("Resumen", "Balance", "Por persona", "Créditos", "Ahorros", "Aportes");
+        assertThat(partes).containsKeys("[Content_Types].xml", "xl/workbook.xml", "xl/styles.xml", "xl/worksheets/sheet7.xml");
+        assertThat(partes.get("xl/workbook.xml")).contains("Resumen", "Balance", "Por persona", "Créditos", "Ahorros", "Aportes",
+                "Libro diario");
+        // El depósito entra a la caja: el diario dice qué fue, que es ingreso y cuánto quedó.
+        assertThat(partes.get("xl/worksheets/sheet7.xml")).contains("Depósito a la cuenta", "Ingreso", "Queda en caja", "<v>123.45</v>");
         assertThat(partes.get("xl/worksheets/sheet1.xml")).contains("Caja principal", "Dinero de las personas");
         assertThat(partes.get("xl/worksheets/sheet2.xml")).contains("TOTAL ACTIVOS", "TOTAL PASIVO + CAPITAL");
         assertThat(partes.get("xl/worksheets/sheet3.xml")).contains(p.apellido(), "<v>123.45</v>");

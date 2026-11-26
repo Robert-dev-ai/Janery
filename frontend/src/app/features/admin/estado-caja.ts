@@ -189,7 +189,7 @@ export class EstadoCaja implements OnInit {
     });
   }
 
-  /** Foto de la caja en el momento de pulsar: resumen, balance, personas, créditos, ahorros y aportes. */
+  /** Foto de la caja en el momento de pulsar: resumen, balance, personas, créditos, ahorros, aportes y libro diario. */
   protected descargarExcel(): void {
     this.descargando.set(true);
     this.error.set(null);
