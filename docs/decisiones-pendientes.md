@@ -80,5 +80,36 @@ Claude no debe inventar respuestas a estos puntos. Puede preparar estructuras ex
 - Acceso a datos personales/financieros.
 - Retención, respaldos y formatos de exportación.
 
+## 9. Fondo de reserva institucional (propuesta del 26/11/2026, a decidir en la reunión)
+
+Nada de esto está implementado. Hoy el 10 % de cada ingreso va a la reserva al momento, la reserva no paga gastos ni se
+reparte, y su dinero está en la caja principal y se presta (ver reglas, secciones 11 y 14).
+
+Ya decidido por el propietario:
+
+- Se sigue separando el 10 % en cada ganancia, no una vez al mes: así el socio no ve un descuento grande al cerrar.
+- Los ahorros, depósitos, encajes, desgravamen y aportes no cuentan como ingreso.
+
+Propuesto, pendiente de aprobar:
+
+- **Ganancias de la reserva:** que reciba su parte de todas las ganancias según su saldo, como un socio más (ejemplo:
+  reserva $1.000 y socios $9.000; de $100 de intereses recibe $10 + $9). Si no se aprueba, queda como hoy. Idea: un
+  interruptor en el CMS, auditado y sin efecto retroactivo, para no tener que elegir ya.
+- **Dónde está la reserva:** mostrar cuánto está prestado en créditos y cuánto en su propia cuenta. Pasa poco a poco a esa
+  cuenta, que ya no se presta y está pensada para invertir en bolsa y tener liquidez en un día. Lo que gane es todo suyo.
+- **Aviso al presidente:** al cerrar cada mes, con lo que falta pasar a la cuenta propia; él decide cuánto se mueve.
+- **Cierre mensual:** el último día a las 23:59:59 (Ecuador). El mes queda bloqueado y lo que se pague después, aunque sea
+  de un mes anterior, se registra en el mes en que se paga.
+- **Informe mensual para los socios:** ingresos, gastos y resultado del mes; reserva (lo que recibió, lo que ganó, saldo y
+  dónde está); evolución del fondo de cada socio.
+- **Pérdidas:** al cierre anual, el presidente decide si usa la reserva para cubrirlas y cuánto, como máximo la pérdida.
+  Cambia la regla actual de que la reserva no se devuelve.
+- **Pantalla de la reserva:** saldo actualizado e historial de movimientos.
+- **Normativa:** confirmar con la SEPS o un contador lo que aplica a cajas de ahorro. En cooperativas la reserva legal se
+  forma de los excedentes, no de los ingresos brutos.
+
+Orden propuesto: cuenta propia e historial; interruptor de ganancias; cierre mensual con bloqueo y aviso; informe mensual;
+uso de la reserva en el cierre anual.
+
 ## 8. Nota de alcance
 El cierre de cuenta, admisión/salida de socios y aplicación de ahorro letras/encaje a última cuota deben mantenerse simples en primera versión. No desarrollar flujos complejos anticipadamente.
