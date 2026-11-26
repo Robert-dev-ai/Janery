@@ -1110,6 +1110,11 @@ export class ApiService {
     return this.http.get(`${this.base}/admin/reportes/${codigo}/csv`, { params: fechas(desde, hasta), responseType: 'blob' });
   }
 
+  /** Foto de la caja en este momento, en Excel. Solo para quien tiene CONSULTAR_CAJA. */
+  estadoCajaExcel(): Observable<Blob> {
+    return this.http.get(`${this.base}/tesoreria/estado.xlsx`, { responseType: 'blob' });
+  }
+
   miEstadoDeCuentaCsv(): Observable<Blob> {
     return this.http.get(`${this.base}/cuentas-principales/me/estado-de-cuenta.csv`, { responseType: 'blob' });
   }

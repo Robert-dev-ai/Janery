@@ -1,10 +1,12 @@
 import { CurrencyPipe } from '@angular/common';
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
 
+import { AuthService } from '../../core/auth/auth';
 import { ApiService, DuenoDinero, EstadoCajaRespuesta } from '../../core/services/api';
 import { alCambiar } from '../../core/services/tiempo-real';
 import { GraficoCircular, PorcionGrafico } from '../../shared/components/grafico-circular';
 import { GraficoColumnas, GrupoColumnas } from '../../shared/components/grafico-columnas';
+import { descargar } from '../../shared/utils/descarga';
 import { mensajeDeError } from '../../shared/utils/errores';
 import { nombreConcepto } from '../../shared/utils/etiquetas';
 
@@ -13,6 +15,9 @@ const CAJAS: Record<string, string> = { PRINCIPAL: 'Caja principal', CHICA: 'Caj
 const MES_CORTO = new Intl.DateTimeFormat('es-EC', { month: 'short', timeZone: 'UTC' });
 const MES_LARGO = new Intl.DateTimeFormat('es-EC', { month: 'long', year: 'numeric', timeZone: 'UTC' });
 const fechaDe = (periodo: string) => new Date(`${periodo}-01T00:00:00Z`);
+const dos = (n: number) => String(n).padStart(2, '0');
+const marcaDeTiempo = (d: Date) =>
+  `${d.getFullYear()}-${dos(d.getMonth() + 1)}-${dos(d.getDate())}_${dos(d.getHours())}${dos(d.getMinutes())}`;
 
 /** Los conceptos propios de la caja no tienen nombre en el catálogo: se leen a partir de su código. */
 function etiquetaConcepto(codigo: string): string {
@@ -28,7 +33,16 @@ function etiquetaConcepto(codigo: string): string {
   selector: 'app-estado-caja',
   imports: [CurrencyPipe, GraficoCircular, GraficoColumnas],
   template: `
-    <h1>Estado de caja</h1>
+    <div class="encabezado-pagina">
+      <h1>Estado de caja</h1>
+      @if (puedeDescargar) {
+        <div class="acciones">
+          <button type="button" class="secundario" [disabled]="descargando()" (click)="descargarExcel()">
+            {{ descargando() ? 'Preparando Excel…' : 'Descargar en Excel' }}
+          </button>
+        </div>
+      }
+    </div>
     <p class="suave">Saldos de hoy y, de la caja principal, lo ocurrido en los últimos doce meses.</p>
     @if (error()) { <p class="error" role="alert">{{ error() }}</p> }
     @if (datos(); as d) {
@@ -128,6 +142,9 @@ export class EstadoCaja implements OnInit {
 
   protected readonly datos = signal<EstadoCajaRespuesta | null>(null);
   protected readonly error = signal<string | null>(null);
+  /** Presidencia y Tesorería: los socios ven la pantalla, pero el Excel con el detalle de cada persona es solo para quien maneja la caja. */
+  protected readonly puedeDescargar = inject(AuthService).tienePermiso('CONSULTAR_CAJA');
+  protected readonly descargando = signal(false);
 
   protected readonly saldos = computed<PorcionGrafico[]>(() => (this.datos()?.caja.saldos ?? []).map((s) => ({
     etiqueta: CAJAS[s.codigo] ?? s.codigo, valor: s.saldo, texto: USD.format(s.saldo),
@@ -169,6 +186,22 @@ export class EstadoCaja implements OnInit {
     this.api.estadoCaja().subscribe({
       next: (d) => this.datos.set(d),
       error: (e) => this.error.set(mensajeDeError(e)),
+    });
+  }
+
+  /** Foto de la caja en el momento de pulsar: resumen, balance, personas, créditos, ahorros y aportes. */
+  protected descargarExcel(): void {
+    this.descargando.set(true);
+    this.error.set(null);
+    this.api.estadoCajaExcel().subscribe({
+      next: (archivo) => {
+        this.descargando.set(false);
+        descargar(archivo, `estado_de_caja_${marcaDeTiempo(new Date())}.xlsx`);
+      },
+      error: () => {
+        this.descargando.set(false);
+        this.error.set('No se pudo preparar el Excel. Intente de nuevo.');
+      },
     });
   }
 

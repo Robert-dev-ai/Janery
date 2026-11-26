@@ -24,6 +24,7 @@ import lombok.RequiredArgsConstructor;
 public class ReporteController {
 
     private final ReporteService service;
+    private final EstadoCajaExcelService estadoCaja;
 
     @GetMapping("/admin/reportes")
     @PreAuthorize("hasAuthority('SCOPE_CONSULTAR_INFORMES')")
@@ -43,6 +44,18 @@ public class ReporteController {
     public ResponseEntity<byte[]> exportar(@AuthenticationPrincipal Jwt jwt, @PathVariable String codigo,
             @RequestParam(required = false) LocalDate desde, @RequestParam(required = false) LocalDate hasta) {
         return archivo(service.exportar(Long.valueOf(jwt.getSubject()), codigo, desde, hasta));
+    }
+
+    /** Foto de la caja en este momento, para Presidencia y Tesorería: quien puede ver la caja, no los socios. */
+    @GetMapping("/tesoreria/estado.xlsx")
+    @PreAuthorize("hasAuthority('SCOPE_CONSULTAR_CAJA')")
+    public ResponseEntity<byte[]> estadoDeCajaExcel(@AuthenticationPrincipal Jwt jwt) {
+        ReporteService.Archivo archivo = estadoCaja.generar(Long.valueOf(jwt.getSubject()));
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        ContentDisposition.attachment().filename(archivo.nombre()).build().toString())
+                .body(archivo.contenido());
     }
 
     @GetMapping("/cuentas-principales/me/estado-de-cuenta.csv")

@@ -80,6 +80,7 @@
 - `GET /caja-chica` (solo permisos autorizados)
 - `GET /tesoreria` (solo permisos autorizados)
 - `GET /tesoreria/estado` (`CONSULTAR_CAJA`): saldo de cada caja; entradas y salidas de la caja principal y resultados, por mes, de los últimos 12 meses; totales por concepto y centavos en espera de reparto.
+- `GET /tesoreria/estado.xlsx` (`CONSULTAR_CAJA`, no basta con ser socio): foto de la caja en el momento de pedirla, en Excel. Hojas: Resumen, Balance (mes en curso), Por persona (lo que se le debe, créditos por pagar, aportes y fondo personal), Créditos activos, Ahorros activos y Aportes por socio. Se lee en una sola transacción `REPEATABLE READ` para que las hojas cuadren entre sí; queda en auditoría como `INFORME_EXPORTADO` con código `ESTADO_CAJA`.
 - `POST /creditos/{id}/documentos` (multipart `archivos`, varios PDF), `GET /creditos/{id}/documentos`; `GET /admin/creditos/{id}/documentos` y `GET /admin/creditos/{id}/documentos/{documentoId}` (`APROBAR_CREDITOS`).
 - `POST /creditos/letras/solicitudes` exige `origenEncaje` (`EFECTIVO`, `CUENTA`, `AHORROS`, `CREDITO`) y, con `AHORROS`, `ahorroEncajeId`.
 - `POST /creditos/emergentes/solicitudes` y `POST /creditos/emergentes/disposiciones` ya no desembolsan: devuelven `{ id }` y esperan aprobación.

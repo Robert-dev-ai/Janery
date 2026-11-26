@@ -106,6 +106,36 @@ class ReportesIntegrationTest {
     }
 
     @Test
+    void estadoDeCajaEnExcelEsParaQuienManejaLaCaja() throws Exception {
+        Persona p = persona();
+        depositar(p, "123.45");
+        var respuesta = mvc.perform(get("/api/v1/tesoreria/estado.xlsx").header(HttpHeaders.AUTHORIZATION, bearer(presidente())))
+                .andExpect(status().isOk()).andReturn().getResponse();
+        assertThat(respuesta.getContentType()).isEqualTo("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        assertThat(respuesta.getHeader(HttpHeaders.CONTENT_DISPOSITION)).contains("estado_de_caja_", ".xlsx");
+
+        Map<String, String> partes = new java.util.HashMap<>();
+        try (var zip = new java.util.zip.ZipInputStream(new java.io.ByteArrayInputStream(respuesta.getContentAsByteArray()))) {
+            for (var e = zip.getNextEntry(); e != null; e = zip.getNextEntry()) {
+                partes.put(e.getName(), new String(zip.readAllBytes(), StandardCharsets.UTF_8));
+            }
+        }
+        assertThat(partes).containsKeys("[Content_Types].xml", "xl/workbook.xml", "xl/styles.xml", "xl/worksheets/sheet6.xml");
+        assertThat(partes.get("xl/workbook.xml")).contains("Resumen", "Balance", "Por persona", "Créditos", "Ahorros", "Aportes");
+        assertThat(partes.get("xl/worksheets/sheet1.xml")).contains("Caja principal", "Dinero de las personas");
+        assertThat(partes.get("xl/worksheets/sheet2.xml")).contains("TOTAL ACTIVOS", "TOTAL PASIVO + CAPITAL");
+        assertThat(partes.get("xl/worksheets/sheet3.xml")).contains(p.apellido(), "<v>123.45</v>");
+
+        // Tesorería tiene CONSULTAR_CAJA; una persona sin cargo, no.
+        Persona tesorero = persona();
+        asignarCargo(tesorero, "TESORERIA");
+        mvc.perform(get("/api/v1/tesoreria/estado.xlsx").header(HttpHeaders.AUTHORIZATION, bearer(login(tesorero.correo(), "Clave-Segura-1"))))
+                .andExpect(status().isOk());
+        mvc.perform(get("/api/v1/tesoreria/estado.xlsx").header(HttpHeaders.AUTHORIZATION, bearer(p.token())))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
     void estadoDeCuentaPropioNoIncluyeAOtrasPersonas() throws Exception {
         Persona a = persona();
         Persona b = persona();
